@@ -25,14 +25,24 @@ def insert(db: Path, **row) -> None:
     connection.close()
 
 
+def run(db: Path, key: str, at: datetime, missing: list[str] | None = None, error: str | None = None) -> None:
+    """One check in the history: what it found missing, or the error it ended with."""
+    verdict = None if missing is None else json.dumps({"missing": missing})
+    connection = sqlite3.connect(db)
+    connection.execute("INSERT INTO runs (key, at, verdict, error) VALUES (?, ?, ?, ?)", (key, stamp(at), verdict, error))
+    connection.commit()
+    connection.close()
+
+
 def log_line(event: str, at: datetime, **fields) -> str:
     return json.dumps({"ts": stamp(at), "level": "info", "event": event, **fields}) + "\n"
 
 
 @pytest.fixture
 def state(tmp_path: Path) -> Path:
-    """A state directory: one bug skipped at the first start, two commented on, one complete, one
-    whose check failed; and a log of a dry run polling a minute ago."""
+    """A state directory: one bug skipped at the first start, two commented on (one of them checked
+    three times, as its reporter added steps), one complete, one whose check failed; and a log of a
+    dry run polling a minute ago."""
     now = datetime.now()
     db = tmp_path / "bug-validator.sqlite"
     connection = sqlite3.connect(db)
@@ -59,6 +69,9 @@ def state(tmp_path: Path) -> Path:
         ),
         comment=f"{MENTION}\nPlease add:\n- Build\n- HAR file",
     )
+    run(db, "KAZ-2", now - timedelta(hours=2), ["R1", "R4", "R6"])
+    run(db, "KAZ-2", now - timedelta(hours=1), error="VerdictError: a re-check must keep the comment")
+    run(db, "KAZ-2", now, ["R4", "R6"])
     insert(
         db,
         key="KAZ-3",
@@ -85,6 +98,6 @@ def state(tmp_path: Path) -> Path:
 
     (tmp_path / "service.log").write_text(
         log_line("service_start", now - timedelta(hours=2), dryRun=True, pollIntervalS=180, model="haiku")
-        + log_line("poll", now - timedelta(minutes=1), inQuery=7, pending=0, checked=0, failed=0)
+        + log_line("poll", now - timedelta(minutes=1), inQuery=7, waiting=2, pending=0, checked=0, failed=0)
     )
     return tmp_path

@@ -49,14 +49,15 @@ def period_stats(checks: list[Check], since: datetime | None = None) -> Stats:
 class Problem:
     id: str
     name: str
-    # Bugs whose check found this requirement failed, of every bug checked to the end.
+    # Bugs whose first check found this requirement failed, of every bug checked to the end.
     share: Share
 
 
 def problems(checks: list[Check]) -> list[Problem]:
-    """Every requirement with how often the checks found it failed, the most common first."""
+    """Every requirement with how often the first checks found it failed, the most common first:
+    the reports as they arrived, which is what the PRD's success metric is about."""
     done = [c for c in checks if c.checked]
-    failed = Counter(requirement for c in done for requirement in c.missing)
+    failed = Counter(requirement for c in done for requirement in c.first_missing)
     found = [Problem(id, name, Share(failed[id], len(done))) for id, name in REQUIREMENTS.items()]
     # sorted() keeps R1–R8 order among equal counts.
     return sorted(found, key=lambda p: -p.share.count)

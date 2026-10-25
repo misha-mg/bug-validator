@@ -9,12 +9,13 @@ Nothing is posted to Jira.
 - Modules, data flow, row statuses, log events, configuration, how to run and deploy:
   `docs/architecture.md`. Jira ids, fields, workflow: `docs/jira-reference.md`.
 - The agent writes the whole comment and searches Jira itself; the program only validates.
-  Its prompt is `agent/instructions.md`: tune it with `npm run check -- KAZ-1234` on real bugs
-  (writes nothing); the running service picks up edits without a restart.
+  Its prompt is `agent/instructions.md`: tune it with `npm run check -- KAZ-1234 [--recheck]` on
+  real bugs (writes nothing); the running service picks up edits without a restart.
 - Three things are shared between the service and the TUI (`tui/`, Python + Textual, read-only)
   and change together: the tables in `src/db/store.ts` ↔ `tui/tests/schema.sql` + `checks.py`;
-  the log events in `docs/architecture.md` ↔ `service.py`; the requirement ids in
-  `src/domain/bug.ts` ↔ `agent/instructions.md` + `checks.py`.
+  the log events in `docs/architecture.md` ↔ `service.py`; the requirement ids and names in
+  `src/domain/bug.ts` ↔ `agent/instructions.md` + `checks.py` (the comment's list is read by
+  those names).
 - Jira stays read-only until the PRD's rollout reaches "comments live": `DRY_RUN=true` is the
   default. The service's agent is sandboxed by its command-line flags; the deny list in
   `.claude/settings.json` protects only interactive Claude Code sessions in this repository.

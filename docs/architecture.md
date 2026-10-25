@@ -8,27 +8,29 @@ writes the comment. Why things are as they are: `prd.md`.
 
 ```
 src/
-  main.ts            CLI: run | check <KEY> | requeue <KEY>
+  main.ts            CLI: run | check <KEY> [--recheck] | requeue <KEY>
   config.ts          env → typed Config; fails fast on a bad value
   log.ts             one JSON line per event on stdout
   domain/            pure functions, no I/O
     bug.ts           Bug model, requirement ids R1–R7, which of them are field facts
     checks.ts        base checks: section headings, Affects versions, Devices, HAR
-    prompt.ts        Bug + field facts → the agent's prompt
-    verdict.ts       the agent's JSON: schema and the guardrails
+    fingerprint.ts   a hash of the report: what a re-check watches
+    prompt.ts        Bug + field facts (+ the previous comment on a re-check) → the agent's prompt
+    verdict.ts       the agent's JSON: schema and the guardrails, the comment's list included
   jira/
-    client.ts        REST v2 through api.atlassian.com: search, get issue, changelog, add comment (the only write)
-    mapping.ts       raw issue JSON → Bug
+    client.ts        REST v2 through api.atlassian.com: search, get issue, changelog; add and edit comment (the only writes)
+    mapping.ts       raw issue JSON → Bug; Jira times
     queries.ts       the trigger JQL
   claude/
     agent.ts         spawns `claude -p` with the Jira MCP server as its only tool
     jira-mcp.ts      that server: search_issues, get_issue — read-only, KAZ and RPG only
   db/
-    store.ts         SQLite (node:sqlite): one row per bug (by issue id), plus `meta`
+    store.ts         SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, plus `meta`
   pipeline/
     deps.ts          what the pipeline needs: config, Jira, agent, store (Jira and agent are interfaces)
     checkBug.ts      one bug: fetch → base checks → agent → verdict → guardrails
-    poll.ts          one poll: query → first-start bootstrap → moved bugs → pending bugs → record / post
+    plan.ts          which bugs of a poll are due: first checks, re-checks, the waiting ones
+    poll.ts          one poll: query → first-start bootstrap → moved bugs → plan → checks → record / post / edit
   commands/          run (the loop), check (one bug, writes nothing), requeue (a failed bug back in line)
 agent/instructions.md   the agent's system prompt
 deploy/bug-validator.service   systemd user unit
@@ -42,18 +44,36 @@ build step. `claude` must be on PATH.
 
 ## One bug
 
-1. `poll` runs the trigger JQL. A row whose issue id comes back under another key (the bug moved
-   between KAZ and RPG) takes the new key. Keys with no row, or whose row is `retry`, are pending.
-2. `checkBug` fetches the issue, computes the field facts, builds the prompt and runs the agent.
-   The agent searches Jira for related bugs itself and writes the whole comment.
-3. Guardrails (`verdict.ts`, `checkBug.ts`), each a failed check when broken: the JSON matches
-   the schema; "comment needed" and the comment agree; every failed field fact (R4–R6) is in
-   `missing`; the reporter is mentioned and nobody else (other mentions are stripped and
-   logged); every issue key named is a KAZ or RPG issue that exists.
-4. No comment → row `complete`. `DRY_RUN=true` → row `dry_run` with the comment. Live → row
-   `posting` with the comment, the post, then `commented` with the comment id.
-5. A failure of this bug's check → row `retry` with the error; the third → `failed`. A failure of
-   the surroundings (see Failures) ends the poll instead and leaves rows alone.
+1. `poll` runs the trigger JQL and reads every bug's report fields and times in the same request.
+   A row whose issue id comes back under another key (the bug moved between KAZ and RPG) takes
+   the new key.
+2. `plan` picks the bugs due (constants in `plan.ts`):
+   - a first check for a bug with no row once it is 30 minutes old, and for a `retry` row;
+   - a re-check for a `complete` row, or a `dry_run` row in a dry run (`commented` live), whose
+     stored fingerprint differs from the report's now, once `updated` is 15 minutes old;
+   - nothing for a bug with 5 runs.
+
+   The rest are counted as waiting when they are not settled yet.
+3. `checkBug` fetches the issue, computes the field facts, builds the prompt and runs the agent.
+   On a re-check the prompt ends with the comment the service made last time, and the agent
+   edits it. The agent searches Jira for related bugs itself and writes the whole comment.
+4. Guardrails (`verdict.ts`, `checkBug.ts`), each a failed check when broken:
+   - the JSON matches the schema;
+   - "comment needed" and the comment agree;
+   - every failed field fact (R4–R6) is in `missing`;
+   - the comment's list (R1–R6 by name) is exactly `missing`, and a first comment strikes
+     nothing through;
+   - a re-check keeps the comment and every item of it, and strikes through only items it had;
+   - the reporter is mentioned and nobody else (other mentions are stripped and logged);
+   - every issue key named is a KAZ or RPG issue that exists.
+5. Every check adds a row to `runs`, and the bug's row takes the new state and fingerprint:
+   - no comment → `complete`;
+   - `DRY_RUN=true` → `dry_run` with the comment;
+   - live, with a comment already in Jira → the edit, then `commented`, keeping the comment id;
+   - live otherwise → `posting` with the comment, the post, then `commented` with the comment id.
+6. A failure of this bug's first check → row `retry` with the error; the third → `failed`. A
+   failed re-check sets the row's error and leaves the rest. A failure of the surroundings (see
+   Failures) ends the poll instead and leaves rows alone.
 
 ## Row statuses
 
@@ -67,9 +87,10 @@ build step. `claude` must be on PATH.
 | `retry` | last attempt failed, tried again at the next poll |
 | `failed` | 3 attempts failed, left alone; `requeue <KEY>` puts it back |
 
-`meta.bootstrapped_at` records the first start, so a first poll on an empty query still counts.
-Rows are never deleted. A row holds the issue id; rows from before 2026-10-26 get it when their bug
-is next in the query.
+A re-check changes a row's comment, not its status. `meta.bootstrapped_at` records the first
+start, so a first poll on an empty query still counts. Rows are never deleted. A row holds the
+issue id; rows from before 2026-10-26 get it when their bug is next in the query. They have no
+fingerprint and no runs, so they are never re-checked.
 
 ## Failures
 
@@ -77,7 +98,7 @@ is next in the query.
 of kind `start` (claude cannot be started) are failures of the surroundings: the poll ends with
 `poll_failed`, no row changes, the next poll tries again. Everything else — `VerdictError`,
 `MappingError`, an agent run that times out or exits badly, a 4xx on one issue — is this bug's
-failure and costs it an attempt. At start the service runs `claude --version` and refuses to
+failure and costs it an attempt (on a re-check, one of its 5 checks). At start the service runs `claude --version` and refuses to
 start without it.
 
 ## The agent run
@@ -99,13 +120,13 @@ One JSON line per event: `ts`, `level`, `event`, then fields. The TUI reads the 
 |---|---|---|
 | `service_start` | dryRun, pollIntervalS, maxAttempts, model, claudeVersion, claudeAuth, dbFile | mode, model, interval |
 | `service_stopping`, `service_stopped` | signal | stopped |
-| `poll` | inQuery, pending, checked, failed, ms | last poll, in Created |
+| `poll` | inQuery, waiting, pending, checked, failed, ms | last poll, in Created, waiting |
 | `poll_failed` | error, ms | last poll failed, error |
 | `first_start` | skipped | |
 | `key_changed` | from, to | |
-| `check_start` | key | liveness |
-| `bug_complete`, `comment_dry_run`, `comment_posted` | key, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId | |
-| `check_failed` | key, attempts, status, error, ms | |
+| `check_start` | key, recheck | liveness |
+| `bug_complete`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId | |
+| `check_failed` | key, recheck, attempts (first check only), status, error, ms | |
 | `mentions_stripped` | key, stripped | |
 | `fatal` | error | |
 
@@ -128,7 +149,9 @@ five minutes.
 | `AGENT_TIMEOUT_SECONDS` | `180` | one agent run |
 | `DB_FILE` | `state/bug-validator.sqlite` | |
 
-Attempts per bug (3) and the query cap (200 issues per poll) are constants in the code.
+Attempts at the first check (3), the query cap (200 issues per poll), the wait before the first
+check (30 min), the quiet before a re-check (15 min) and the checks per bug (5) are constants in
+the code.
 
 ## Running
 
@@ -136,6 +159,7 @@ Attempts per bug (3) and the query cap (200 issues per poll) are constants in th
 npm install
 cp .env.example .env && chmod 600 .env      # fill in JIRA_EMAIL, JIRA_API_TOKEN
 npm run check -- KAZ-9025                   # one bug: the verdict and the comment, nothing written
+npm run check -- KAZ-9025 --recheck         # as a re-check of the comment recorded in the database
 npm start                                   # the loop, DRY_RUN=true by default; log on stdout
 npm run requeue -- KAZ-9025                 # a failed bug back in line
 npm run tui                                 # the terminal view (needs uv)
@@ -143,7 +167,8 @@ npm test && npm run typecheck && (cd tui && uv run pytest)
 ```
 
 Tuning the agent: edit `agent/instructions.md`, run `check` on bugs with known gaps (the fixtures
-in `test/fixtures/` are such bugs) and on a good one (RPG-6188). Adding a requirement touches
+in `test/fixtures/` are such bugs) and on a good one (RPG-6188); `check --recheck` on a bug whose
+reporter added something after its comment (RPG-6219, KAZ-9035). Adding a requirement touches
 `bug.ts`, `checks.ts` (if a field fact), `prd.md`, `agent/instructions.md`, `tui/.../checks.py`,
 and a fixture.
 
@@ -152,13 +177,15 @@ and a fixture.
 `npm run tui` (or `uv run --project tui bug-validator-tui [state-dir]`) reads `state/`: the
 database, and `state/service.log`, which exists when the service runs under systemd (a local
 `npm start` logs to stdout, so the Service block shows "no log"). Home: the service (running,
-stopped or silent; mode; last poll; in Created; started; model; skipped at the first start),
-bugs checked today / 7 days / all time with and without a comment, failed checks, bugs per day
-for 30 days, the requirements found missing most often, and the checks that need attention.
+stopped or silent; mode; last poll; in Created and how many of them wait; started; model; skipped
+at the first start), bugs checked today / 7 days / all time with and without a comment, failed
+checks, bugs per day for 30 days, the requirements the first check found missing most often, and
+the checks that need attention.
 Keys: `b` all bugs · `Enter` open · `Esc` back · `r` reload · `q` quit; in all bugs `f` steps
 the filter through the results and `/` searches keys, summaries and reporters. Screens reload
 every 5 s. A bug's screen shows each requirement as the agent judged it beside the base check,
-the related bugs, and the comment as it was (or would be) posted. The Jira link uses
+the related bugs, every check when there were several, and the comment as it is (or would be)
+in Jira. The Jira link uses
 `JIRA_BASE_URL` from the environment, else the company site.
 
 ### Deploy

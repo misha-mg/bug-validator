@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -11,14 +11,28 @@ export interface IssueRef {
 /** A row's status: docs/architecture.md, Row statuses. */
 export type CheckStatus = 'skipped' | 'complete' | 'dry_run' | 'posting' | 'commented' | 'retry' | 'failed';
 
+/** A bug's row as the poll needs it to decide on a check. */
+export interface BugRow {
+  status: CheckStatus;
+  /** The report's fingerprint at the last check; null on rows from before fingerprints were kept. */
+  fingerprint: string | null;
+  comment: string | null;
+  commentId: string | null;
+  /** Checks run on the bug, failed ones included. */
+  runs: number;
+}
+
 export interface CheckResultRow {
-  status: Extract<CheckStatus, 'complete' | 'dry_run' | 'posting'>;
+  status: Extract<CheckStatus, 'complete' | 'dry_run' | 'posting' | 'commented'>;
   /** The bug's summary and reporter at the check, for the TUI. */
   summary: string;
   reporter: string | null;
+  fingerprint: string;
   baseChecks: unknown;
   verdict: unknown;
   comment: string | null;
+  /** The comment in Jira, kept when a re-check edits it; null until a comment is posted. */
+  commentId: string | null;
 }
 
 const SCHEMA = `
@@ -30,6 +44,7 @@ CREATE TABLE IF NOT EXISTS checks (
   checked_at  TEXT NOT NULL,
   summary     TEXT,
   reporter    TEXT,
+  fingerprint TEXT,
   base_checks TEXT,
   verdict     TEXT,
   comment     TEXT,
@@ -37,6 +52,16 @@ CREATE TABLE IF NOT EXISTS checks (
   error       TEXT
 );
 CREATE INDEX IF NOT EXISTS checks_status ON checks (status);
+CREATE TABLE IF NOT EXISTS runs (
+  key         TEXT NOT NULL,
+  at          TEXT NOT NULL,
+  fingerprint TEXT,
+  base_checks TEXT,
+  verdict     TEXT,
+  comment     TEXT,
+  error       TEXT
+);
+CREATE INDEX IF NOT EXISTS runs_key ON runs (key);
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -44,13 +69,14 @@ CREATE TABLE IF NOT EXISTS meta (
 `;
 
 // Columns added after the first database was made; an older one gets them when opened.
-const ADDED_COLUMNS = ['summary TEXT', 'reporter TEXT', 'issue_id TEXT'];
+const ADDED_COLUMNS = ['summary TEXT', 'reporter TEXT', 'issue_id TEXT', 'fingerprint TEXT'];
 
 const now = (): string => new Date().toISOString();
 
 /**
- * One row per bug the service has dealt with, plus `meta`. A bug's row is the only thing that
- * stops a second comment, so rows are never deleted; `requeue` is the way to re-run a bug.
+ * One row per bug the service has dealt with, its current state; one row in `runs` per check of
+ * it, the history; plus `meta`. A bug's row is the only thing that stops a second comment, so rows
+ * are never deleted; `requeue` is the way to re-run a bug.
  */
 export class Store {
   private readonly db: DatabaseSync;
@@ -74,6 +100,18 @@ export class Store {
     if (!this.isBootstrapped() && !this.isEmpty()) this.setMeta('bootstrapped_at', now());
   }
 
+  /** The comment recorded for a bug, read without opening the database for writing (`check --recheck`). */
+  static recordedComment(file: string, key: string): string | null {
+    if (!existsSync(file)) return null;
+    const db = new DatabaseSync(file, { readOnly: true });
+    try {
+      const row = db.prepare('SELECT comment FROM checks WHERE key = ?').get(key) as { comment: string | null } | undefined;
+      return row?.comment ?? null;
+    } finally {
+      db.close();
+    }
+  }
+
   /** True once the first poll has recorded what was already in the query (a lost database starts over). */
   isBootstrapped(): boolean {
     return this.getMeta('bootstrapped_at') !== null;
@@ -88,19 +126,23 @@ export class Store {
   }
 
   /**
-   * Brings rows up to date with the query, before anything is pending: a bug moved to the other
-   * project keeps its row under the new key, so it is not checked a second time. A row from before
-   * ids were stored gets its id here. Returns the moves.
+   * Brings rows up to date with the query, before anything is checked: a bug moved to the other
+   * project keeps its row and its history under the new key, so it is not checked as a new bug.
+   * A row from before ids were stored gets its id here. Returns the moves.
    */
   track(issues: IssueRef[]): { from: string; to: string }[] {
     const byId = this.db.prepare('SELECT key FROM checks WHERE issue_id = ?');
     const rename = this.db.prepare('UPDATE checks SET key = ? WHERE issue_id = ?');
+    const renameRuns = this.db.prepare('UPDATE runs SET key = ? WHERE key = ?');
     const fillId = this.db.prepare('UPDATE checks SET issue_id = ? WHERE key = ? AND issue_id IS NULL');
     const moves: { from: string; to: string }[] = [];
     for (const issue of issues) {
       const row = byId.get(issue.id) as { key: string } | undefined;
       if (row && row.key !== issue.key) {
-        rename.run(issue.key, issue.id);
+        this.transaction(() => {
+          rename.run(issue.key, issue.id);
+          renameRuns.run(issue.key, row.key);
+        });
         moves.push({ from: row.key, to: issue.key });
       } else if (!row) {
         fillId.run(issue.id, issue.key);
@@ -109,40 +151,61 @@ export class Store {
     return moves;
   }
 
-  /** Keys with no row yet, or whose last attempt failed and may be retried. */
-  pending(keys: string[]): string[] {
-    if (keys.length === 0) return [];
+  /** The rows of the bugs among `keys` that have one. */
+  rows(keys: string[]): Map<string, BugRow> {
+    if (keys.length === 0) return new Map();
     const marks = keys.map(() => '?').join(',');
-    const rows = this.db.prepare(`SELECT key, status FROM checks WHERE key IN (${marks})`).all(...keys) as { key: string; status: CheckStatus }[];
-    const known = new Map(rows.map((r) => [r.key, r.status]));
-    return keys.filter((k) => !known.has(k) || known.get(k) === 'retry');
+    const rows = this.db
+      .prepare(
+        `SELECT key, status, fingerprint, comment, comment_id AS commentId, (SELECT COUNT(*) FROM runs WHERE runs.key = checks.key) AS runs
+         FROM checks WHERE key IN (${marks})`,
+      )
+      .all(...keys) as unknown as (BugRow & { key: string })[];
+    return new Map(rows.map(({ key, ...row }) => [key, row]));
   }
 
-  /** One more failed attempt: `retry`, or `failed` once the limit is reached. */
+  /** One more failed attempt at the first check: `retry`, or `failed` once the limit is reached. */
   recordFailure(issue: IssueRef, error: string, maxAttempts: number): { status: CheckStatus; attempts: number } {
-    const row = this.db
-      .prepare(
-        `INSERT INTO checks (key, issue_id, status, attempts, checked_at, error) VALUES (?, ?, 'retry', 1, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET
-           attempts = attempts + 1,
-           status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE 'retry' END,
-           checked_at = excluded.checked_at, error = excluded.error
-         RETURNING status, attempts`,
-      )
-      .get(issue.key, issue.id, now(), error, maxAttempts) as { status: CheckStatus; attempts: number };
-    return { status: row.status, attempts: row.attempts };
+    return this.transaction(() => {
+      const at = now();
+      this.addRun(issue.key, at, { error });
+      const row = this.db
+        .prepare(
+          `INSERT INTO checks (key, issue_id, status, attempts, checked_at, error) VALUES (?, ?, 'retry', 1, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+             attempts = attempts + 1,
+             status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE 'retry' END,
+             checked_at = excluded.checked_at, error = excluded.error
+           RETURNING status, attempts`,
+        )
+        .get(issue.key, issue.id, at, error, maxAttempts) as { status: CheckStatus; attempts: number };
+      return { status: row.status, attempts: row.attempts };
+    });
   }
 
+  /** A failed re-check: recorded, and the bug's state (its comment above all) stays as it was. */
+  recordRecheckFailure(key: string, error: string): void {
+    this.transaction(() => {
+      this.addRun(key, now(), { error });
+      this.db.prepare('UPDATE checks SET error = ? WHERE key = ?').run(error, key);
+    });
+  }
+
+  /** A finished check, first or re-check: the bug's new state and one more run. */
   recordResult(issue: IssueRef, r: CheckResultRow): void {
-    this.db
-      .prepare(
-        `INSERT INTO checks (key, issue_id, status, attempts, checked_at, summary, reporter, base_checks, verdict, comment, comment_id, error)
-         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, NULL, NULL)
-         ON CONFLICT(key) DO UPDATE SET status = excluded.status, attempts = attempts + 1, checked_at = excluded.checked_at,
-           summary = excluded.summary, reporter = excluded.reporter, base_checks = excluded.base_checks, verdict = excluded.verdict,
-           comment = excluded.comment, comment_id = NULL, error = NULL`,
-      )
-      .run(issue.key, issue.id, r.status, now(), r.summary, r.reporter, JSON.stringify(r.baseChecks), JSON.stringify(r.verdict), r.comment);
+    this.transaction(() => {
+      const at = now();
+      this.addRun(issue.key, at, { fingerprint: r.fingerprint, baseChecks: r.baseChecks, verdict: r.verdict, comment: r.comment });
+      this.db
+        .prepare(
+          `INSERT INTO checks (key, issue_id, status, attempts, checked_at, summary, reporter, fingerprint, base_checks, verdict, comment, comment_id, error)
+           VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+           ON CONFLICT(key) DO UPDATE SET status = excluded.status, attempts = attempts + 1, checked_at = excluded.checked_at,
+             summary = excluded.summary, reporter = excluded.reporter, fingerprint = excluded.fingerprint, base_checks = excluded.base_checks,
+             verdict = excluded.verdict, comment = excluded.comment, comment_id = excluded.comment_id, error = NULL`,
+        )
+        .run(issue.key, issue.id, r.status, at, r.summary, r.reporter, r.fingerprint, JSON.stringify(r.baseChecks), JSON.stringify(r.verdict), r.comment, r.commentId);
+    });
   }
 
   /** The comment is in Jira: `posting` → `commented`. */
@@ -163,6 +226,25 @@ export class Store {
 
   close(): void {
     this.db.close();
+  }
+
+  private addRun(key: string, at: string, run: { fingerprint?: string; baseChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string }): void {
+    const json = (value: unknown): string | null => (value === undefined ? null : JSON.stringify(value));
+    this.db
+      .prepare('INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(key, at, run.fingerprint ?? null, json(run.baseChecks), json(run.verdict), run.comment ?? null, run.error ?? null);
+  }
+
+  private transaction<T>(fn: () => T): T {
+    this.db.exec('BEGIN');
+    try {
+      const result = fn();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   private isEmpty(): boolean {

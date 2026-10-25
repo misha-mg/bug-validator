@@ -158,7 +158,8 @@ def _status_rows(status: ServiceStatus, now: datetime) -> list[tuple[str, Conten
     elif status.dry_run is False:
         rows.append(("Mode", Content.styled("live", "bold $accent")))
     if status.in_query is not None and not status.poll_error:
-        rows.append(("In Created", str(status.in_query)))
+        waiting = f" · {status.waiting} waiting" if status.waiting else ""
+        rows.append(("In Created", f"{status.in_query}{waiting}"))
     if status.started:
         rows.append(("Started", f"{status.started:%d %b %H:%M}"))
     if status.model:

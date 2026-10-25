@@ -36,7 +36,7 @@ def test_home_shows_the_service_the_statistics_and_the_gaps(state: Path) -> None
             assert rows["State"] == "running"
             assert rows["Last poll"] == "1m ago"
             assert rows["Mode"] == "dry run"
-            assert rows["In Created"] == "7"
+            assert rows["In Created"] == "7 · 2 waiting"
             assert rows["Skipped"].startswith("1 · ")
             assert "Poll every" not in rows
 
@@ -133,6 +133,7 @@ def test_a_bug_shows_the_comment_and_what_it_asks_for(state: Path) -> None:
             assert "KAZ-2 · Ports table is empty after clearing the filter" in summary
             assert "A Tester" in summary
             assert "https://cgstowernetworks.atlassian.net/browse/KAZ-2" in summary
+            assert "Checks       3 · first " in summary
 
             comment = text_of(screen.query_one("#comment", Static))
             assert comment.splitlines()[:2] == ["@A Tester", "Please add:"]
@@ -142,6 +143,10 @@ def test_a_bug_shows_the_comment_and_what_it_asks_for(state: Path) -> None:
             r6 = next(line for line in requirements if line.startswith("R6"))
             assert "missing" in r6 and "✗ detail of R6" in r6
             assert any(line.startswith("KAZ-1") and "the same empty table" in line for line in requirements)
+            history = requirements[requirements.index("Checks") + 1 :]
+            assert [line.split("  ", 1)[1].strip() for line in history] == [
+                "missing R1 R4 R6", "VerdictError: a re-check must keep the comment", "missing R4 R6"
+            ]
 
             await pilot.press("escape")
             await pilot.pause()

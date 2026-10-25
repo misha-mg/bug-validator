@@ -5,7 +5,7 @@ periodically". Discussed the same day; nothing built.
 
 ## Problem it addresses
 
-R8 (related bugs) today relies on Jira's `~` text search, driven by two or three JQL queries the
+Related-bug search today relies on Jira's `~` text search, driven by two or three JQL queries the
 agent improvises per bug. That has three weaknesses, all seen in the dry run:
 
 - no ranking: `~` returns matches in `updated` order, not by relevance;

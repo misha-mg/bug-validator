@@ -20,6 +20,15 @@ def test_reads_every_row_latest_check_first(state: Path) -> None:
     assert checks[1].error == "Error: agent run timed out" and checks[1].base_checks == ()
 
 
+def test_reads_the_history_and_the_first_verdict(state: Path) -> None:
+    checks = {c.key: c for c in load_checks(state / "bug-validator.sqlite")}
+
+    history = checks["KAZ-2"].history
+    assert [(r.missing, r.error is not None) for r in history] == [(("R1", "R4", "R6"), False), ((), True), (("R4", "R6"), False)]
+    assert checks["KAZ-2"].first_missing == ("R1", "R4", "R6") and checks["KAZ-2"].missing == ("R4", "R6")
+    assert checks["KAZ-5"].history == () and checks["KAZ-5"].first_missing == ("R6",), "a row from before runs were kept"
+
+
 def test_reads_a_database_made_before_summary_and_reporter_and_rows_without_a_time(tmp_path: Path) -> None:
     db = tmp_path / "old.sqlite"
     connection = sqlite3.connect(db)

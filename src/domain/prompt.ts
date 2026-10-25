@@ -4,7 +4,8 @@ import type { BaseCheck } from './checks.ts';
 const list = (items: string[]): string => (items.length > 0 ? items.join(', ') : '(none)');
 const day = (iso: string): string => iso.slice(0, 10);
 
-export function buildPrompt(bug: Bug, baseChecks: BaseCheck[]): string {
+/** The agent's prompt. A re-check also gets the comment the service made last time, to edit. */
+export function buildPrompt(bug: Bug, baseChecks: BaseCheck[], previousComment: string | null = null): string {
   const lines: string[] = [
     `Bug ${bug.key} — project ${bug.project}: ${PROJECT_NAMES[bug.project]}`,
     `Summary: ${bug.summary}`,
@@ -29,6 +30,11 @@ export function buildPrompt(bug: Bug, baseChecks: BaseCheck[]): string {
   lines.push('', 'Field facts computed by the program:');
   for (const c of baseChecks) lines.push(`- ${c.id} ${REQUIREMENTS[c.id]}: ${c.passed ? 'PASS' : 'FAIL'} — ${c.detail}`);
 
-  lines.push('', 'Investigate with the Jira tools where it helps (related bugs, R8), then return the JSON verdict for this bug.');
+  if (previousComment === null) {
+    lines.push('', 'Investigate with the Jira tools where it helps (related bugs), then return the JSON verdict for this bug.');
+  } else {
+    lines.push('', '=== Your previous comment on this bug; the report has changed since ===', previousComment, '=== End of previous comment ===');
+    lines.push('', 'This is a re-check: judge the report again, then return your previous comment edited, as "Re-check" in your instructions says.');
+  }
   return lines.join('\n');
 }
