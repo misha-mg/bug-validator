@@ -1,0 +1,25 @@
+{
+  "name": "bug-validator",
+  "version": "0.1.0",
+  "description": "Checks new WebUI bugs in Jira and comments on what they are missing",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts run",
+    "check": "node src/main.ts check",
+    "requeue": "node src/main.ts requeue",
+    "tui": "uv run --project tui bug-validator-tui",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "typescript": "^5.9.3"
+  }
+}

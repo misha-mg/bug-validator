@@ -1,0 +1,58 @@
+{
+  "key": "RPG-6188",
+  "fields": {
+    "summary": "SIP statistics: UDP SIP messages and RTP packets are counted twice, TCP once",
+    "description": "*Build:* 5.10.0-commit.3094\n*DUT:* 192.168.201.50 (dut-201-50), ANPB\n*When:* 2026-10-13, 06:31-06:35 UTC\n*Test:* RPG-6119 test cycle, cases A2, A3, C1, C3 (the same result in every UDP/TCP replay of the run)\n\nh3. Configuration\n\nSIP list {{s_r6}} = {{alice@ims.example.net}}; rule {{r6_filter}}: input 1 → output 4, redirect. SIP ports at defaults (A2/A3) or 5070 UDP / 5080 TCP (C1/C3).\n\nh3. Steps\n\nReplay one call per PCAP on port 1 at 50 pps, and read {{show sip stats}} before and after. Each call has 7 SIP messages (INVITE, 100, 180, 200, ACK, BYE, 200) and 5 RTP packets over UDP.\n\nh3. Results\n\n||PCAP||SIP transport||Packets on the wire||Rule delta||{{Processed SIP messages}}||{{Processed RTP packets}}||\n|{{a2.pcap}} (A2), {{c1.pcap}} (C1)|UDP|7 SIP + 5 RTP|+12|*+14*|*+10*|\n|{{a3.pcap}} (A3), {{c3.pcap}} (C3)|TCP|4 SIP segments (7 messages) + 5 RTP over UDP|+9|+7|*+10*|\n\nh3. Expected\n\nOne count per SIP message and per RTP packet, whatever the transport: +7 / +5 for both calls.\n\nh3. Actual\n\n* UDP SIP messages count twice (14 for 7); TCP SIP messages count once (7 for 7).\n* RTP packets (always UDP here) count twice (10 for 5).\n* The rule's packet counters are correct; only the SIP statistics are off.\n\n{{SIP messages per second}} and {{RTP packets per second}} are probably inflated the same way.\n\nh3. Impact\n\nThe statistics overstate UDP traffic by 2×, and TCP and UDP numbers can't be compared. This matters more now that RPG-6119 lets customers debug per transport.\n\nh3. Evidence (attached)\n\n* {{f4_pcaps.tar.gz}}: {{a2.pcap}}, {{a3.pcap}}\n* {{f4_udp_double_count_transcript.jsonl}}: {{show sip stats}} before/after and the replays for A2, A3, C1, C3\n* {{f4_udp_double_count_results.json}}: per-case deltas",
+    "status": {
+      "name": "To Do"
+    },
+    "project": {
+      "key": "RPG"
+    },
+    "labels": [
+      "R5.11",
+      "SIP",
+      "Statistics",
+      "sip-correlation"
+    ],
+    "versions": [
+      {
+        "name": "5.10.0-commit.3099"
+      },
+      {
+        "name": "5.10.0-commit.3094"
+      }
+    ],
+    "customfield_10033": [
+      {
+        "value": "AFS"
+      }
+    ],
+    "attachment": [
+      {
+        "filename": "f4_pcaps.tar.gz",
+        "mimeType": "application/gzip",
+        "size": 1897
+      },
+      {
+        "filename": "f4_udp_double_count_results.json",
+        "mimeType": "application/json",
+        "size": 2266
+      },
+      {
+        "filename": "f4_udp_double_count_transcript.jsonl",
+        "mimeType": "application/x-ndjson",
+        "size": 38456
+      }
+    ],
+    "reporter": {
+      "accountId": "712020:15c55a0f-b5b9-4d55-99a4-111d42e6530f",
+      "displayName": "Martin Bober"
+    },
+    "comment": {
+      "comments": []
+    },
+    "created": "2026-10-13T16:26:58.664+0300",
+    "updated": "2026-10-15T08:38:26.969+0300"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "key": "KAZ-9021",
+  "fields": {
+    "summary": "Web UI 2.0: clearing filter statistics clears filters as well until refresh ",
+    "description": "on the filters statistics page, press clear statistics.\n\nThe filters themselves also disappear from display until auto-refresh (5 seconds if default).\n\n!20261014-1435-23.8691496.mp4|width=742,alt=\"20261014-1435-23.8691496.mp4\"!",
+    "status": {
+      "name": "Created"
+    },
+    "project": {
+      "key": "KAZ"
+    },
+    "labels": [
+      "Filters",
+      "Statistics",
+      "WebUI",
+      "Web_UI_2.0"
+    ],
+    "versions": [
+      {
+        "name": "5.10.0-commit.3099"
+      }
+    ],
+    "customfield_10033": [
+      {
+        "value": "All"
+      }
+    ],
+    "attachment": [
+      {
+        "filename": "20261014-1435-23.8691496.mp4",
+        "mimeType": "video/mp4",
+        "size": 1412350
+      }
+    ],
+    "reporter": {
+      "accountId": "712020:a91caa38-10e5-460c-86d2-5e9d9719237d",
+      "displayName": "Shimon Korenman"
+    },
+    "comment": {
+      "comments": []
+    },
+    "created": "2026-10-14T17:37:48.377+0300",
+    "updated": "2026-10-14T17:38:27.453+0300"
+  }
+}

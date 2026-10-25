@@ -1,0 +1,19 @@
+# systemd user unit for the home server (WSL). Install and operate: docs/architecture.md, Deploy.
+# Two lines are machine-specific: WorkingDirectory and the node path (PATH must also hold `claude`).
+
+[Unit]
+Description=Bug Validator — checks new WebUI bugs in Jira
+
+[Service]
+WorkingDirectory=%h/npb/bug-validator
+Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node src/main.ts run
+Restart=always
+RestartSec=15
+# A stop waits for the bug being checked (one agent run, up to AGENT_TIMEOUT_SECONDS) to finish.
+TimeoutStopSec=240
+StandardOutput=append:%h/npb/bug-validator/state/service.log
+StandardError=append:%h/npb/bug-validator/state/service.log
+
+[Install]
+WantedBy=default.target

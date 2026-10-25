@@ -1,0 +1,45 @@
+{
+  "key": "KAZ-8996",
+  "fields": {
+    "summary": "WebUI: No vertical scroll on Status/Hardware page",
+    "description": "[https://192.168.201.63:8888/index.html#/system/status|https://192.168.201.63:8888/index.html#/system/status]\n\nNo vertical scroll on status hardware page\n\nIn AFS \n\n!image-20261011-054533.png|width=839,alt=\"image-20261011-054533.png\"!",
+    "status": {
+      "name": "Created"
+    },
+    "project": {
+      "key": "KAZ"
+    },
+    "labels": [
+      "WebUI"
+    ],
+    "versions": [
+      {
+        "name": "5.10.0-commit.3089"
+      }
+    ],
+    "customfield_10033": [
+      {
+        "value": "NPB-All"
+      },
+      {
+        "value": "AFS"
+      }
+    ],
+    "attachment": [
+      {
+        "filename": "image-20261011-054533.png",
+        "mimeType": "image/png",
+        "size": 128049
+      }
+    ],
+    "reporter": {
+      "accountId": "712020:1cfa8fcd-b441-411c-b9e6-b4a7a96b4b13",
+      "displayName": "Oleg Sher"
+    },
+    "comment": {
+      "comments": []
+    },
+    "created": "2026-10-11T08:44:59.912+0300",
+    "updated": "2026-10-11T09:56:28.686+0300"
+  }
+}

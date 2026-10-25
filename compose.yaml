@@ -1,0 +1,17 @@
+services:
+  bug-validator:
+    build: .
+    env_file: .env
+    volumes:
+      - ./state:/app/state
+    # The container sees the host only through this volume; claude needs a writable home and tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/node
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"

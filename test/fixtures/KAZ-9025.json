@@ -1,0 +1,45 @@
+{
+  "key": "KAZ-9025",
+  "fields": {
+    "summary": "Web UI 2.0: Egress filter does not appear as egress action in the port config table",
+    "description": "# Create a filter egress list and filter\n# Associate it to port\n# The port table should show the egress filter as a filter action like in CLI:\n\n{noformat}NPB-Ie8# show ports port\nPort     Name           Admin    Link    Speed ASpeed Alarms Mode     FEC       Ingress Action         Egress Action\n======== ============== ======== ======= ===== ====== ====== ======== ========= ====================== ========================\n1                       Enabled  Up        10G    10G No     Normal   Disable\n2                       Enabled  Down      10G      0 No     Normal   Disable\n3                       Enabled  Down      10G      0 No     Normal   Disable\n4                       Enabled  Down       1G      0 No     Normal   Disable                          FILTER\n{noformat}\n\nBut in fact it doesn’t show it:\n\n!image-20261015-124338.png|width=742,alt=\"image-20261015-124338.png\"!",
+    "status": {
+      "name": "Created"
+    },
+    "project": {
+      "key": "KAZ"
+    },
+    "labels": [
+      "Egress_Action",
+      "WebUI",
+      "Web_UI_2.0",
+      "egress_filters"
+    ],
+    "versions": [
+      {
+        "name": "5.10.0-official"
+      }
+    ],
+    "customfield_10033": [
+      {
+        "value": "NPB-All"
+      }
+    ],
+    "attachment": [
+      {
+        "filename": "image-20261015-124338.png",
+        "mimeType": "image/png",
+        "size": 51867
+      }
+    ],
+    "reporter": {
+      "accountId": "712020:a91caa38-10e5-460c-86d2-5e9d9719237d",
+      "displayName": "Shimon Korenman"
+    },
+    "comment": {
+      "comments": []
+    },
+    "created": "2026-10-15T15:44:20.194+0300",
+    "updated": "2026-10-15T15:44:29.967+0300"
+  }
+}

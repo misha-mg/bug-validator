@@ -1,0 +1,6 @@
+.env
+node_modules/
+state/
+tui/.venv/
+__pycache__/
+.pytest_cache/

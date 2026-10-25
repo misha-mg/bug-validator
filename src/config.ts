@@ -1,0 +1,44 @@
+import { existsSync } from 'node:fs';
+import { z } from 'zod';
+
+const Env = z.object({
+  JIRA_BASE_URL: z.url().default('https://cgstowernetworks.atlassian.net'),
+  JIRA_CLOUD_ID: z.string().min(1).default('0ba987c4-6759-4967-afaa-f80e0e69c8fc'),
+  JIRA_EMAIL: z.email(),
+  JIRA_API_TOKEN: z.string().min(1),
+  // Safe default: nothing is written to Jira unless DRY_RUN=false is set on purpose.
+  DRY_RUN: z.enum(['true', 'false']).default('true'),
+  POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().default(180),
+  DB_FILE: z.string().min(1).default('state/bug-validator.sqlite'),
+  AGENT_MODEL: z.string().min(1).default('haiku'),
+  AGENT_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(180),
+  // Long-lived token from `claude setup-token`; without it claude uses the machine's own login.
+  CLAUDE_CODE_OAUTH_TOKEN: z.string().min(1).optional(),
+});
+
+export interface Config {
+  jira: { baseUrl: string; cloudId: string; email: string; apiToken: string };
+  dryRun: boolean;
+  pollIntervalMs: number;
+  dbFile: string;
+  agent: { model: string; timeoutMs: number; auth: 'oauth_token' | 'cli_login' };
+  maxAttempts: number;
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  if (env === process.env && existsSync('.env')) process.loadEnvFile('.env');
+  const parsed = Env.safeParse(env);
+  if (!parsed.success) {
+    const problems = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+    throw new Error(`Bad configuration: ${problems.join('; ')}`);
+  }
+  const e = parsed.data;
+  return {
+    jira: { baseUrl: e.JIRA_BASE_URL, cloudId: e.JIRA_CLOUD_ID, email: e.JIRA_EMAIL, apiToken: e.JIRA_API_TOKEN },
+    dryRun: e.DRY_RUN === 'true',
+    pollIntervalMs: e.POLL_INTERVAL_SECONDS * 1000,
+    dbFile: e.DB_FILE,
+    agent: { model: e.AGENT_MODEL, timeoutMs: e.AGENT_TIMEOUT_SECONDS * 1000, auth: e.CLAUDE_CODE_OAUTH_TOKEN ? 'oauth_token' : 'cli_login' },
+    maxAttempts: 3,
+  };
+}

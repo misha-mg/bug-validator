@@ -1,0 +1,52 @@
+{
+  "key": "RPG-6192",
+  "fields": {
+    "summary": "WebUI: WebUI lost session with backend (Read Only)",
+    "description": "device .73\n\nexample: trying to download CMI image via WebUI (the same behaviour if i try to enable port - no write connection to device)\n\n!image-20261014-070557.png|width=742,alt=\"image-20261014-070557.png\"!\n\n!image-20261014-070634.png|width=742,alt=\"image-20261014-070634.png\"!\n\nnothing in device log file.\n\ncmi available on [ftp://192.168.201.110/cmi/cmi-2026.2.bin|ftp://192.168.201.110/cmi/cmi-2026.2.bin]\n\n[~accountid:712020:d7ceb79c-a1ff-496f-b365-bca91b9bd387] \n\nafter hard cahe reset in browser - the same\n\nclose - open UI in guest mode solve the read only issue.\n\nTHE CACHING ISSUE IN CHROME NOT DEVICE ISSUE - i my opinion we have to provide end user with any indication that WRITE connection between UI backend lost",
+    "status": {
+      "name": "Created"
+    },
+    "project": {
+      "key": "RPG"
+    },
+    "labels": [
+      "WebUI"
+    ],
+    "versions": [
+      {
+        "name": "5.10.0-commit.3099"
+      }
+    ],
+    "customfield_10033": [
+      {
+        "value": "AFS"
+      }
+    ],
+    "attachment": [
+      {
+        "filename": "192.168.201.73_cmi_download_error.har",
+        "mimeType": "text/plain",
+        "size": 1777569
+      },
+      {
+        "filename": "image-20261014-070557.png",
+        "mimeType": "image/png",
+        "size": 106886
+      },
+      {
+        "filename": "image-20261014-070634.png",
+        "mimeType": "image/png",
+        "size": 84883
+      }
+    ],
+    "reporter": {
+      "accountId": "712020:1cfa8fcd-b441-411c-b9e6-b4a7a96b4b13",
+      "displayName": "Oleg Sher"
+    },
+    "comment": {
+      "comments": []
+    },
+    "created": "2026-10-14T10:10:18.544+0300",
+    "updated": "2026-10-14T10:54:42.171+0300"
+  }
+}
