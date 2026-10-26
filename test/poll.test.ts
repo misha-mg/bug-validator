@@ -8,98 +8,126 @@ import { poll } from '../src/pipeline/poll.ts';
 import { rawIssue } from './fixtures.ts';
 
 // KAZ-9021: a video, no HAR, Devices = All, Affects versions set. Its field facts fail only R6.
+// The fixtures were created days ago: old enough for the first check, quiet enough for a re-check.
 const KEY = 'KAZ-9021';
 const REPORTER = '712020:a91caa38-10e5-460c-86d2-5e9d9719237d';
 const needsHar = { comment_needed: true, comment: `[~accountid:${REPORTER}]\nPlease add:\n- HAR file`, missing: ['R6'], related: [] };
+const harArrived = { ...needsHar, comment: `[~accountid:${REPORTER}]\nPlease add:\n- -HAR file-`, missing: [] };
+const minutesAgo = (m: number): string => new Date(Date.now() - m * 60_000).toISOString();
 
 class FakeJira implements Jira {
   inQuery: string[] = [KEY];
   /** A bug's id; by default derived from its key, set to show a bug that moved. */
   ids: Record<string, string> = {};
+  /** Fields that differ from the bug's fixture: what the reporter changed. */
+  changes: Record<string, Record<string, unknown>> = {};
   posted: { key: string; body: string }[] = [];
-  failWith: Error | null = null;
+  edited: { key: string; commentId: string; body: string }[] = [];
   async search(jql: string): Promise<RawIssue[]> {
-    if (this.failWith) throw this.failWith;
     if (jql.startsWith('key IN')) return []; // no related bug exists
-    return this.inQuery.map((key) => ({ id: this.ids[key] ?? `id-${key}`, key, fields: {} }));
+    return this.inQuery.map((key) => this.issue(key));
   }
   async getIssue(key: string): Promise<RawIssue> {
-    return rawIssue(key);
+    return this.issue(key);
   }
   async addComment(key: string, body: string): Promise<{ id: string }> {
     this.posted.push({ key, body });
     return { id: String(this.posted.length) };
   }
+  async editComment(key: string, commentId: string, body: string): Promise<void> {
+    this.edited.push({ key, commentId, body });
+  }
+  /** The reporter attaches a HAR. */
+  attachHar(key: string): void {
+    const fields = rawIssue(key).fields as { attachment: object[] };
+    this.changes[key] = { attachment: [...fields.attachment, { filename: 'session.har' }] };
+  }
+  private issue(key: string): RawIssue {
+    const fixture = rawIssue(this.ids[key] ? KEY : key);
+    return { id: this.ids[key] ?? `id-${key}`, key, fields: { ...fixture.fields, ...this.changes[key] } };
+  }
 }
 
+/** Returns the outcomes in turn, the last one from then on. */
 class FakeAgent implements Agent {
-  private readonly outcome: unknown | Error;
-  constructor(outcome: unknown | Error) {
-    this.outcome = outcome;
+  private readonly outcomes: (unknown | Error)[];
+  prompts: string[] = [];
+  constructor(...outcomes: (unknown | Error)[]) {
+    this.outcomes = outcomes;
   }
-  async run(): Promise<AgentRun> {
-    if (this.outcome instanceof Error) throw this.outcome;
-    return { output: this.outcome, costUsd: 0, durationMs: 0, turns: 1 };
+  async run(prompt: string, _jsonSchema: object, _signal?: AbortSignal): Promise<AgentRun> {
+    this.prompts.push(prompt);
+    const outcome = this.outcomes.length > 1 ? this.outcomes.shift() : this.outcomes[0];
+    if (outcome instanceof Error) throw outcome;
+    return { output: outcome, costUsd: 0, durationMs: 0, turns: 1 };
   }
 }
 
-function deps(agentOutcome: unknown | Error, dryRun = true): Deps & { jira: FakeJira } {
-  const d = { config: { dryRun, maxAttempts: 3 }, jira: new FakeJira(), agent: new FakeAgent(agentOutcome), store: new Store(':memory:') };
+function deps(agent: FakeAgent, dryRun = true): Deps & { jira: FakeJira; agent: FakeAgent } {
+  const d = { config: { dryRun, maxAttempts: 3 }, jira: new FakeJira(), agent, store: new Store(':memory:') };
   d.store.bootstrap([]);
   return d;
 }
 
 describe('poll', () => {
   it('the first poll skips what is already in the query and checks nothing', async () => {
-    const d = deps(needsHar);
+    const d = deps(new FakeAgent(needsHar));
     d.store = new Store(':memory:');
-    assert.deepEqual(await poll(d), { inQuery: 1, pending: 0, checked: 0, failed: 0 });
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 0, checked: 0, failed: 0 });
     assert.equal(d.store.status(KEY), 'skipped');
     d.jira.inQuery = [KEY, 'KAZ-9025'];
     assert.deepEqual((await poll(d)).pending, 1, 'only the new bug is pending');
   });
+  it('a bug younger than 30 minutes waits for a later poll', async () => {
+    const d = deps(new FakeAgent(needsHar));
+    d.jira.changes[KEY] = { created: minutesAgo(10), updated: minutesAgo(10) };
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 1, pending: 0, checked: 0, failed: 0 });
+    d.jira.changes[KEY] = { created: minutesAgo(31), updated: minutesAgo(10) };
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 1, checked: 1, failed: 0 });
+  });
   it('a complete bug is recorded without a comment', async () => {
-    const d = deps({ comment_needed: false, comment: '', missing: [], related: [] });
+    const d = deps(new FakeAgent({ comment_needed: false, comment: '', missing: [], related: [] }));
     d.jira.inQuery = ['RPG-6192']; // HAR attached, every field fact passes
-    assert.deepEqual(await poll(d), { inQuery: 1, pending: 1, checked: 1, failed: 0 });
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 1, checked: 1, failed: 0 });
     assert.equal(d.store.status('RPG-6192'), 'complete');
   });
-  it('dry run: the comment is recorded, nothing is posted, the bug is not checked twice', async () => {
-    const d = deps(needsHar);
+  it('dry run: the comment is recorded, nothing is posted, an unchanged bug is not checked again', async () => {
+    const d = deps(new FakeAgent(needsHar));
     await poll(d);
     assert.equal(d.store.status(KEY), 'dry_run');
     assert.deepEqual(d.jira.posted, []);
-    assert.deepEqual(await poll(d), { inQuery: 1, pending: 0, checked: 0, failed: 0 });
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 0, checked: 0, failed: 0 });
   });
   it('a bug moved to the other project after its check is not checked again', async () => {
-    const d = deps(needsHar);
+    const d = deps(new FakeAgent(needsHar));
     await poll(d);
     d.jira.inQuery = ['RPG-9999'];
     d.jira.ids = { 'RPG-9999': `id-${KEY}` };
-    assert.deepEqual(await poll(d), { inQuery: 1, pending: 0, checked: 0, failed: 0 });
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 0, checked: 0, failed: 0 });
     assert.equal(d.store.status('RPG-9999'), 'dry_run');
   });
   it('live: the row is written before the post, then marked commented', async () => {
-    const d = deps(needsHar, false);
+    const d = deps(new FakeAgent(needsHar), false);
     await poll(d);
     assert.equal(d.store.status(KEY), 'commented');
     assert.deepEqual(d.jira.posted, [{ key: KEY, body: needsHar.comment }]);
   });
   it('live: a post that fails leaves the bug posting, for a human, never for a second post', async () => {
-    const d = deps(needsHar, false);
+    const d = deps(new FakeAgent(needsHar), false);
     d.jira.addComment = async () => {
       throw new JiraError('request failed: fetch failed');
     };
     await assert.rejects(poll(d), JiraError);
     assert.equal(d.store.status(KEY), 'posting');
     d.jira.addComment = FakeJira.prototype.addComment;
-    assert.equal((await poll(d)).pending, 0);
+    d.jira.attachHar(KEY);
+    assert.equal((await poll(d)).pending, 0, 'not even when its report changes');
     assert.deepEqual(d.jira.posted, []);
   });
   it('a bad verdict costs an attempt; three of them mark the bug failed', async () => {
-    const d = deps({ ...needsHar, missing: [] }); // R6 fails but is not named
+    const d = deps(new FakeAgent({ ...needsHar, missing: [] })); // R6 fails but is not named
     for (const n of [1, 2]) {
-      assert.deepEqual(await poll(d), { inQuery: 1, pending: 1, checked: 0, failed: 1 }, `attempt ${n}`);
+      assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 1, checked: 0, failed: 1 }, `attempt ${n}`);
       assert.equal(d.store.status(KEY), 'retry');
     }
     await poll(d);
@@ -108,13 +136,13 @@ describe('poll', () => {
   });
   it('a failure of the surroundings ends the poll and costs the bug nothing', async () => {
     for (const err of [new AgentError('cannot start claude: spawn claude ENOENT', 'start'), new JiraError('HTTP 503', 503)]) {
-      const d = deps(err);
+      const d = deps(new FakeAgent(err));
       await assert.rejects(poll(d), err.constructor as ErrorConstructor);
       assert.equal(d.store.status(KEY), null);
     }
   });
   it('a stop request ends the poll between bugs', async () => {
-    const d = deps(needsHar);
+    const d = deps(new FakeAgent(needsHar));
     d.jira.inQuery = [KEY, 'KAZ-9025'];
     const stop = new AbortController();
     const agentRun = d.agent.run.bind(d.agent);
@@ -122,6 +150,38 @@ describe('poll', () => {
       stop.abort();
       return agentRun(...args);
     };
-    assert.deepEqual(await poll(d, stop.signal), { inQuery: 2, pending: 2, checked: 1, failed: 0 });
+    assert.deepEqual(await poll(d, stop.signal), { inQuery: 2, waiting: 0, pending: 2, checked: 1, failed: 0 });
+  });
+});
+
+describe('a re-check', () => {
+  it('live: the report changed, so the comment is edited in place, never posted again', async () => {
+    const d = deps(new FakeAgent(needsHar, harArrived), false);
+    await poll(d);
+    d.jira.attachHar(KEY);
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 1, checked: 1, failed: 0 });
+    assert.match(d.agent.prompts[1] ?? '', /previous comment[\s\S]*- HAR file/);
+    assert.equal(d.jira.posted.length, 1);
+    assert.deepEqual(d.jira.edited, [{ key: KEY, commentId: '1', body: harArrived.comment }]);
+    assert.deepEqual(d.store.rows([KEY]).get(KEY)?.comment, harArrived.comment);
+    assert.equal((await poll(d)).pending, 0, 'the edit itself is not a change');
+  });
+  it('waits until nothing has moved on the bug for 15 minutes', async () => {
+    const d = deps(new FakeAgent(needsHar, harArrived));
+    await poll(d);
+    d.jira.attachHar(KEY);
+    d.jira.changes[KEY] = { ...d.jira.changes[KEY], updated: minutesAgo(5) };
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 1, pending: 0, checked: 0, failed: 0 });
+    d.jira.changes[KEY] = { ...d.jira.changes[KEY], updated: minutesAgo(16) };
+    assert.equal((await poll(d)).checked, 1);
+    assert.equal(d.store.rows([KEY]).get(KEY)?.comment, harArrived.comment);
+  });
+  it('a failed re-check leaves the comment as it was and is tried again, up to 5 checks', async () => {
+    const d = deps(new FakeAgent(needsHar, { ...needsHar, comment_needed: false, comment: '' }));
+    await poll(d);
+    d.jira.attachHar(KEY);
+    for (let n = 2; n <= 5; n++) assert.equal((await poll(d)).failed, 1, `check ${n}`);
+    assert.equal((await poll(d)).pending, 0, 'the cap');
+    assert.deepEqual(d.store.rows([KEY]).get(KEY), { status: 'dry_run', fingerprint: d.store.rows([KEY]).get(KEY)?.fingerprint ?? '', comment: needsHar.comment, commentId: null, runs: 5 });
   });
 });

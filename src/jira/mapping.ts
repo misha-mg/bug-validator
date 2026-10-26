@@ -24,6 +24,11 @@ const IssueFields = z.object({
   updated: z.string(),
 });
 
+/** A Jira time ("2026-10-20T14:13:45.548+0300") in epoch ms; Date.parse wants the offset as +03:00. */
+export function jiraTime(s: string): number {
+  return Date.parse(s.replace(/([+-]\d\d)(\d\d)$/, '$1:$2'));
+}
+
 /** The issue JSON is not what the service expects: a per-bug failure, retried. */
 export class MappingError extends Error {
   constructor(message: string) {

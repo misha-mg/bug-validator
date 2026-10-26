@@ -10,7 +10,7 @@ def test_reads_the_mode_and_the_last_poll(state: Path) -> None:
 
     assert status is not None
     assert (status.dry_run, status.model, status.poll_interval) == (True, "haiku", timedelta(minutes=3))
-    assert status.in_query == 7 and status.poll_error is None
+    assert (status.in_query, status.waiting, status.poll_error) == (7, 2, None)
     assert liveness(status, datetime.now()) is Liveness.RUNNING
 
 

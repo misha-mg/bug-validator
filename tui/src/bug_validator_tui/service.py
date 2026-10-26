@@ -28,6 +28,8 @@ class ServiceStatus:
     last_seen: datetime | None = None
     last_poll: datetime | None = None
     in_query: int | None = None
+    # Of those, bugs not settled yet: too young for the first check, or changed and not yet quiet.
+    waiting: int | None = None
     # The latest poll's error, when it failed.
     poll_error: str | None = None
 
@@ -98,7 +100,7 @@ def _take(status: ServiceStatus, line: bytes) -> ServiceStatus:
     if name == "service_stopped":
         return replace(status, stopped=True)
     if name == "poll":
-        return replace(status, last_poll=ts, in_query=event.get("inQuery"), poll_error=None)
+        return replace(status, last_poll=ts, in_query=event.get("inQuery"), waiting=event.get("waiting"), poll_error=None)
     if name == "poll_failed":
         return replace(status, last_poll=ts, poll_error=event.get("error") or "unknown error")
     return status

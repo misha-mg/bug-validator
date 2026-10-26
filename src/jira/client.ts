@@ -44,12 +44,16 @@ export interface Jira {
   search(jql: string, fields: string[], maxResults: number): Promise<RawIssue[]>;
   getIssue(key: string): Promise<RawIssue>;
   addComment(key: string, body: string): Promise<{ id: string }>;
+  editComment(key: string, commentId: string, body: string): Promise<void>;
 }
 
 export const ISSUE_FIELDS = [
   'summary', 'description', 'status', 'project', 'labels', 'versions', 'customfield_10033',
   'attachment', 'reporter', 'comment', 'created', 'updated',
 ];
+
+/** What the poll reads of every bug in the query: the report (domain/fingerprint.ts) and its times. */
+export const REPORT_FIELDS = ['summary', 'description', 'status', 'project', 'versions', 'customfield_10033', 'attachment', 'created', 'updated'];
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -92,10 +96,18 @@ export class JiraClient implements Jira {
     }
   }
 
-  /** The program's only write to Jira. */
+  /** One of the program's two writes to Jira: a new comment. */
   addComment(key: string, body: string): Promise<{ id: string }> {
     return this.request<{ id: string }>(`/issue/${encodeURIComponent(key)}/comment`, {
       method: 'POST',
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  /** The other write: the service's own comment, edited after a re-check. */
+  async editComment(key: string, commentId: string, body: string): Promise<void> {
+    await this.request<unknown>(`/issue/${encodeURIComponent(key)}/comment/${encodeURIComponent(commentId)}`, {
+      method: 'PUT',
       body: JSON.stringify({ body }),
     });
   }

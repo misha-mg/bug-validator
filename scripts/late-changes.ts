@@ -10,7 +10,7 @@ import { loadConfig } from '../src/config.ts';
 import { FIELD_FACTS, type RequirementId } from '../src/domain/bug.ts';
 import { runBaseChecks } from '../src/domain/checks.ts';
 import { type ChangelogEntry, ISSUE_FIELDS, JiraClient, type RawIssue } from '../src/jira/client.ts';
-import { toBug } from '../src/jira/mapping.ts';
+import { jiraTime as time, toBug } from '../src/jira/mapping.ts';
 
 /** What the check reads, as changelog fields; everything else (assignee, links, labels) is not content. */
 const KINDS = ['description', 'summary', 'HAR', 'other attachment', 'Affects versions', 'Devices', 'project'] as const;
@@ -41,9 +41,6 @@ interface Measured {
   updatedFrom: 'changelog' | 'comment' | 'neither';
   failingNow: RequirementId[];
 }
-
-// Jira writes offsets as +0300; Date.parse wants +03:00.
-const time = (s: string): number => Date.parse(s.replace(/([+-]\d\d)(\d\d)$/, '$1:$2'));
 
 function kindOf(item: ChangelogEntry['items'][number]): Kind | null {
   switch (item.fieldId ?? item.field) {

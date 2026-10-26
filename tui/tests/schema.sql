@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS checks (
   checked_at  TEXT NOT NULL,
   summary     TEXT,
   reporter    TEXT,
+  fingerprint TEXT,
   base_checks TEXT,
   verdict     TEXT,
   comment     TEXT,
@@ -15,6 +16,16 @@ CREATE TABLE IF NOT EXISTS checks (
 );
 CREATE INDEX IF NOT EXISTS checks_status ON checks (status);
 CREATE UNIQUE INDEX IF NOT EXISTS checks_issue_id ON checks (issue_id);
+CREATE TABLE IF NOT EXISTS runs (
+  key         TEXT NOT NULL,
+  at          TEXT NOT NULL,
+  fingerprint TEXT,
+  base_checks TEXT,
+  verdict     TEXT,
+  comment     TEXT,
+  error       TEXT
+);
+CREATE INDEX IF NOT EXISTS runs_key ON runs (key);
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL

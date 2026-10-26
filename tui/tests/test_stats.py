@@ -23,8 +23,9 @@ def test_counts_the_checks_of_each_period(state: Path) -> None:
 def test_problems_are_the_requirements_found_failed_most_common_first(state: Path) -> None:
     found = problems(load_checks(state / "bug-validator.sqlite"))
 
-    assert [(p.id, p.share) for p in found[:3]] == [("R6", Share(2, 3)), ("R4", Share(1, 3)), ("R1", Share(0, 3))]
-    assert [p.id for p in found] == ["R6", "R4", "R1", "R2", "R3", "R5", "R7"]
+    # KAZ-2's first check found R1 missing too; its reporter added steps later.
+    assert [(p.id, p.share) for p in found[:4]] == [("R6", Share(2, 3)), ("R1", Share(1, 3)), ("R4", Share(1, 3)), ("R2", Share(0, 3))]
+    assert [p.id for p in found] == ["R6", "R1", "R4", "R2", "R3", "R5", "R7"]
 
 
 def test_checks_per_day_leave_out_skipped_bugs(state: Path) -> None:

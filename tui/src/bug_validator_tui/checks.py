@@ -1,4 +1,5 @@
-"""The service's database, read-only: one row per bug it has dealt with (docs/architecture.md)."""
+"""The service's database, read-only: one row per bug it has dealt with, and one per check of it
+(docs/architecture.md)."""
 
 from __future__ import annotations
 
@@ -59,6 +60,16 @@ class Related:
 
 
 @dataclass(frozen=True)
+class Run:
+    """One check of a bug: what it found missing, or why it failed."""
+
+    at: datetime
+    missing: tuple[str, ...]
+    comment: str | None
+    error: str | None
+
+
+@dataclass(frozen=True)
 class Check:
     key: str
     status: str
@@ -74,6 +85,14 @@ class Check:
     related: tuple[Related, ...]
     comment: str | None
     error: str | None
+    # Every check of the bug, oldest first; empty for rows from before the service kept them.
+    history: tuple[Run, ...] = ()
+
+    @property
+    def first_missing(self) -> tuple[str, ...]:
+        """What the first finished check found missing: the report as it arrived, before any re-check."""
+        first = next((run for run in self.history if run.error is None), None)
+        return first.missing if first else self.missing
 
     @property
     def result(self) -> Result:
@@ -94,12 +113,24 @@ def load_checks(db: Path) -> list[Check]:
     connection.row_factory = sqlite3.Row
     try:
         rows = connection.execute("SELECT * FROM checks").fetchall()
+        history = _history(connection)
     except sqlite3.Error:
         # The file is there, the table not yet (the service is creating it), or it is not a database.
         return []
     finally:
         connection.close()
-    return sorted((_check(row) for row in rows), key=lambda c: c.checked_at, reverse=True)
+    return sorted((_check(row, history.get(row["key"], ())) for row in rows), key=lambda c: c.checked_at, reverse=True)
+
+
+def _history(connection: sqlite3.Connection) -> dict[str, tuple[Run, ...]]:
+    """The runs of every bug, oldest first; none in a database from before runs were kept."""
+    if not connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'runs'").fetchone():
+        return {}
+    runs: dict[str, list[Run]] = {}
+    for row in connection.execute("SELECT * FROM runs ORDER BY at, rowid"):
+        verdict = _json(row["verdict"]) or {}
+        runs.setdefault(row["key"], []).append(Run(local_time(row["at"]), tuple(verdict.get("missing", [])), row["comment"], row["error"]))
+    return {key: tuple(found) for key, found in runs.items()}
 
 
 def local_time(stamp: str | None) -> datetime:
@@ -110,7 +141,7 @@ def local_time(stamp: str | None) -> datetime:
     return datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
 
 
-def _check(row: sqlite3.Row) -> Check:
+def _check(row: sqlite3.Row, history: tuple[Run, ...]) -> Check:
     columns = row.keys()
     verdict = _json(row["verdict"]) or {}
     return Check(
@@ -125,6 +156,7 @@ def _check(row: sqlite3.Row) -> Check:
         related=tuple(Related(r["key"], r["reason"]) for r in verdict.get("related", [])),
         comment=row["comment"],
         error=row["error"],
+        history=history,
     )
 
 

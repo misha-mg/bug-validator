@@ -6,7 +6,9 @@ Status: idea, not decided. Replaces the "re-read right before posting" step drop
 ## Question it would answer
 
 Does the comment work? That is: after the service asks for steps, a HAR or a build, does the
-reporter add them, and how fast? Today the database knows only what was missing at the check.
+reporter add them, and how fast? Since 2026-10-26 the re-checks record it while the bug is in
+Created (the `runs` table). Nothing records what arrives after the bug leaves Created, and the TUI
+shows no "asked → added" count yet.
 
 ## The idea
 

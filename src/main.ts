@@ -6,10 +6,11 @@ import { log } from './log.ts';
 const USAGE = `usage:
   node src/main.ts run             poll Jira and check new bugs (DRY_RUN=true by default)
   node src/main.ts check <KEY>     check one bug and print the result; writes nothing
+    [--recheck]                    as a re-check: the agent edits the comment recorded for the bug
   node src/main.ts requeue <KEY>   check a failed bug again at the next poll
 `;
 
-const [command, arg] = process.argv.slice(2);
+const [command, arg, ...flags] = process.argv.slice(2);
 
 // `check | head` closes the pipe early; that is not an error worth a stack trace.
 process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -20,8 +21,8 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
 try {
   if (command === 'run') {
     await run();
-  } else if (command === 'check' && arg) {
-    await check(arg);
+  } else if (command === 'check' && arg && flags.every((f) => f === '--recheck')) {
+    await check(arg, flags.includes('--recheck'));
   } else if (command === 'requeue' && arg) {
     requeue(arg);
   } else {

@@ -63,6 +63,8 @@ def _summary(check: Check, jira_url: str) -> Content:
     color = RESULT_COLORS.get(check.result)
     rows.append(("Result", Content.styled(result_label(check), f"${color}" if color else "dim")))
     rows.append(("Checked", f"{check.checked_at:%d %b %H:%M}"))
+    if len(check.history) > 1:
+        rows.append(("Checks", f"{len(check.history)} · first {check.history[0].at:%d %b %H:%M}"))
     if check.error:
         rows.append(("Error", Content.styled(check.error, "$error")))
     rows.append(("Jira", f"{jira_url.rstrip('/')}/browse/{check.key}"))
@@ -89,15 +91,32 @@ def _requirements(check: Check, colors: dict[str, str]) -> RenderableType:
             fact.append("✓ " if found.passed else "✗ ", style=colors["success"] if found.passed else colors["error"])
             fact.append(found.detail, style="dim")
         table.add_row(Text(id, style="bold"), name, verdict, fact)
-    if not check.related:
-        return table
-    # Their own grid: a reason runs to two lines rather than being cut.
-    related = Table.grid(padding=(0, 2))
-    related.add_column(no_wrap=True)
-    related.add_column()
-    for bug in check.related:
-        related.add_row(Text(bug.key, style="bold"), Text(bug.reason, style="dim"))
-    return Group(table, Text(""), Text("Related bugs", style=f"bold {colors['secondary']}"), related)
+    parts: list[RenderableType] = [table]
+    if check.related:
+        # Their own grid: a reason runs to two lines rather than being cut.
+        related = Table.grid(padding=(0, 2))
+        related.add_column(no_wrap=True)
+        related.add_column()
+        for bug in check.related:
+            related.add_row(Text(bug.key, style="bold"), Text(bug.reason, style="dim"))
+        parts += [Text(""), Text("Related bugs", style=f"bold {colors['secondary']}"), related]
+    if len(check.history) > 1:
+        parts += [Text(""), Text("Checks", style=f"bold {colors['secondary']}"), _history(check, colors)]
+    return Group(*parts) if len(parts) > 1 else table
+
+
+def _history(check: Check, colors: dict[str, str]) -> Table:
+    """Every check of the bug, oldest first: what each found missing, so what the reporter added shows."""
+    table = Table.grid(padding=(0, 2))
+    table.add_column(no_wrap=True)
+    table.add_column(overflow="ellipsis")
+    for run in check.history:
+        if run.error:
+            found = Text(run.error, style=colors["error"])
+        else:
+            found = Text("missing " + " ".join(run.missing) if run.missing else "nothing missing", style="dim")
+        table.add_row(f"{run.at:%d %b %H:%M}", found)
+    return table
 
 
 def _comment(check: Check) -> str:
