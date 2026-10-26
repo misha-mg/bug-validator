@@ -85,6 +85,10 @@ describe('home', () => {
     assert.equal(at('check_failed', { key: 'KAZ-1', recheck: true, error: 'x' }), 're-check failed · x');
     assert.equal(at('key_changed', { from: 'RPG-1', to: 'KAZ-2' }), 'moved: RPG-1 → KAZ-2');
     assert.equal(at('poll_failed', { error: 'HTTP 503' }), 'poll failed · HTTP 503');
+    const long = `HTTP 403 on GET /search?${'x'.repeat(200)}`;
+    const line = at('poll_failed', { error: long });
+    assert.ok(line.startsWith(`poll failed · <span title="${long}">HTTP 403 on GET /search?xxx`) && line.endsWith('…</span>'));
+    assert.equal(line.length, long.length + 'poll failed · <span title="">'.length + 120 + '</span>'.length);
     assert.equal(at('something_new'), 'something_new');
   });
 });

@@ -9,6 +9,7 @@ import { type Day, type Share, checksPerDay, itemsAddedAfterComment, needsAttent
 export const CHART_DAYS = 30;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const SUMMARY_WIDTH = 80;
+const ERROR_WIDTH = 120;
 const KEY = /^(KAZ|RPG)-\d+$/;
 const MENTION = /\[~accountid:[^\]]*\]/g;
 
@@ -94,7 +95,7 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
     else rows.push(['State', `<span class="err">silent${s.lastSeen ? ` · ${span(now.getTime() - s.lastSeen.getTime())}` : ''}</span>`]);
     if (s.pollError) {
       rows.push(['Last poll', `<span class="err">failed · ${ago(now, s.lastPoll ?? now)}</span>`]);
-      rows.push(['Error', `<span class="err">${esc(s.pollError)}</span>`]);
+      rows.push(['Error', `<span class="err">${errorText(s.pollError)}</span>`]);
     } else if (s.lastPoll) rows.push(['Last poll', ago(now, s.lastPoll)]);
     else rows.push(['Last poll', '<span class="muted">none yet</span>']);
     if (s.dryRun === true) rows.push(['Mode', '<span class="badge dry">dry run</span>']);
@@ -181,7 +182,7 @@ export function eventText(e: LogEvent): string {
     case 'first_start':
       return esc(`first start · ${f.skipped ?? 0} bugs already in Created skipped`);
     case 'poll_failed':
-      return esc(`poll failed · ${f.error ?? ''}`);
+      return `poll failed · ${errorText(f.error)}`;
     case 'key_changed':
       return esc(`moved: ${f.from} → ${f.to}`);
     case 'bug_complete':
@@ -193,11 +194,11 @@ export function eventText(e: LogEvent): string {
     case 'comment_edited':
       return esc(`comment edited${missing}`);
     case 'check_failed':
-      return esc(`${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${f.attempts}` : ''} · ${f.error ?? ''}`);
+      return `${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${f.attempts}` : ''} · ${errorText(f.error)}`;
     case 'mentions_stripped':
       return esc(`mentions stripped: ${Array.isArray(f.stripped) ? f.stripped.join(', ') : ''}`);
     case 'fatal':
-      return esc(`fatal · ${f.error ?? ''}`);
+      return `fatal · ${errorText(f.error)}`;
     default:
       return esc(e.event);
   }
@@ -419,6 +420,13 @@ export const bugsText = (n: number): string => `${n} bug${n === 1 ? '' : 's'}`;
 
 /** "85% (11)": the percentage, and how many it is. */
 export const shareText = (s: Share): string => (s.total ? `${Math.round((s.count * 100) / s.total)}% (${s.count})` : '–');
+
+/** An error message on one line; the whole of it on hover when it is cut. */
+function errorText(error: unknown): string {
+  const text = typeof error === 'string' ? error : error == null ? '' : String(error);
+  const line = cut(text, ERROR_WIDTH);
+  return line === text ? esc(text) : `<span title="${esc(text)}">${esc(line)}</span>`;
+}
 
 /** One line of at most width characters. */
 export function cut(text: string, width: number): string {

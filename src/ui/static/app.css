@@ -105,7 +105,9 @@ svg.days text.today { fill: var(--fg); font-weight: 700; }
 .result.no_comment { color: var(--ok); }
 .result.error { color: var(--error); }
 .result.skipped { color: var(--muted); }
-.bugs a.jira, .activity a.jira { font-size: 0.8rem; color: var(--muted); margin-left: 0.3rem; }
+.bugs a.jira { font-size: 0.8rem; color: var(--muted); margin-left: 0.3rem; }
+/* Activity: the time and the key as wide as they are, the text takes the rest and wraps. */
+.activity td:not(:last-child) { width: 1%; white-space: nowrap; }
 .activity td:last-child { overflow-wrap: anywhere; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-bottom: 1rem; }
