@@ -35,6 +35,7 @@ export function layout(title: string, main: string, ctx: PageContext): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <link rel="stylesheet" href="/app.css">
+<script src="/theme.js"></script>
 </head>
 <body>
 <header class="top">
@@ -42,6 +43,7 @@ export function layout(title: string, main: string, ctx: PageContext): string {
 <nav><a href="/">Home</a><a href="/bugs">Bugs</a></nav>
 ${mode}
 <form class="request" method="post" action="/requests"><input name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button>Check</button></form>
+<button class="theme" type="button" aria-label="Switch between light and dark"></button>
 </header>
 <main>
 ${main}
@@ -72,9 +74,10 @@ export function homePage(m: HomeModel, ctx: PageContext): string {
   const total = found[0]?.share.total ?? 0;
   const attention = needsAttention(m.bugs);
   const main = `
+<section class="tiles">${tiles(m.bugs, ctx.now)}</section>
 <section class="block service"><h2>Service</h2>${kv(serviceRows(m, ctx.now))}</section>
-<section class="block statistics"><h2>Statistics</h2>${statsTable(m.bugs, ctx.now)}
-<figure class="chart"><figcaption>Bugs checked per day</figcaption>${dayChart(checksPerDay(m.bugs, ctx.now, CHART_DAYS))}
+<section class="block statistics"><h2>Bugs checked per day <small>${CHART_DAYS} days</small></h2>
+<figure class="chart">${dayChart(checksPerDay(m.bugs, ctx.now, CHART_DAYS))}
 <div class="legend"><span class="sw no_comment"></span>without comment <span class="sw comment"></span>with comment <span class="sw error"></span>error</div></figure></section>
 <section class="block problems"><h2>Most common gaps <small>${total ? `of ${bugsText(total)} checked · all time` : ''}</small></h2>
 ${total ? problemsTable(found) : '<p class="muted">No bug has been checked yet.</p>'}</section>
@@ -122,22 +125,23 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
   return rows;
 }
 
-function statsTable(bugs: BugView[], now: Date): string {
-  const columns = [
-    ['Today', periodStats(bugs, startOfDay(now))],
-    ['7 days', periodStats(bugs, new Date(now.getTime() - WEEK_MS))],
-    ['All time', periodStats(bugs)],
+/** Bugs checked today, in 7 days and all time, with the share that got a comment; and what arrived after a comment. */
+function tiles(bugs: BugView[], now: Date): string {
+  const periods = [
+    ['Checked today', periodStats(bugs, startOfDay(now))],
+    ['Checked in 7 days', periodStats(bugs, new Date(now.getTime() - WEEK_MS))],
+    ['Checked all time', periodStats(bugs)],
   ] as const;
-  const row = (label: string, cell: (s: (typeof columns)[number][1]) => string): string =>
-    `<tr><th>${label}</th>${columns.map(([, s]) => `<td>${cell(s)}</td>`).join('')}</tr>`;
+  const tile = (label: string, value: string, caption: string): string => `<div class="block tile"><div class="label">${label}</div><div class="value">${value}</div><div class="caption">${caption}</div></div>`;
   const added = itemsAddedAfterComment(bugs);
-  return `<table class="stats"><thead><tr><th></th>${columns.map(([title]) => `<th>${title}</th>`).join('')}</tr></thead><tbody>
-${row('Checked', (s) => String(s.checked))}
-${row('Without comment', (s) => shareText(s.withoutComment))}
-${row('With comment', (s) => shareText(s.withComment))}
-${row('Check failed', (s) => (s.errors ? `<span class="err">${s.errors}</span>` : '0'))}
-</tbody></table>
-<p class="after-comment">Items added after the comment: <strong>${added.total ? `${added.count} of ${added.total} asked` : '–'}</strong> <small>re-checked bugs, all time</small></p>`;
+  return (
+    periods
+      .map(([label, s]) => {
+        const failed = s.errors ? ` · <span class="err">${s.errors} failed</span>` : '';
+        return tile(label, String(s.checked), s.checked ? `${shareText(s.withComment)} with comment${failed}` : `no checks${failed}`);
+      })
+      .join('') + tile('Items added after the comment', added.total ? `${added.count} of ${added.total}` : '–', 're-checked bugs, all time')
+  );
 }
 
 function problemsTable(found: ReturnType<typeof problems>): string {

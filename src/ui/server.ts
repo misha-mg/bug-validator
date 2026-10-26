@@ -8,7 +8,7 @@ import { type PageContext, bugPage, bugsPage, bugsQuery, errorPage, homePage } f
 import { readBug, readBugs, readRequests } from './read.ts';
 import { ServiceLog } from './service-log.ts';
 
-const STATIC: Record<string, string> = { '/app.css': 'text/css', '/app.js': 'text/javascript' };
+const STATIC: Record<string, string> = { '/app.css': 'text/css', '/app.js': 'text/javascript', '/theme.js': 'text/javascript' };
 
 /** A posted form is small; anything bigger is not one. */
 const MAX_BODY = 4096;

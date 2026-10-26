@@ -41,7 +41,7 @@ src/
     stats.ts         counts by period, the most common gaps, checks per day, items added after the comment
     html.ts          the three pages as pure functions: HTML strings from what was read
     server.ts        node:http: the pages, app.css and app.js; nothing cached
-    static/          the stylesheet and the refresh script
+    static/          the stylesheet, the theme switch (runs in <head>) and the refresh script
 agent/instructions.md   the agent's system prompt
 deploy/*.service     systemd user units: the service and the UI
 scripts/late-changes.ts   how reports change after creation (read-only measurement): `node scripts/late-changes.ts [days]`
@@ -209,8 +209,9 @@ external resources: the pages work on a network without internet access.
 
 - `/` — the service (running, stopped or silent; last poll; mode; in Created and how many of
   them wait; started; model; claude version and auth; poll interval; the bug being checked;
-  the checks requested and waiting; skipped at the first start), bugs checked today / 7 days / all time with and without a
-  comment, failed checks, the items that arrived after a comment, bugs per day for 30 days, the
+  the checks requested and waiting; skipped at the first start), bugs checked today / 7 days /
+  all time with the share that got a comment and the failed checks, the items that arrived
+  after a comment, bugs per day for 30 days, the
   requirements the first check found missing most often, the checks that need attention, and
   the latest 30 events of the log.
 - `/bugs` — every bug by the day of its last check, latest first: result, what is missing,
@@ -223,7 +224,9 @@ external resources: the pages work on a network without internet access.
 
 The pages are rendered on the server (`html.ts`, pure functions tested in `test/ui/`); `app.js`
 fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden
-or the search box has focus. Everything works with JavaScript off, minus the refresh. Times are
+or the search box has focus; `theme.js` keeps the light or dark choice made with the header's
+button in the browser (the system's setting until then). Everything works with JavaScript off,
+minus the refresh and the switch. Times are
 the server's local time. Jira links use `JIRA_BASE_URL`.
 
 ### Deploy

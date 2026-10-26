@@ -53,6 +53,7 @@ describe('server', () => {
     const js = await get('/app.js');
     assert.equal(js.type, 'text/javascript; charset=utf-8');
     assert.match(js.body, /setInterval/);
+    assert.match((await get('/theme.js')).body, /localStorage/);
     assert.equal(css.headers.get('cache-control'), 'no-store');
     assert.match((await get('/')).headers.get('content-security-policy') ?? '', /default-src 'self'/);
   });

@@ -41,11 +41,9 @@ describe('home', () => {
     assert.match(service, /Requested KAZ-1 · 2m ago Skipped/, 'the pending request, not the failed one');
     assert.match(section(html, 'service'), /<a class="key" href="\/bugs\/KAZ-1">KAZ-1<\/a> · 2m ago/);
 
-    const stats = text(section(html, 'statistics'));
-    assert.match(stats, /Today 7 days All time/);
-    assert.match(stats, /With comment 100% \(1\) 50% \(1\) 67% \(2\)/);
-    assert.match(stats, /Check failed 0 1 1/);
-    assert.match(stats, /Items added after the comment: 1 of 3 asked/);
+    const tiles = text(html.slice(html.indexOf('<section class="tiles">'), html.indexOf('<section class="block service">')));
+    assert.match(tiles, /^Checked today 1 100% \(1\) with comment Checked in 7 days 2 50% \(1\) with comment · 1 failed Checked all time 3 67% \(2\) with comment · 1 failed Items added after the comment 1 of 3 re-checked bugs, all time$/);
+    assert.match(html, /<button class="theme" type="button"/);
 
     const problems = text(section(html, 'problems'));
     assert.match(problems, /of 3 bugs checked · all time/);
@@ -68,6 +66,7 @@ describe('home', () => {
     assert.match(page, /No bug has been checked yet/);
     assert.match(page, /No check has failed/);
     assert.match(page, /Nothing logged yet/);
+    assert.match(page, /Checked today 0 no checks/);
     assert.doesNotMatch(empty, /class="badge/);
   });
   it('the chart has one bar per day, stacked in order, with its count', () => {
