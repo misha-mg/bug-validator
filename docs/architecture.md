@@ -31,12 +31,19 @@ src/
     checkBug.ts      one bug: fetch → base checks → agent → verdict → guardrails
     plan.ts          which bugs of a poll are due: first checks, re-checks, the waiting ones
     poll.ts          one poll: query → first-start bootstrap → moved bugs → plan → checks → record / post / edit
-  commands/          run (the loop), check (one bug, writes nothing), requeue (a failed bug back in line)
+  commands/          run (the loop), check (one bug, writes nothing), requeue (a failed bug back in line), ui (the web UI)
+  ui/                the web UI: a separate process that reads state/ and never writes
+    config.ts        UI_HOST, UI_PORT, LOG_FILE, plus the service's DB_FILE and JIRA_BASE_URL
+    read.ts          the database, read-only → one view per bug with its runs; never creates the file
+    service-log.ts   service.log → the service's state and its latest events, read as it grows
+    stats.ts         counts by period, the most common gaps, checks per day, items added after the comment
+    html.ts          the three pages as pure functions: HTML strings from what was read
+    server.ts        node:http: the pages, app.css and app.js; nothing cached
+    static/          the stylesheet and the refresh script
 agent/instructions.md   the agent's system prompt
-deploy/bug-validator.service   systemd user unit
+deploy/*.service     systemd user units: the service and the UI
 scripts/late-changes.ts   how reports change after creation (read-only measurement): `node scripts/late-changes.ts [days]`
-test/                node:test; fixtures/ are real bugs saved from Jira (REST v2 JSON)
-tui/                 the terminal view: Python + Textual (uv); reads state/, never writes
+test/                node:test; fixtures/ are real bugs saved from Jira (REST v2 JSON); ui/ builds its databases with the real Store
 ```
 
 Dependencies: `zod` only. Node 24 runs the TypeScript directly and ships SQLite; there is no
@@ -114,24 +121,27 @@ session cookies.
 
 ## Log
 
-One JSON line per event: `ts`, `level`, `event`, then fields. The TUI reads the ones marked.
+One JSON line per event: `ts`, `level`, `event`, then fields. The UI reads them all
+(`src/ui/service-log.ts`, `html.ts`): the Service block from the ones marked, the Activity block
+from every event but `poll` and `check_start`, one line each.
 
-| event | fields | TUI |
+| event | fields | UI |
 |---|---|---|
-| `service_start` | dryRun, pollIntervalS, maxAttempts, model, claudeVersion, claudeAuth, dbFile | mode, model, interval |
+| `service_start` | dryRun, pollIntervalS, maxAttempts, model, claudeVersion, claudeAuth, dbFile | mode, model, claude, interval, started |
 | `service_stopping`, `service_stopped` | signal | stopped |
 | `poll` | inQuery, waiting, pending, checked, failed, ms | last poll, in Created, waiting |
 | `poll_failed` | error, ms | last poll failed, error |
 | `first_start` | skipped | |
 | `key_changed` | from, to | |
-| `check_start` | key, recheck | liveness |
+| `check_start` | key, recheck | liveness, checking |
 | `bug_complete`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId | |
 | `check_failed` | key, recheck, attempts (first check only), status, error, ms | |
 | `mentions_stripped` | key, stripped | |
 | `fatal` | error | |
 
-The TUI calls the service *silent* when nothing has been logged for two poll intervals plus
-five minutes.
+The UI calls the service *silent* when nothing has been logged for two poll intervals plus five
+minutes. The UI's own log (`ui_start`, `ui_stopping`, `ui_stopped`, `ui_error`) goes to
+`state/ui.log` under systemd.
 
 ## Configuration
 
@@ -148,6 +158,9 @@ five minutes.
 | `AGENT_MODEL` | `haiku` | `sonnet` to compare on the same bugs with `check` |
 | `AGENT_TIMEOUT_SECONDS` | `180` | one agent run |
 | `DB_FILE` | `state/bug-validator.sqlite` | |
+| `LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI reads it |
+| `UI_HOST` | `0.0.0.0` | the UI listens on every interface: it is opened from the office network by the server's IP |
+| `UI_PORT` | `8081` | |
 
 Attempts at the first check (3), the query cap (200 issues per poll), the wait before the first
 check (30 min), the quiet before a re-check (15 min) and the checks per bug (5) are constants in
@@ -162,31 +175,42 @@ npm run check -- KAZ-9025                   # one bug: the verdict and the comme
 npm run check -- KAZ-9025 --recheck         # as a re-check of the comment recorded in the database
 npm start                                   # the loop, DRY_RUN=true by default; log on stdout
 npm run requeue -- KAZ-9025                 # a failed bug back in line
-npm run tui                                 # the terminal view (needs uv)
-npm test && npm run typecheck && (cd tui && uv run pytest)
+npm run ui                                  # the web UI on http://<this host>:8081/
+npm test && npm run typecheck
 ```
 
 Tuning the agent: edit `agent/instructions.md`, run `check` on bugs with known gaps (the fixtures
 in `test/fixtures/` are such bugs) and on a good one (RPG-6188); `check --recheck` on a bug whose
 reporter added something after its comment (RPG-6219, KAZ-9035). Adding a requirement touches
-`bug.ts`, `checks.ts` (if a field fact), `prd.md`, `agent/instructions.md`, `tui/.../checks.py`,
-and a fixture.
+`bug.ts`, `checks.ts` (if a field fact), `prd.md`, `agent/instructions.md` and a fixture; the
+UI takes the ids and names from `bug.ts`.
 
-### TUI
+### UI
 
-`npm run tui` (or `uv run --project tui bug-validator-tui [state-dir]`) reads `state/`: the
-database, and `state/service.log`, which exists when the service runs under systemd (a local
-`npm start` logs to stdout, so the Service block shows "no log"). Home: the service (running,
-stopped or silent; mode; last poll; in Created and how many of them wait; started; model; skipped
-at the first start), bugs checked today / 7 days / all time with and without a comment, failed
-checks, bugs per day for 30 days, the requirements the first check found missing most often, and
-the checks that need attention.
-Keys: `b` all bugs · `Enter` open · `Esc` back · `r` reload · `q` quit; in all bugs `f` steps
-the filter through the results and `/` searches keys, summaries and reporters. Screens reload
-every 5 s. A bug's screen shows each requirement as the agent judged it beside the base check,
-the related bugs, every check when there were several, and the comment as it is (or would be)
-in Jira. The Jira link uses
-`JIRA_BASE_URL` from the environment, else the company site.
+`npm run ui` serves three pages on `UI_PORT`, read from `DB_FILE` and `LOG_FILE` on every
+request; the log exists when the service runs under systemd (a local `npm start` logs to
+stdout, so the Service block shows "no log"). The UI is opened from the office network as
+`http://<server-ip>:8081/`: no login, no TLS, no proxy, nothing outside the LAN. It opens the
+database read-only, never creates it, and writes nothing. No external resources: the pages work
+on a network without internet access.
+
+- `/` — the service (running, stopped or silent; last poll; mode; in Created and how many of
+  them wait; started; model; claude version and auth; poll interval; the bug being checked;
+  skipped at the first start), bugs checked today / 7 days / all time with and without a
+  comment, failed checks, the items that arrived after a comment, bugs per day for 30 days, the
+  requirements the first check found missing most often, the checks that need attention, and
+  the latest 30 events of the log.
+- `/bugs` — every bug by the day of its last check, latest first: result, what is missing,
+  related bugs, how many checks. `?result=` narrows by result (chips), `?q=` searches keys,
+  summaries and reporters (the form; Enter submits).
+- `/bugs/<KEY>` — each requirement as the agent judged it beside the base check, the related
+  bugs, every check with the comment it recorded, and the comment as it is (or would be) in
+  Jira, the mention by name and arrived items struck through.
+
+The pages are rendered on the server (`html.ts`, pure functions tested in `test/ui/`); `app.js`
+fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden
+or the search box has focus. Everything works with JavaScript off, minus the refresh. Times are
+the server's local time. Jira links use `JIRA_BASE_URL`.
 
 ### Deploy
 
@@ -194,12 +218,15 @@ Home server (WSL, systemd user unit). Edit the two machine-specific lines in
 `deploy/bug-validator.service` (working directory, node path; PATH must also hold `claude`).
 
 ```
-mkdir -p ~/.config/systemd/user && cp deploy/bug-validator.service ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now bug-validator
+mkdir -p ~/.config/systemd/user && cp deploy/bug-validator.service deploy/bug-validator-ui.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now bug-validator bug-validator-ui
 loginctl enable-linger $USER                  # survive logout
-systemctl --user status bug-validator
+systemctl --user status bug-validator bug-validator-ui
 tail -f state/service.log
 ```
+
+The UI is then at `http://<server-ip>:8081/` from the office network; if the server has a
+firewall, let the port through from the LAN. Its log is `state/ui.log`.
 
 Claude auth: `claude setup-token` once (opens the browser), paste the token into `.env`, restart.
 `service_start` logs `claudeAuth`: `oauth_token`, or `cli_login` when the machine's own login is
@@ -207,5 +234,5 @@ used. **Going live:** `DRY_RUN=false` in `.env`, `systemctl --user restart bug-v
 log file grows about 50 KB a day and is not rotated.
 
 Docker (`Dockerfile`, `compose.yaml`) is for a server without a Claude login: `docker compose up
--d` with `CLAUDE_CODE_OAUTH_TOKEN` in `.env`. The TUI then has no `service.log` to read; the
+-d` with `CLAUDE_CODE_OAUTH_TOKEN` in `.env`. The UI then has no `service.log` to read; the
 database still works. Not used yet.

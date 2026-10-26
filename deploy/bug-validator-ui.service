@@ -1,0 +1,17 @@
+# systemd user unit for the web UI, next to bug-validator.service. Install and operate:
+# docs/architecture.md, Deploy. The same two lines are machine-specific: WorkingDirectory and the node path.
+
+[Unit]
+Description=Bug Validator UI — the web view of the checks
+
+[Service]
+WorkingDirectory=%h/npb/bug-validator
+Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node src/main.ts ui
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/npb/bug-validator/state/ui.log
+StandardError=append:%h/npb/bug-validator/state/ui.log
+
+[Install]
+WantedBy=default.target

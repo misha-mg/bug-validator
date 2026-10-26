@@ -120,7 +120,7 @@ input[type="search"] { flex: 1; min-width: 16rem; padding: 0.35rem 0.6rem; borde
 .bug-head h1 .summary { font-weight: 400; }
 .columns { display: grid; grid-template-columns: 3fr 2fr; gap: 1rem; }
 @media (max-width: 900px) { .columns { grid-template-columns: 1fr; } }
-.requirements th, .requirements td:nth-child(2), .requirements td:nth-child(3) { width: 1%; white-space: nowrap; }
+.requirements tbody th, .requirements td:nth-child(2), .requirements td:nth-child(3), .requirements thead th:not(:last-child) { width: 1%; white-space: nowrap; }
 .requirements td:last-child { overflow-wrap: anywhere; }
 .related th { width: 1%; padding-right: 1rem; }
 .history details { margin-top: 0.25rem; }

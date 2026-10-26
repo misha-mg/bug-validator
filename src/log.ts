@@ -6,7 +6,7 @@ function write(level: Level, event: string, fields: Fields = {}): void {
   process.stdout.write(line + '\n');
 }
 
-/** One JSON line per event on stdout. The TUI reads some of them: docs/architecture.md, Log. */
+/** One JSON line per event on stdout. The UI reads them: docs/architecture.md, Log. */
 export const log = {
   info: (event: string, fields?: Fields): void => write('info', event, fields),
   warn: (event: string, fields?: Fields): void => write('warn', event, fields),

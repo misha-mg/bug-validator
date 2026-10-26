@@ -160,7 +160,7 @@ describe('one bug', () => {
     assert.equal(resultLabel({ ...retry, status: 'posting' }), 'interrupted while posting');
     assert.equal(resultLabel({ ...retry, status: 'commented' }), 'commented');
   });
-  it('writes a time ago as the TUI did', () => {
+  it('writes a time ago in short words', () => {
     const now = state.now;
     assert.equal(ago(now, now), 'just now');
     assert.equal(ago(now, new Date(now.getTime() - 5 * 60_000)), '5m ago');

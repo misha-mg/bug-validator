@@ -36,7 +36,7 @@ Scale: KAZ + RPG are about 15k issues. One file, rebuilt in a minute, fits in me
 
 Refresh, the same for all three: a JQL `updated >= <last refresh>` on the existing poll cadence,
 upsert the changed rows, re-embed only those. A full rebuild as a command. An index that silently
-stops refreshing is the failure mode to design against: log the refresh, show its age in the TUI.
+stops refreshing is the failure mode to design against: log the refresh, show its age in the UI.
 
 Tokenisation detail that matters here: board types such as `NPB-Ie6-XL` must stay one token.
 
