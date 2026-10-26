@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { z } from 'zod';
 
-const Env = z.object({
+export const Env = z.object({
   JIRA_BASE_URL: z.url().default('https://cgstowernetworks.atlassian.net'),
   JIRA_CLOUD_ID: z.string().min(1).default('0ba987c4-6759-4967-afaa-f80e0e69c8fc'),
   JIRA_EMAIL: z.email(),
@@ -25,14 +25,19 @@ export interface Config {
   maxAttempts: number;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+/** The environment through a schema; `.env` in the working directory is loaded first. Fails fast on a bad value. */
+export function parseEnv<T extends z.ZodType>(schema: T, env: NodeJS.ProcessEnv): z.infer<T> {
   if (env === process.env && existsSync('.env')) process.loadEnvFile('.env');
-  const parsed = Env.safeParse(env);
+  const parsed = schema.safeParse(env);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
     throw new Error(`Bad configuration: ${problems.join('; ')}`);
   }
-  const e = parsed.data;
+  return parsed.data;
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const e = parseEnv(Env, env);
   return {
     jira: { baseUrl: e.JIRA_BASE_URL, cloudId: e.JIRA_CLOUD_ID, email: e.JIRA_EMAIL, apiToken: e.JIRA_API_TOKEN },
     dryRun: e.DRY_RUN === 'true',
