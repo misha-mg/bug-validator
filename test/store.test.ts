@@ -20,15 +20,24 @@ describe('Store', () => {
     assert.deepEqual([...s.rows(['KAZ-1', 'KAZ-2', 'KAZ-3']).keys()], ['KAZ-1', 'KAZ-2']);
     assert.equal(statusOf(s, 'KAZ-1'), 'skipped');
   });
-  it('retries a failed first check up to the limit, then marks it failed; requeue starts over', () => {
+  it('retries a failed first check up to the limit, then marks it failed', () => {
     const s = new Store(':memory:');
     assert.deepEqual(s.recordFailure(ref('KAZ-3'), 'boom', 3), { status: 'retry', attempts: 1 });
     s.recordFailure(ref('KAZ-3'), 'boom', 3);
     assert.deepEqual(s.recordFailure(ref('KAZ-3'), 'boom', 3), { status: 'failed', attempts: 3 });
     assert.equal(s.rows(['KAZ-3']).get('KAZ-3')?.runs, 3, 'every attempt is a run');
-    assert.equal(s.requeue('KAZ-3'), true);
-    assert.equal(statusOf(s, 'KAZ-3'), 'retry');
-    assert.equal(s.requeue('KAZ-3'), false, 'only failed or posting rows are requeued');
+  });
+  it('keeps one request per key until it is served, or failed until it is asked again', () => {
+    const s = new Store(':memory:');
+    s.request('KAZ-1');
+    s.request('KAZ-2');
+    s.request('KAZ-1');
+    assert.deepEqual(s.requests().map((r) => r.key), ['KAZ-2', 'KAZ-1'], 'one per key, oldest first; asked again is asked anew');
+    s.requestFailed('KAZ-2', 'no such issue');
+    s.requestDone('KAZ-1');
+    assert.deepEqual(s.requests().map((r) => [r.key, r.error]), [['KAZ-2', 'no such issue']]);
+    s.request('KAZ-2');
+    assert.deepEqual(s.requests().map((r) => r.error), [null], 'asked again: pending again');
   });
   it('a result after a failure closes the bug; posting becomes commented', () => {
     const s = new Store(':memory:');

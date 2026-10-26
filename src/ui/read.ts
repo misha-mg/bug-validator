@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import type { CheckStatus } from '../db/store.ts';
+import type { CheckRequest, CheckStatus } from '../db/store.ts';
 import type { RequirementId } from '../domain/bug.ts';
 import type { BaseCheck } from '../domain/checks.ts';
 
@@ -87,6 +87,28 @@ export function readBugs(dbFile: string): BugView[] {
 
 export function readBug(dbFile: string, key: string): BugView | null {
   return readBugs(dbFile).find((bug) => bug.key === key) ?? null;
+}
+
+/** A check asked for by hand, pending or failed, as the pages show it. */
+export interface Request {
+  key: string;
+  at: Date;
+  error: string | null;
+}
+
+/** Every request, oldest first; none without the database or its table (a service from before requests). */
+export function readRequests(dbFile: string): Request[] {
+  if (!existsSync(dbFile)) return [];
+  const db = new DatabaseSync(dbFile, { readOnly: true, timeout: 5000 });
+  try {
+    const rows = db.prepare('SELECT key, at, error FROM requests ORDER BY at, rowid').all() as unknown as CheckRequest[];
+    return rows.map((r) => ({ key: r.key, at: time(r.at), error: r.error }));
+  } catch (err) {
+    if (err instanceof Error && /no such table|not a database/.test(err.message)) return [];
+    throw err;
+  } finally {
+    db.close();
+  }
 }
 
 /** The runs of every bug, oldest first; none in a database from before runs were kept. */

@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS requests (
+  key   TEXT PRIMARY KEY,
+  at    TEXT NOT NULL,
+  error TEXT
+);
 `;
 
 // Columns added after the first database was made; an older one gets them when opened.
@@ -73,10 +78,19 @@ const ADDED_COLUMNS = ['summary TEXT', 'reporter TEXT', 'issue_id TEXT', 'finger
 
 const now = (): string => new Date().toISOString();
 
+/** A check asked for by hand (`request <KEY>`, the UI), pending until the service takes it or failed to be. */
+export interface CheckRequest {
+  key: string;
+  at: string;
+  /** Why the service could not check it (no such issue); null while pending. */
+  error: string | null;
+}
+
 /**
  * One row per bug the service has dealt with, its current state; one row in `runs` per check of
- * it, the history; plus `meta`. A bug's row is the only thing that stops a second comment, so rows
- * are never deleted; `requeue` is the way to re-run a bug.
+ * it, the history; `meta`; and `requests`, the checks asked for by hand. A bug's row is the only
+ * thing that stops a second comment, so rows are never deleted; a request is the way to re-run a
+ * bug.
  */
 export class Store {
   private readonly db: DatabaseSync;
@@ -213,10 +227,24 @@ export class Store {
     this.db.prepare("UPDATE checks SET status = 'commented', comment_id = ? WHERE key = ?").run(commentId, key);
   }
 
-  /** Lets a `failed` (or `posting`) bug be checked again on the next poll. False when there is no such row. */
-  requeue(key: string): boolean {
-    const r = this.db.prepare("UPDATE checks SET status = 'retry', attempts = 0, error = NULL WHERE key = ? AND status IN ('failed', 'posting')").run(key);
-    return r.changes > 0;
+  /** Asks for a check of the bug; a request already pending or failed for the key is replaced. */
+  request(key: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO requests (key, at, error) VALUES (?, ?, NULL)').run(key, now());
+  }
+
+  /** Every request, oldest first: the pending ones and the ones the service could not serve. */
+  requests(): CheckRequest[] {
+    return this.db.prepare('SELECT key, at, error FROM requests ORDER BY at, rowid').all() as unknown as CheckRequest[];
+  }
+
+  /** The request is served: the check's outcome is in the bug's row. */
+  requestDone(key: string): void {
+    this.db.prepare('DELETE FROM requests WHERE key = ?').run(key);
+  }
+
+  /** The request cannot be served (no such issue); kept with the reason until it is replaced. */
+  requestFailed(key: string, error: string): void {
+    this.db.prepare('UPDATE requests SET error = ? WHERE key = ?').run(error, key);
   }
 
   status(key: string): CheckStatus | null {

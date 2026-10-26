@@ -5,6 +5,7 @@ import { Store } from '../src/db/store.ts';
 import { JiraError, type Jira, type RawIssue } from '../src/jira/client.ts';
 import type { Deps } from '../src/pipeline/deps.ts';
 import { poll } from '../src/pipeline/poll.ts';
+import { serveRequests } from '../src/pipeline/requests.ts';
 import { rawIssue } from './fixtures.ts';
 
 // KAZ-9021: a video, no HAR, Devices = All, Affects versions set. Its field facts fail only R6.
@@ -28,6 +29,7 @@ class FakeJira implements Jira {
     return this.inQuery.map((key) => this.issue(key));
   }
   async getIssue(key: string): Promise<RawIssue> {
+    if (!this.inQuery.includes(key) && !this.ids[key]) throw new JiraError(`HTTP 404 on GET /issue/${key}`, 404);
     return this.issue(key);
   }
   async addComment(key: string, body: string): Promise<{ id: string }> {
@@ -183,5 +185,65 @@ describe('a re-check', () => {
     for (let n = 2; n <= 5; n++) assert.equal((await poll(d)).failed, 1, `check ${n}`);
     assert.equal((await poll(d)).pending, 0, 'the cap');
     assert.deepEqual(d.store.rows([KEY]).get(KEY), { status: 'dry_run', fingerprint: d.store.rows([KEY]).get(KEY)?.fingerprint ?? '', comment: needsHar.comment, commentId: null, runs: 5 });
+  });
+});
+
+describe('a request', () => {
+  const requests = (d: Deps) => d.store.requests().map((r) => [r.key, r.error]);
+  it('checks a bug whatever its age or row says, and is served before the planned checks', async () => {
+    const d = deps(new FakeAgent(needsHar));
+    d.jira.inQuery = [KEY, 'KAZ-9025'];
+    d.jira.changes[KEY] = { created: minutesAgo(5), updated: minutesAgo(5) }; // too young for the poll
+    d.store.bootstrap([{ id: 'id-KAZ-9025', key: 'KAZ-9025' }]); // skipped at the first start
+    d.store.request(KEY);
+    d.store.request('KAZ-9025');
+    assert.deepEqual(await poll(d), { inQuery: 2, waiting: 1, pending: 0, checked: 0, failed: 0 }, 'nothing planned; the waiting loop serves requests');
+    assert.deepEqual(await serveRequests(d), [KEY, 'KAZ-9025']);
+    assert.equal(d.store.status(KEY), 'dry_run');
+    assert.equal(d.store.status('KAZ-9025'), 'dry_run', 'a skipped bug is checked on request');
+    assert.deepEqual(requests(d), [], 'served');
+    assert.deepEqual(await serveRequests(d), []);
+  });
+  it('is served inside a poll, and its bug is not checked twice', async () => {
+    const d = deps(new FakeAgent(needsHar));
+    d.store.request(KEY);
+    assert.deepEqual(await poll(d), { inQuery: 1, waiting: 0, pending: 1, checked: 0, failed: 0 });
+    assert.equal(d.agent.prompts.length, 1);
+    assert.equal(d.store.rows([KEY]).get(KEY)?.runs, 1);
+  });
+  it('re-checks a bug with a comment of the current mode, and checks a failed one afresh', async () => {
+    const d = deps(new FakeAgent(needsHar, harArrived));
+    await poll(d);
+    d.jira.attachHar(KEY);
+    d.store.request(KEY);
+    await serveRequests(d);
+    assert.match(d.agent.prompts[1] ?? '', /previous comment/);
+    assert.equal(d.store.rows([KEY]).get(KEY)?.comment, harArrived.comment);
+
+    const bad = { ...needsHar, missing: [] }; // R6 fails but is not named
+    const failed = deps(new FakeAgent(bad, bad, bad, needsHar));
+    for (const _ of [1, 2, 3]) await poll(failed);
+    assert.equal(failed.store.status(KEY), 'failed');
+    failed.store.request(KEY);
+    await serveRequests(failed);
+    assert.equal(failed.store.status(KEY), 'dry_run', 'the request replaces requeue');
+  });
+  it('fails for a key Jira does not know, keeps the reason, and follows a moved bug', async () => {
+    const d = deps(new FakeAgent(needsHar));
+    await poll(d);
+    d.store.request('KAZ-1');
+    d.store.request('RPG-9999');
+    d.jira.inQuery = ['RPG-9999'];
+    d.jira.ids = { 'RPG-9999': `id-${KEY}` };
+    assert.deepEqual(await serveRequests(d), ['RPG-9999']);
+    assert.deepEqual(requests(d), [['KAZ-1', 'JiraError: HTTP 404 on GET /issue/KAZ-1']]);
+    assert.equal(d.store.status('RPG-9999'), 'dry_run', 'the row followed the key');
+    assert.equal(d.store.rows(['RPG-9999']).get('RPG-9999')?.runs, 2, 'as a re-check of the moved bug');
+  });
+  it('a failure of the surroundings is thrown and leaves the request pending', async () => {
+    const d = deps(new FakeAgent(new JiraError('HTTP 503', 503)));
+    d.store.request(KEY);
+    await assert.rejects(serveRequests(d), JiraError);
+    assert.deepEqual(requests(d), [[KEY, null]]);
   });
 });

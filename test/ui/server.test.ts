@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
 import { startUi } from '../../src/ui/server.ts';
+import { readRequests } from '../../src/ui/read.ts';
 import { appendLog, logLine, sampleState } from './state.ts';
 
 const state = sampleState();
@@ -54,6 +55,22 @@ describe('server', () => {
     assert.match(js.body, /setInterval/);
     assert.equal(css.headers.get('cache-control'), 'no-store');
     assert.match((await get('/')).headers.get('content-security-policy') ?? '', /default-src 'self'/);
+  });
+  it('takes a check request and shows it on the bug page', async () => {
+    const post = (key: string) => fetch(`${base}/requests`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ key }), redirect: 'manual' });
+    const res = await post('https://jira.example.com/browse/RPG-4');
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), '/bugs/RPG-4');
+    assert.deepEqual(readRequests(state.dbFile).map((r) => r.key), ['KAZ-77', 'KAZ-1', 'RPG-4']);
+    assert.match((await get('/bugs/RPG-4')).body, /Request<\/dt><dd>waiting · just now/);
+    assert.match((await get('/')).body, /RPG-4<\/a> · just now/);
+    assert.equal((await post('KAZ-9')).headers.get('location'), '/bugs/KAZ-9');
+    const page = await get('/bugs/KAZ-9');
+    assert.equal(page.status, 200, 'a page for a bug not checked yet');
+    assert.match(page.body, /Not checked yet/);
+    const bad = await post('ABC-1');
+    assert.equal(bad.status, 400);
+    assert.match(await bad.text(), /Not a KAZ or RPG issue: ABC-1/);
   });
   it('shows the log as it grows', async () => {
     appendLog(state, logLine('poll_failed', new Date(), { error: 'Jira answered 503' }));

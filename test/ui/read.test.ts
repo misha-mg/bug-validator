@@ -3,7 +3,7 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
-import { checked, firstMissing, readBug, readBugs, result } from '../../src/ui/read.ts';
+import { checked, firstMissing, readBug, readBugs, readRequests, result } from '../../src/ui/read.ts';
 import { emptyState, sampleState } from './state.ts';
 
 describe('readBugs', () => {
@@ -45,6 +45,15 @@ describe('readBugs', () => {
     assert.deepEqual(readBugs(join(dir, 'text.sqlite')), []);
     new DatabaseSync(join(dir, 'bare.sqlite')).close();
     assert.deepEqual(readBugs(join(dir, 'bare.sqlite')), []);
+  });
+  it('reads the requests, oldest first; none from a database without the table', () => {
+    const state = sampleState();
+    assert.deepEqual(readRequests(state.dbFile).map((r) => [r.key, r.error]), [['KAZ-77', 'JiraError: HTTP 404 on GET /issue/KAZ-77'], ['KAZ-1', null]]);
+    assert.ok(readRequests(state.dbFile)[1]!.at < state.now);
+    const file = join(emptyState().dir, 'old.sqlite');
+    new DatabaseSync(file).close();
+    assert.deepEqual(readRequests(file), []);
+    assert.deepEqual(readRequests(join(emptyState().dir, 'missing.sqlite')), []);
   });
   it('no database yet is no bugs, and the UI never creates one', () => {
     const file = join(emptyState().dir, 'missing.sqlite');

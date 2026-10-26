@@ -8,7 +8,7 @@ writes the comment. Why things are as they are: `prd.md`.
 
 ```
 src/
-  main.ts            CLI: run | check <KEY> [--recheck] | requeue <KEY>
+  main.ts            CLI: run | check <KEY> [--recheck] | request <KEY|URL> | ui
   config.ts          env → typed Config; fails fast on a bad value
   log.ts             one JSON line per event on stdout
   domain/            pure functions, no I/O
@@ -25,16 +25,18 @@ src/
     agent.ts         spawns `claude -p` with the Jira MCP server as its only tool
     jira-mcp.ts      that server: search_issues, get_issue — read-only, KAZ and RPG only
   db/
-    store.ts         SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, plus `meta`
+    store.ts         SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta`, and `requests` (checks asked for by hand)
   pipeline/
     deps.ts          what the pipeline needs: config, Jira, agent, store (Jira and agent are interfaces)
     checkBug.ts      one bug: fetch → base checks → agent → verdict → guardrails
     plan.ts          which bugs of a poll are due: first checks, re-checks, the waiting ones
-    poll.ts          one poll: query → first-start bootstrap → moved bugs → plan → checks → record / post / edit
-  commands/          run (the loop), check (one bug, writes nothing), requeue (a failed bug back in line), ui (the web UI)
-  ui/                the web UI: a separate process that reads state/ and never writes
+    handle.ts        one check and its record / post / edit; which failures are the surroundings'
+    requests.ts      a check asked for by hand: written to `requests`, served before each check of a poll and while the service waits
+    poll.ts          one poll: query → first-start bootstrap → moved bugs → plan → checks, requests first
+  commands/          run (the loop), check (one bug, writes nothing), request (the service checks a bug next), ui (the web UI)
+  ui/                the web UI: a separate process that reads state/ and writes nothing but check requests
     config.ts        UI_HOST, UI_PORT, LOG_FILE, plus the service's DB_FILE and JIRA_BASE_URL
-    read.ts          the database, read-only → one view per bug with its runs; never creates the file
+    read.ts          the database, read-only → one view per bug with its runs, the requests; never creates the file
     service-log.ts   service.log → the service's state and its latest events, read as it grows
     stats.ts         counts by period, the most common gaps, checks per day, items added after the comment
     html.ts          the three pages as pure functions: HTML strings from what was read
@@ -82,6 +84,14 @@ build step. `claude` must be on PATH.
    failed re-check sets the row's error and leaves the rest. A failure of the surroundings (see
    Failures) ends the poll instead and leaves rows alone.
 
+A check asked for by hand (`request <KEY|URL>`, the UI's form) skips steps 1 and 2: the bug
+is read by its key, whatever its age, its status in Jira or its row — skipped, failed, at the
+cap — and goes through 3–6 as a re-check when its row holds the comment of the current mode,
+as a first check otherwise. The service serves requests before each check of a poll and every
+2 s while it waits for the next poll; after a failure of the surroundings they wait for a poll
+that succeeds. A key Jira does not know fails the request, which keeps the reason until it is
+asked again.
+
 ## Row statuses
 
 | status | meaning |
@@ -89,10 +99,10 @@ build step. `claude` must be on PATH.
 | `skipped` | was already in the query at the first start, never checked |
 | `complete` | checked, nothing missing, no comment |
 | `dry_run` | comment composed and recorded, not posted |
-| `posting` | the service stopped between the post and its record; a human looks in Jira, then `requeue` if needed |
+| `posting` | the service stopped between the post and its record; a human looks in Jira, then asks for a check if needed |
 | `commented` | comment posted (`comment_id` set) |
 | `retry` | last attempt failed, tried again at the next poll |
-| `failed` | 3 attempts failed, left alone; `requeue <KEY>` puts it back |
+| `failed` | 3 attempts failed, left alone; a request (`request <KEY>`, the UI) checks it again |
 
 A re-check changes a row's comment, not its status. `meta.bootstrapped_at` records the first
 start, so a first poll on an empty query still counts. Rows are never deleted. A row holds the
@@ -133,9 +143,10 @@ from every event but `poll` and `check_start`, one line each.
 | `poll_failed` | error, ms | last poll failed, error |
 | `first_start` | skipped | |
 | `key_changed` | from, to | |
-| `check_start` | key, recheck | liveness, checking |
-| `bug_complete`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId | |
-| `check_failed` | key, recheck, attempts (first check only), status, error, ms | |
+| `check_start` | key, recheck, requested | liveness, checking |
+| `bug_complete`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, requested, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId | |
+| `check_failed` | key, recheck, requested, attempts (first check only), status, error, ms | |
+| `request_failed` | key, error | |
 | `mentions_stripped` | key, stripped | |
 | `fatal` | error | |
 
@@ -174,7 +185,7 @@ cp .env.example .env && chmod 600 .env      # fill in JIRA_EMAIL, JIRA_API_TOKEN
 npm run check -- KAZ-9025                   # one bug: the verdict and the comment, nothing written
 npm run check -- KAZ-9025 --recheck         # as a re-check of the comment recorded in the database
 npm start                                   # the loop, DRY_RUN=true by default; log on stdout
-npm run requeue -- KAZ-9025                 # a failed bug back in line
+npm run request -- KAZ-9025                 # the running service checks the bug next (a key or a link)
 npm run ui                                  # the web UI on http://<this host>:8081/
 npm test && npm run typecheck
 ```
@@ -191,12 +202,14 @@ UI takes the ids and names from `bug.ts`.
 request; the log exists when the service runs under systemd (a local `npm start` logs to
 stdout, so the Service block shows "no log"). The UI is opened from the office network as
 `http://<server-ip>:8081/`: no login, no TLS, no proxy, nothing outside the LAN. It opens the
-database read-only, never creates it, and writes nothing. No external resources: the pages work
-on a network without internet access.
+database read-only, never creates it, and writes nothing but a check request: the form in the
+header (a key or a link to the bug) and the button on a bug's page ask the service to check
+that bug next; the page then shows the request waiting and fills in with the result. No
+external resources: the pages work on a network without internet access.
 
 - `/` — the service (running, stopped or silent; last poll; mode; in Created and how many of
   them wait; started; model; claude version and auth; poll interval; the bug being checked;
-  skipped at the first start), bugs checked today / 7 days / all time with and without a
+  the checks requested and waiting; skipped at the first start), bugs checked today / 7 days / all time with and without a
   comment, failed checks, the items that arrived after a comment, bugs per day for 30 days, the
   requirements the first check found missing most often, the checks that need attention, and
   the latest 30 events of the log.
@@ -205,7 +218,8 @@ on a network without internet access.
   summaries and reporters (the form; Enter submits).
 - `/bugs/<KEY>` — each requirement as the agent judged it beside the base check, the related
   bugs, every check with the comment it recorded, and the comment as it is (or would be) in
-  Jira, the mention by name and arrived items struck through.
+  Jira, the mention by name and arrived items struck through. For a bug asked for and not
+  checked yet, the request alone.
 
 The pages are rendered on the server (`html.ts`, pure functions tested in `test/ui/`); `app.js`
 fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden

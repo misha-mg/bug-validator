@@ -43,6 +43,13 @@ code, .key, .time, .jira-comment, .req, .num { font-family: ui-monospace, "Casca
 .badge { padding: 0.1rem 0.6rem; border-radius: 1rem; font-size: 0.8rem; font-weight: 600; }
 .badge.dry { background: var(--panel); color: var(--secondary); }
 .badge.live { background: var(--comment); color: #fff; }
+/* Ask for a check: in the header on every page, and on a bug's page. */
+.top form.request { margin-left: auto; }
+form.request { display: flex; gap: 0.4rem; }
+form.request input { width: 15rem; padding: 0.3rem 0.6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+form.request button { padding: 0.3rem 0.8rem; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: #fff; font: inherit; cursor: pointer; }
+form.request button:hover { filter: brightness(1.1); }
+.bug-head form.request { margin-top: 0.75rem; }
 
 main { padding: 1.25rem 1.5rem 3rem; max-width: 1500px; margin: 0 auto; }
 h1 { font-size: 1.4rem; margin: 0 0 1rem; }

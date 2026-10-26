@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { type PageContext, ago, bugPage, bugsPage, bugsQuery, commentHtml, dayChart, eventText, filterBugs, homePage, resultLabel } from '../../src/ui/html.ts';
-import { readBug, readBugs } from '../../src/ui/read.ts';
+import { readBug, readBugs, readRequests } from '../../src/ui/read.ts';
 import { ServiceLog } from '../../src/ui/service-log.ts';
 import { checksPerDay } from '../../src/ui/stats.ts';
 import { DAY, sampleState } from './state.ts';
 
 const state = sampleState();
 const bugs = readBugs(state.dbFile);
+const requests = readRequests(state.dbFile);
 const log = new ServiceLog(state.logFile);
+const bugModel = (key: string) => ({ key, bug: readBug(state.dbFile, key), request: requests.find((r) => r.key === key) ?? null });
 const status = log.read();
 const ctx: PageContext = { jiraBaseUrl: 'https://jira.example.com', dryRun: true, now: state.now };
 
@@ -25,7 +27,7 @@ const section = (html: string, cls: string): string => {
 };
 
 describe('home', () => {
-  const html = homePage({ bugs, status, logPath: state.logFile, recent: log.recent }, ctx);
+  const html = homePage({ bugs, status, logPath: state.logFile, recent: log.recent, requests }, ctx);
   it('shows the service, the statistics and the gaps', () => {
     const service = text(section(html, 'service'));
     assert.match(service, /State running/);
@@ -36,6 +38,8 @@ describe('home', () => {
     assert.match(service, /Claude 2\.0\.30 · oauth_token/);
     assert.match(service, /Poll every 3m/);
     assert.match(service, /Skipped 1 · \d\d \w\w\w/);
+    assert.match(service, /Requested KAZ-1 · 2m ago Skipped/, 'the pending request, not the failed one');
+    assert.match(section(html, 'service'), /<a class="key" href="\/bugs\/KAZ-1">KAZ-1<\/a> · 2m ago/);
 
     const stats = text(section(html, 'statistics'));
     assert.match(stats, /Today 7 days All time/);
@@ -57,7 +61,7 @@ describe('home', () => {
     assert.match(activity, /service started · dry run · haiku/);
   });
   it('says so when there is no log, no database and no failed check', () => {
-    const empty = homePage({ bugs: [], status: null, logPath: '/x/service.log', recent: [] }, { ...ctx, dryRun: null });
+    const empty = homePage({ bugs: [], status: null, logPath: '/x/service.log', recent: [], requests: [] }, { ...ctx, dryRun: null });
     const page = text(empty);
     assert.match(page, /State no log at \/x\/service.log/);
     assert.match(page, /Database none yet/);
@@ -85,6 +89,8 @@ describe('home', () => {
     assert.equal(at('check_failed', { key: 'KAZ-1', recheck: true, error: 'x' }), 're-check failed · x');
     assert.equal(at('key_changed', { from: 'RPG-1', to: 'KAZ-2' }), 'moved: RPG-1 → KAZ-2');
     assert.equal(at('poll_failed', { error: 'HTTP 503' }), 'poll failed · HTTP 503');
+    assert.equal(at('request_failed', { key: 'KAZ-1', error: 'HTTP 404' }), 'request failed · HTTP 404');
+    assert.equal(at('comment_dry_run', { key: 'KAZ-1', requested: true, recheck: true, missing: ['R1'] }), 'requested · re-check: comment · dry run · missing R1');
     const long = `HTTP 403 on GET /search?${'x'.repeat(200)}`;
     const line = at('poll_failed', { error: long });
     assert.ok(line.startsWith(`poll failed · <span title="${long}">HTTP 403 on GET /search?xxx`) && line.endsWith('…</span>'));
@@ -127,7 +133,7 @@ describe('bugs', () => {
 
 describe('one bug', () => {
   it('shows the facts, the requirements, the related bugs, the history and the comment', () => {
-    const html = bugPage(readBug(state.dbFile, 'KAZ-2')!, ctx);
+    const html = bugPage(bugModel('KAZ-2'), ctx);
     const page = text(html);
     assert.match(page, /KAZ-2 Ports table is empty after clearing the filter/);
     assert.match(page, /Reporter A Tester Result comment · dry run Checked \d\d \w\w\w \d\d:\d\d Checks 3 · first \d\d \w\w\w \d\d:\d\d Jira https:\/\/jira.example.com\/browse\/KAZ-2/);
@@ -139,16 +145,27 @@ describe('one bug', () => {
     assert.match(page, /Checks .* first check missing R1 R4 R6 comment .* re-check VerdictError: a re-check must keep the comment .* re-check missing R4 R6 comment/);
     assert.match(page, /Comment dry run · not posted @A Tester Please add: Steps to reproduce Affects versions HAR file/);
     assert.match(html, /<li><s>Steps to reproduce<\/s><\/li><li>Affects versions<\/li>/);
+    assert.match(html, /<form class="request" method="post" action="\/requests"><input type="hidden" name="key" value="KAZ-2"><button>Check again<\/button>/);
+    assert.doesNotMatch(page, /Request /);
+  });
+  it('shows the check asked for: pending, failed, or for a bug not checked yet', () => {
+    const pending = bugPage(bugModel('KAZ-1'), ctx);
+    assert.match(text(pending), /Request waiting · 2m ago/);
+    assert.doesNotMatch(pending, /name="key" value="KAZ-1"/, 'already asked: no button');
+    const unknown = bugPage(bugModel('KAZ-77'), ctx);
+    assert.match(text(unknown), /KAZ-77 Request failed · JiraError: HTTP 404 on GET \/issue\/KAZ-77 Jira .* Not checked yet\./);
+    assert.match(unknown, /<input type="hidden" name="key" value="KAZ-77"><button>Check<\/button>/);
+    assert.doesNotMatch(unknown, /Requirements/);
   });
   it('explains a failed, a skipped and a complete bug', () => {
-    const failed = text(bugPage(readBug(state.dbFile, 'RPG-4')!, ctx));
+    const failed = text(bugPage(bugModel('RPG-4'), ctx));
     assert.match(failed, /Result check failed .* Error Error: agent run timed out/);
     assert.match(failed, /The check did not finish\./);
     assert.match(failed, /No comment: the check did not finish\./);
-    const skipped = text(bugPage(readBug(state.dbFile, 'KAZ-1')!, ctx));
+    const skipped = text(bugPage(bugModel('KAZ-1'), ctx));
     assert.match(skipped, /Never checked\./);
     assert.match(skipped, /Skipped: the bug was already in Created/);
-    const complete = text(bugPage(readBug(state.dbFile, 'KAZ-3')!, ctx));
+    const complete = text(bugPage(bugModel('KAZ-3'), ctx));
     assert.match(complete, /Nothing is missing, so the bug got no comment\./);
     assert.doesNotMatch(complete, /Related bugs|Checks \d/);
   });

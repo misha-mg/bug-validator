@@ -50,9 +50,17 @@ export function run(dbFile: string, key: string, at: Date, missing: string[] | n
   db.close();
 }
 
+/** A check asked for by hand, pending (no error) or failed. */
+export function request(dbFile: string, key: string, at: Date, error: string | null = null): void {
+  const db = new DatabaseSync(dbFile);
+  db.prepare('INSERT INTO requests (key, at, error) VALUES (?, ?, ?)').run(key, stamp(at), error);
+  db.close();
+}
+
 /**
  * A state directory: one bug skipped at the first start, two commented on (one of them checked
- * three times, as its reporter added steps), one complete, one whose check failed; and a log of a
+ * three times, as its reporter added steps), one complete, one whose check failed; a check
+ * asked for the skipped bug and one that failed for a key Jira does not know; and a log of a
  * dry run polling a minute ago.
  */
 export function sampleState(): State {
@@ -94,6 +102,8 @@ export function sampleState(): State {
     verdict: JSON.stringify({ comment_needed: true, comment: '…', missing: ['R6'], related: [] }),
     comment: `${MENTION}\nPlease add:\n- HAR file`,
   });
+  request(dbFile, 'KAZ-1', ago(2 * 60 * 1000, now));
+  request(dbFile, 'KAZ-77', ago(HOUR, now), 'JiraError: HTTP 404 on GET /issue/KAZ-77');
   writeFileSync(
     state.logFile,
     logLine('service_start', ago(2 * HOUR, now), { dryRun: true, pollIntervalS: 180, model: 'haiku', claudeVersion: '2.0.30', claudeAuth: 'oauth_token' }) +

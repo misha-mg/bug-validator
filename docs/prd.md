@@ -104,6 +104,9 @@ triage (median time in Created 2.4 h over the last 90 days, 17 h over the year, 
   labels, assignee and status are left out: the service's own comment and the QA lead's hand-off
   are not changes.
 - At most 5 checks per bug, failed ones included. Re-checks stop when the bug leaves Created.
+- **On request**: whoever runs the service can ask for a check of any KAZ or RPG bug, by key or
+  link, from the web UI or the command line. It runs next, whatever the bug's age, status or
+  record, the caps included, and its result is recorded (or posted) as any check's.
 
 Every WebUI bug counts, whoever reported it.
 
@@ -115,7 +118,7 @@ Every WebUI bug counts, whoever reported it.
   id, so a bug moved between KAZ and RPG is still the same bug.
 - On the first start, every bug already in the query is recorded as skipped; the first start
   itself is recorded, so a start on an empty query still counts. A missing database is a first
-  start. A skipped bug is never checked, not even when it changes.
+  start. A skipped bug is never checked, not even when it changes, unless asked for.
 - Bugs checked during the dry run stay recorded, and their dry-run comments are never posted or
   edited live. A bug found complete in the dry run gets a comment live only if its report
   changes and it then lacks something.
@@ -129,9 +132,9 @@ Every WebUI bug counts, whoever reported it.
   error and costs no bug an attempt; the next poll tries again. A failure of one bug's check —
   the agent's verdict breaks the contract, times out, the issue JSON is not as expected — is
   tried at most 3 times, then the bug is recorded as "failed" and left alone. A failed re-check
-  leaves the comment as it was and is tried at the next poll, within the 5 checks. `requeue
-  <KEY>` puts a failed bug back in line; `check <KEY> [--recheck]` runs a bug by hand without
-  writing anything.
+  leaves the comment as it was and is tried at the next poll, within the 5 checks. A request
+  (`request <KEY>`, the UI) checks a failed bug again; `check <KEY> [--recheck]` runs a bug by
+  hand without writing anything.
 - The service checks that claude starts before its first poll.
 
 ## Rollout
@@ -214,6 +217,12 @@ Every WebUI bug counts, whoever reported it.
   no TLS, no proxy. One language and toolchain; the UI imports the requirement ids and the row
   statuses instead of copying them, so only the log events stay a hand-kept contract. Two views
   of the same data were one too many to keep current.
+- 2026-10-26 — A check on request, from the UI and the command line, replacing `requeue`: a
+  person picks the bug, the running service checks it next and records the result as usual. The
+  request is a row in the service's database (the one thing the UI writes), served by the
+  service's loop, so there is one checker and one record; it ignores the age, the status and
+  the caps, because a person asked. `requeue` only put a failed bug back in line for the next
+  poll; a request does that and more.
 
 ## Sources
 

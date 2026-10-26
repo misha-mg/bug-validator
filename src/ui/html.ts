@@ -2,7 +2,8 @@
 
 import { MAX_ATTEMPTS } from '../config.ts';
 import { REQUIREMENT_IDS, REQUIREMENTS } from '../domain/bug.ts';
-import { type BugView, type Result, checked, result } from './read.ts';
+import { ISSUE_KEY } from '../domain/key.ts';
+import { type BugView, type Request, type Result, checked, result } from './read.ts';
 import { type LogEvent, type ServiceStatus, liveness } from './service-log.ts';
 import { type Day, type Share, checksPerDay, itemsAddedAfterComment, needsAttention, periodStats, problems, startOfDay } from './stats.ts';
 
@@ -10,7 +11,6 @@ export const CHART_DAYS = 30;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const SUMMARY_WIDTH = 80;
 const ERROR_WIDTH = 120;
-const KEY = /^(KAZ|RPG)-\d+$/;
 const MENTION = /\[~accountid:[^\]]*\]/g;
 
 /** What every page needs besides its own model. */
@@ -41,6 +41,7 @@ export function layout(title: string, main: string, ctx: PageContext): string {
 <a class="brand" href="/">Bug validator</a>
 <nav><a href="/">Home</a><a href="/bugs">Bugs</a></nav>
 ${mode}
+<form class="request" method="post" action="/requests"><input name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button>Check</button></form>
 </header>
 <main>
 ${main}
@@ -63,6 +64,7 @@ export interface HomeModel {
   logPath: string;
   /** The latest events, oldest first, as the log keeps them. */
   recent: LogEvent[];
+  requests: Request[];
 }
 
 export function homePage(m: HomeModel, ctx: PageContext): string {
@@ -107,6 +109,9 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
     if (s.pollIntervalMs) rows.push(['Poll every', span(s.pollIntervalMs)]);
     if (s.checking) rows.push(['Checking', `${bugLink(s.checking.key)} · ${span(now.getTime() - s.checking.since.getTime())}`]);
   }
+  // The checks asked for and not yet made; a failed request shows on its bug's page and in the log.
+  const pending = m.requests.filter((r) => !r.error);
+  if (pending.length) rows.push(['Requested', pending.map((r) => `${bugLink(r.key)} · ${ago(now, r.at)}`).join('<br>')]);
   const skipped = m.bugs.filter((b) => result(b) === 'skipped');
   if (skipped.length) {
     // Bugs already in Created at the first start, never checked.
@@ -172,6 +177,7 @@ export function eventText(e: LogEvent): string {
   const f = e.fields;
   const missing = Array.isArray(f.missing) ? (f.missing.length ? ` · missing ${f.missing.join(' ')}` : ' · nothing missing') : '';
   const re = f.recheck === true;
+  const by = f.requested === true ? 'requested · ' : '';
   switch (e.event) {
     case 'service_start':
       return esc(['service started', f.dryRun === true ? 'dry run' : f.dryRun === false ? 'live' : null, f.model].filter(Boolean).join(' · '));
@@ -183,18 +189,20 @@ export function eventText(e: LogEvent): string {
       return esc(`first start · ${f.skipped ?? 0} bugs already in Created skipped`);
     case 'poll_failed':
       return `poll failed · ${errorText(f.error)}`;
+    case 'request_failed':
+      return `request failed · ${errorText(f.error)}`;
     case 'key_changed':
       return esc(`moved: ${f.from} → ${f.to}`);
     case 'bug_complete':
-      return esc(`${re ? 're-check: ' : ''}complete, no comment${missing}`);
+      return esc(`${by}${re ? 're-check: ' : ''}complete, no comment${missing}`);
     case 'comment_dry_run':
-      return esc(`${re ? 're-check: ' : ''}comment · dry run${missing}`);
+      return esc(`${by}${re ? 're-check: ' : ''}comment · dry run${missing}`);
     case 'comment_posted':
-      return esc(`comment posted${missing}`);
+      return esc(`${by}comment posted${missing}`);
     case 'comment_edited':
-      return esc(`comment edited${missing}`);
+      return esc(`${by}comment edited${missing}`);
     case 'check_failed':
-      return `${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${f.attempts}` : ''} · ${errorText(f.error)}`;
+      return `${by}${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${f.attempts}` : ''} · ${errorText(f.error)}`;
     case 'mentions_stripped':
       return esc(`mentions stripped: ${Array.isArray(f.stripped) ? f.stripped.join(', ') : ''}`);
     case 'fatal':
@@ -258,23 +266,39 @@ const chips_ = (missing: string[]): string => missing.map((id) => `<span class="
 
 const SKIPPED = 'Skipped: the bug was already in Created when the service first started, so it was never checked.';
 
-export function bugPage(b: BugView, ctx: PageContext): string {
+/** A bug's row, if it has one, and the check asked for it, if any. One of the two exists. */
+export interface BugModel {
+  key: string;
+  bug: BugView | null;
+  request: Request | null;
+}
+
+export function bugPage(m: BugModel, ctx: PageContext): string {
+  const { key, bug: b, request } = m;
   const rows: [string, string][] = [];
-  if (b.reporter) rows.push(['Reporter', esc(b.reporter)]);
-  rows.push(['Result', `<span class="result ${result(b)}">${esc(resultLabel(b))}</span>`]);
-  rows.push(['Checked', fmtTime(b.checkedAt)]);
-  if (b.history.length > 1) rows.push(['Checks', `${b.history.length} · first ${fmtTime(b.history[0]!.at)}`]);
-  if (b.error) rows.push(['Error', `<span class="err">${esc(b.error)}</span>`]);
-  rows.push(['Jira', jiraLink(b.key, ctx, esc(`${ctx.jiraBaseUrl}/browse/${b.key}`))]);
+  if (b?.reporter) rows.push(['Reporter', esc(b.reporter)]);
+  if (b) {
+    rows.push(['Result', `<span class="result ${result(b)}">${esc(resultLabel(b))}</span>`]);
+    rows.push(['Checked', fmtTime(b.checkedAt)]);
+    if (b.history.length > 1) rows.push(['Checks', `${b.history.length} · first ${fmtTime(b.history[0]!.at)}`]);
+    if (b.error) rows.push(['Error', `<span class="err">${esc(b.error)}</span>`]);
+  }
+  if (request) rows.push(['Request', request.error ? `<span class="err">failed · ${esc(request.error)}</span>` : `waiting · ${ago(ctx.now, request.at)}`]);
+  rows.push(['Jira', jiraLink(key, ctx, esc(`${ctx.jiraBaseUrl}/browse/${key}`))]);
+  // A pending request is enough; otherwise one click asks for the next check.
+  const button = request && !request.error ? '' : `<form class="request" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button>${b ? 'Check again' : 'Check'}</button></form>`;
+  const head = `<header class="bug-head"><h1>${esc(key)} <span class="summary">${esc(b?.summary ?? '')}</span></h1>${kv(rows)}${button}</header>`;
+  if (!b) return layout(`${key} · Bug validator`, `${head}<p class="muted">Not checked yet. The page fills in when the service has checked the bug.</p>`, ctx);
   const subtitle = { dry_run: 'dry run · not posted', commented: 'posted to Jira', posting: 'interrupted while posting · look in Jira' }[b.status as string] ?? '';
   const main = `
-<header class="bug-head"><h1>${esc(b.key)} <span class="summary">${esc(b.summary ?? '')}</span></h1>${kv(rows)}</header>
+${head}
 <div class="columns">
 <section class="block"><h2>Requirements</h2>${requirements(b, ctx)}</section>
 <section class="block comment"><h2>Comment <small>${subtitle}</small></h2>${commentBlock(b)}</section>
 </div>`;
-  return layout(`${b.key} · Bug validator`, main, ctx);
+  return layout(`${key} · Bug validator`, main, ctx);
 }
+
 
 function requirements(b: BugView, ctx: PageContext): string {
   if (!checked(b) && b.status !== 'posting') return `<p class="muted">${result(b) === 'error' ? 'The check did not finish.' : 'Never checked.'}</p>`;
@@ -305,7 +329,7 @@ function requirements(b: BugView, ctx: PageContext): string {
 
 function commentBlock(b: BugView): string {
   if (result(b) === 'skipped') return `<p class="muted">${SKIPPED}</p>`;
-  if (b.status === 'posting') return `<p class="warn">The service stopped while posting this comment. Look in Jira: if it is not there, requeue the bug.</p><div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>`;
+  if (b.status === 'posting') return `<p class="warn">The service stopped while posting this comment. Look in Jira: if it is not there, ask for a check again.</p><div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>`;
   if (result(b) === 'error') return '<p class="muted">No comment: the check did not finish.</p>';
   if (!b.comment) return '<p class="muted">Nothing is missing, so the bug got no comment.</p>';
   return `<div class="jira-comment">${commentHtml(b.comment, b.reporter)}</div>`;
@@ -363,10 +387,10 @@ export function resultLabel(b: BugView): string {
 
 const kv = (rows: [string, string][]): string => `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
 
-const bugLink = (key: string): string => (KEY.test(key) ? `<a class="key" href="/bugs/${key}">${key}</a>` : esc(key));
+const bugLink = (key: string): string => (ISSUE_KEY.test(key) ? `<a class="key" href="/bugs/${key}">${key}</a>` : esc(key));
 
 function jiraLink(key: string, ctx: PageContext, text = 'Jira'): string {
-  if (!KEY.test(key)) return '';
+  if (!ISSUE_KEY.test(key)) return '';
   return `<a class="jira" href="${esc(ctx.jiraBaseUrl)}/browse/${key}" target="_blank" rel="noopener">${text}</a>`;
 }
 

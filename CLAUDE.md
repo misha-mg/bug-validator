@@ -14,8 +14,8 @@ Stage: dry run on the home server (PRD rollout step 2), systemd user units `bug-
 - Two things are kept in step by hand: the log events in `docs/architecture.md` ↔
   `src/ui/service-log.ts` + `src/ui/html.ts` (the web UI reads them); the requirement ids and
   names in `src/domain/bug.ts` ↔ `agent/instructions.md` (the comment's list is read by those
-  names). The UI (`src/ui/`, read-only) imports the tables and the requirements from the
-  service's own modules.
+  names). The UI (`src/ui/`) reads `state/`, writes only check requests, and imports the tables
+  and the requirements from the service's own modules.
 - Jira stays read-only until the PRD's rollout reaches "comments live": `DRY_RUN=true` is the
   default. The service's agent is sandboxed by its command-line flags; the deny list in
   `.claude/settings.json` protects only interactive Claude Code sessions in this repository.

@@ -15,6 +15,9 @@ export const QUIET_BEFORE_RECHECK_MS = 15 * 60_000;
 /** Checks per bug, failed ones included: a guard against a bug that keeps changing or failing. */
 export const MAX_CHECKS = 5;
 
+/** The rows a check continues as a re-check, editing their comment: the comment made in the current mode. */
+export const recheckableStatuses = (dryRun: boolean): CheckStatus[] => (dryRun ? ['complete', 'dry_run'] : ['complete', 'commented']);
+
 export interface Plan {
   first: Watched[];
   recheck: { bug: Watched; row: BugRow }[];
@@ -29,7 +32,7 @@ export interface Plan {
  * comment was never posted, and a dry run never overwrites a posted one.
  */
 export function plan(watched: Watched[], rows: Map<string, BugRow>, now: number, dryRun: boolean): Plan {
-  const recheckable: CheckStatus[] = dryRun ? ['complete', 'dry_run'] : ['complete', 'commented'];
+  const recheckable = recheckableStatuses(dryRun);
   const out: Plan = { first: [], recheck: [], waiting: 0 };
   for (const bug of watched) {
     const row = rows.get(bug.key);

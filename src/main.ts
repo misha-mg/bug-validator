@@ -1,5 +1,5 @@
 import { check } from './commands/check.ts';
-import { requeue } from './commands/requeue.ts';
+import { request } from './commands/request.ts';
 import { run } from './commands/run.ts';
 import { ui } from './commands/ui.ts';
 import { log } from './log.ts';
@@ -8,7 +8,7 @@ const USAGE = `usage:
   node src/main.ts run             poll Jira and check new bugs (DRY_RUN=true by default)
   node src/main.ts check <KEY>     check one bug and print the result; writes nothing
     [--recheck]                    as a re-check: the agent edits the comment recorded for the bug
-  node src/main.ts requeue <KEY>   check a failed bug again at the next poll
+  node src/main.ts request <KEY|URL>  the running service checks the bug next, whatever its state
   node src/main.ts ui              serve the web UI (UI_HOST, UI_PORT); reads the database and the log
 `;
 
@@ -25,8 +25,8 @@ try {
     await run();
   } else if (command === 'check' && arg && flags.every((f) => f === '--recheck')) {
     await check(arg, flags.includes('--recheck'));
-  } else if (command === 'requeue' && arg) {
-    requeue(arg);
+  } else if (command === 'request' && arg) {
+    request(arg);
   } else if (command === 'ui' && !arg) {
     await ui();
   } else {
