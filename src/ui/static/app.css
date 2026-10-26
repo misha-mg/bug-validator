@@ -1,0 +1,131 @@
+/* The TUI's colours: blue frames, green for ok, pink for a comment, red for errors. */
+:root {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --panel: #e9ecf5;
+  --fg: #1f2335;
+  --muted: #6b7089;
+  --line: #c9cfe3;
+  --primary: #3d6fd6;
+  --ok: #4f8a2a;
+  --comment: #c2458a;
+  --error: #d1393e;
+  --warning: #b8771a;
+  --secondary: #1f8f80;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1b26;
+    --surface: #222436;
+    --panel: #2f334d;
+    --fg: #c0caf5;
+    --muted: #7a82a8;
+    --line: #3b4066;
+    --primary: #7aa2f7;
+    --ok: #9ece6a;
+    --comment: #f5a3c8;
+    --error: #e5484d;
+    --warning: #e0af68;
+    --secondary: #73daca;
+  }
+}
+
+* { box-sizing: border-box; }
+html { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); }
+body { margin: 0; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .key, .time, .jira-comment, .req, .num { font-family: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-size: 0.93em; }
+
+.top { display: flex; align-items: center; gap: 1.5rem; padding: 0.6rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .brand { font-weight: 700; color: var(--fg); font-size: 1.1rem; }
+.top nav a { margin-right: 1rem; }
+.badge { padding: 0.1rem 0.6rem; border-radius: 1rem; font-size: 0.8rem; font-weight: 600; }
+.badge.dry { background: var(--panel); color: var(--secondary); }
+.badge.live { background: var(--comment); color: #fff; }
+
+main { padding: 1.25rem 1.5rem 3rem; max-width: 1500px; margin: 0 auto; }
+h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+h2 { font-size: 1rem; margin: 0 0 0.75rem; color: var(--primary); }
+h3 { font-size: 0.95rem; margin: 1.25rem 0 0.5rem; color: var(--secondary); }
+h1 small, h2 small { font-weight: 400; color: var(--muted); font-size: 0.85em; margin-left: 0.5rem; }
+.block { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; min-width: 0; }
+.muted, .dim { color: var(--muted); }
+.ok { color: var(--ok); }
+.err { color: var(--error); }
+.warn { color: var(--warning); }
+.missing { color: var(--comment); font-weight: 600; }
+
+/* Home: two columns, the activity full width; one column on a narrow window. */
+main:has(.service) { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
+.activity { grid-column: 1 / -1; }
+@media (max-width: 900px) { main:has(.service) { grid-template-columns: 1fr; } }
+
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1.25rem; margin: 0; }
+dl.kv dt { font-weight: 600; }
+dl.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 0.3rem 0.6rem 0.3rem 0; vertical-align: top; }
+thead th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+tbody th { font-weight: 600; white-space: nowrap; }
+.num { text-align: right; white-space: nowrap; }
+.time { white-space: nowrap; color: var(--muted); }
+
+.stats { width: auto; }
+.stats td { text-align: right; padding-left: 1.5rem; }
+.stats thead th { text-align: right; padding-left: 1.5rem; }
+.after-comment { margin: 0.75rem 0 0; color: var(--muted); }
+.after-comment strong { color: var(--fg); }
+
+.chart { margin: 1rem 0 0; }
+.chart figcaption { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.25rem; }
+svg.days { display: block; }
+svg.days rect.no_comment { fill: var(--ok); }
+svg.days rect.comment { fill: var(--comment); }
+svg.days rect.error { fill: var(--error); }
+svg.days text { font-size: 9px; text-anchor: middle; fill: var(--muted); }
+svg.days text.count { fill: var(--fg); }
+svg.days text.today { fill: var(--fg); font-weight: 700; }
+.legend { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; }
+.sw { display: inline-block; width: 0.7em; height: 0.7em; margin: 0 0.3em 0 0.8em; border-radius: 2px; vertical-align: -1px; }
+.sw.no_comment { background: var(--ok); }
+.sw.comment { background: var(--comment); }
+.sw.error { background: var(--error); }
+
+.problems td.bar { width: 35%; }
+.problems td.bar div { height: 0.8rem; background: var(--comment); border-radius: 2px; }
+.problems tr.dim td.bar div { display: none; }
+
+.list tbody tr { border-top: 1px solid var(--line); }
+.list tbody tr.day th { padding-top: 1rem; color: var(--secondary); border: 0; }
+.list td.summary a { color: var(--fg); }
+.req { background: var(--panel); border-radius: 3px; padding: 0 0.3em; cursor: help; }
+.result.comment { color: var(--comment); }
+.result.no_comment { color: var(--ok); }
+.result.error { color: var(--error); }
+.result.skipped { color: var(--muted); }
+.bugs a.jira, .activity a.jira { font-size: 0.8rem; color: var(--muted); margin-left: 0.3rem; }
+.activity td:last-child { overflow-wrap: anywhere; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-bottom: 1rem; }
+.chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.chip { padding: 0.15rem 0.7rem; border: 1px solid var(--line); border-radius: 1rem; color: var(--fg); background: var(--surface); font-size: 0.9rem; }
+.chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.chip:hover { text-decoration: none; border-color: var(--primary); }
+input[type="search"] { flex: 1; min-width: 16rem; padding: 0.35rem 0.6rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--fg); font: inherit; }
+
+/* One bug: its facts on top, requirements left, the comment right. */
+.bug-head { margin-bottom: 1rem; }
+.bug-head h1 .summary { font-weight: 400; }
+.columns { display: grid; grid-template-columns: 3fr 2fr; gap: 1rem; }
+@media (max-width: 900px) { .columns { grid-template-columns: 1fr; } }
+.requirements th, .requirements td:nth-child(2), .requirements td:nth-child(3) { width: 1%; white-space: nowrap; }
+.requirements td:last-child { overflow-wrap: anywhere; }
+.related th { width: 1%; padding-right: 1rem; }
+.history details { margin-top: 0.25rem; }
+.history summary { cursor: pointer; color: var(--primary); font-size: 0.9rem; }
+.jira-comment { background: var(--panel); border-radius: 6px; padding: 0.75rem 1rem; font-family: inherit; font-size: inherit; overflow-wrap: anywhere; }
+.jira-comment p { margin: 0 0 0.5rem; }
+.jira-comment ul { margin: 0 0 0.5rem; padding-left: 1.4rem; }
+.jira-comment s { color: var(--muted); }

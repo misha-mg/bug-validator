@@ -11,6 +11,7 @@
     "start": "node src/main.ts run",
     "check": "node src/main.ts check",
     "requeue": "node src/main.ts requeue",
+    "ui": "node src/main.ts ui",
     "tui": "uv run --project tui bug-validator-tui",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/**/*.test.ts\""

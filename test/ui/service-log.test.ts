@@ -58,12 +58,23 @@ describe('ServiceLog', () => {
   it('keeps the latest events other than polls', () => {
     const state = emptyState();
     let text = '';
-    for (let i = 0; i < RECENT + 5; i++) text += logLine('check_start', ago((RECENT + 5 - i) * MINUTE, state.now), { key: `KAZ-${i}` }) + logLine('poll', state.now, { inQuery: 1 });
+    for (let i = 0; i < RECENT + 5; i++) {
+      text += logLine('check_start', ago((RECENT + 5 - i) * MINUTE, state.now), { key: `KAZ-${i}` });
+      text += logLine('comment_dry_run', ago((RECENT + 5 - i) * MINUTE, state.now), { key: `KAZ-${i}`, missing: ['R1'] }) + logLine('poll', state.now, { inQuery: 1 });
+    }
     writeFileSync(state.logFile, text);
     const log = new ServiceLog(state.logFile);
-    log.read();
+    assert.equal(log.read()?.checking, null);
     assert.equal(log.recent.length, RECENT);
     assert.deepEqual([log.recent[0]?.fields.key, log.recent.at(-1)?.fields.key], ['KAZ-5', `KAZ-${RECENT + 4}`]);
-    assert.ok(log.recent.every((e) => e.event === 'check_start'));
+    assert.ok(log.recent.every((e) => e.event === 'comment_dry_run'));
+  });
+  it('knows the bug being checked until its check ends', () => {
+    const state = emptyState();
+    writeFileSync(state.logFile, logLine('check_start', ago(MINUTE, state.now), { key: 'KAZ-7' }));
+    const log = new ServiceLog(state.logFile);
+    assert.deepEqual(log.read()?.checking, { key: 'KAZ-7', since: ago(MINUTE, state.now) });
+    appendLog(state, logLine('check_failed', state.now, { key: 'KAZ-7', error: 'boom' }));
+    assert.equal(log.read()?.checking, null);
   });
 });

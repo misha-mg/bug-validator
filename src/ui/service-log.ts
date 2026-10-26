@@ -4,8 +4,9 @@ import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 const DEFAULT_INTERVAL_MS = 3 * 60 * 1000;
 // A poll that checks bugs logs nothing while the agent runs, up to its timeout (3 minutes).
 const AGENT_MARGIN_MS = 5 * 60 * 1000;
-/** How many of the latest events (other than `poll`) are kept for the Activity block. */
+/** How many of the latest events (other than `poll` and `check_start`) are kept for the Activity block. */
 export const RECENT = 30;
+const CHECK_ENDS = new Set(['bug_complete', 'comment_dry_run', 'comment_posted', 'comment_edited', 'check_failed', 'poll', 'poll_failed', 'service_stopped', 'fatal']);
 
 export interface ServiceStatus {
   /** From the latest `service_start`; null when the log does not reach back to it. */
@@ -24,6 +25,8 @@ export interface ServiceStatus {
   waiting: number | null;
   /** The latest poll's error, when it failed. */
   pollError: string | null;
+  /** The bug whose check started and has not ended: the agent is running. */
+  checking: { key: string; since: Date } | null;
 }
 
 export interface LogEvent {
@@ -48,6 +51,7 @@ const EMPTY: ServiceStatus = {
   inQuery: null,
   waiting: null,
   pollError: null,
+  checking: null,
 };
 
 /** Stopped when it said so; silent when it has written nothing for two polls and an agent run. */
@@ -67,7 +71,7 @@ export class ServiceLog {
   /** The end of the file when it ends mid-line: the rest of the line comes with the next read. */
   private partial = '';
   private status: ServiceStatus = EMPTY;
-  /** The latest events other than `poll`, oldest first, at most RECENT. */
+  /** The latest events other than `poll` and `check_start`, oldest first, at most RECENT. */
   readonly recent: LogEvent[] = [];
   readonly path: string;
 
@@ -127,9 +131,14 @@ export class ServiceLog {
       Object.assign(s, { lastPoll: event.ts, inQuery: num(f.inQuery), waiting: num(f.waiting), pollError: null });
     } else if (event.event === 'poll_failed') {
       Object.assign(s, { lastPoll: event.ts, pollError: str(f.error) ?? 'unknown error' });
+    } else if (event.event === 'check_start' && typeof f.key === 'string') {
+      s.checking = { key: f.key, since: event.ts };
     }
+    // A check ends with its result or its failure; a poll or a stop ends it too.
+    if (CHECK_ENDS.has(event.event)) s.checking = null;
     this.status = s;
-    if (event.event !== 'poll') {
+    // The Activity block: check_start is not kept, the check's end says what happened.
+    if (event.event !== 'poll' && event.event !== 'check_start') {
       this.recent.push(event);
       if (this.recent.length > RECENT) this.recent.shift();
     }

@@ -16,6 +16,9 @@ export const Env = z.object({
   CLAUDE_CODE_OAUTH_TOKEN: z.string().min(1).optional(),
 });
 
+/** A bug's first check is tried this many times, then the bug is recorded as failed. */
+export const MAX_ATTEMPTS = 3;
+
 export interface Config {
   jira: { baseUrl: string; cloudId: string; email: string; apiToken: string };
   dryRun: boolean;
@@ -44,6 +47,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     pollIntervalMs: e.POLL_INTERVAL_SECONDS * 1000,
     dbFile: e.DB_FILE,
     agent: { model: e.AGENT_MODEL, timeoutMs: e.AGENT_TIMEOUT_SECONDS * 1000, auth: e.CLAUDE_CODE_OAUTH_TOKEN ? 'oauth_token' : 'cli_login' },
-    maxAttempts: 3,
+    maxAttempts: MAX_ATTEMPTS,
   };
 }
