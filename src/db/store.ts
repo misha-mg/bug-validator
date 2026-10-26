@@ -24,7 +24,7 @@ export interface BugRow {
 
 export interface CheckResultRow {
   status: Extract<CheckStatus, 'complete' | 'dry_run' | 'posting' | 'commented'>;
-  /** The bug's summary and reporter at the check, for the TUI. */
+  /** The bug's summary and reporter at the check, for the UI. */
   summary: string;
   reporter: string | null;
   fingerprint: string;
@@ -83,7 +83,7 @@ export class Store {
 
   constructor(file: string) {
     if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
-    // The TUI reads the file while the service writes it: WAL lets both happen, the timeout
+    // The UI reads the file while the service writes it: WAL lets both happen, the timeout
     // waits out the rare overlap instead of failing the write.
     this.db = new DatabaseSync(file, { timeout: 5000 });
     this.db.exec('PRAGMA journal_mode = WAL');

@@ -37,7 +37,7 @@ The check has to come to the bug, as a Jira comment.
 - Primary: the share of new WebUI bugs that fail the basic rules at triage drops from 47%. The
   database holds every check of every bug: the field facts and the agent's list of failed
   requirements. The first check counts for the metric, since it sees the report as it arrived.
-  The TUI shows the counts and the most common gaps. Measuring the metric over time is rollout
+  The web UI shows the counts and the most common gaps. Measuring the metric over time is rollout
   step 4.
 - Secondary: fewer Cannot Reproduce closures and fewer returns from QA for missing data.
 
@@ -49,7 +49,7 @@ The check has to come to the bug, as a Jira comment.
   looks wrong; earlier bugs that look the same.
 
 Non-goals: linking issues, changing fields, labels, assignee or status (the service only
-comments, and edits only its own comment); new Jira fields; any UI outside Jira; other projects or issue types; running on server
+comments, and edits only its own comment); new Jira fields; any UI outside Jira for reporters (the web UI is for whoever runs the service); other projects or issue types; running on server
 236 (the network monitor host): Claude must not run there.
 
 ## Bug requirements
@@ -138,7 +138,7 @@ Every WebUI bug counts, whoever reported it.
 
 1. ✓ **Offline check** (2026-10-16): `check` on bugs the QA lead had sent back and on good ones.
 2. **Dry run**, current, from 2026-10-17: the whole process runs as it will live; only the post
-   is not sent. Comments go to the database and the log and are reviewed in the TUI; fixes to the
+   is not sent. Comments go to the database and the log and are reviewed in the web UI; fixes to the
    agent's instructions follow. A re-check's comment replaces the recorded one, and the history
    keeps both. Going live is a judgement call, no formal exit criterion.
 3. **Comments live** (`DRY_RUN=false`), from the personal account. Before that, check whether
@@ -208,6 +208,12 @@ Every WebUI bug counts, whoever reported it.
   already there is the problem, and a deleted one loses the record. Leaving a written comment
   alone was considered and dropped. A new guardrail: the comment's list equals `missing`, and a
   re-check keeps every item of the previous list.
+- 2026-10-26 — The TUI (Python + Textual) is replaced by a web UI in the service's own stack
+  (TypeScript, `node:http`, server-rendered pages, no dependency, no build): the same
+  information, opened from the office network by the server's IP, and nothing more — no login,
+  no TLS, no proxy. One language and toolchain; the UI imports the requirement ids and the row
+  statuses instead of copying them, so only the log events stay a hand-kept contract. Two views
+  of the same data were one too many to keep current.
 
 ## Sources
 

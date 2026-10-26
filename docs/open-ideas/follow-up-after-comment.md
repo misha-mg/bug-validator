@@ -7,8 +7,8 @@ Status: idea, not decided. Replaces the "re-read right before posting" step drop
 
 Does the comment work? That is: after the service asks for steps, a HAR or a build, does the
 reporter add them, and how fast? Since 2026-10-26 the re-checks record it while the bug is in
-Created (the `runs` table). Nothing records what arrives after the bug leaves Created, and the TUI
-shows no "asked → added" count yet.
+Created (the `runs` table), and the UI counts the items that arrived then ("Items added after the
+comment"). Nothing records what arrives after the bug leaves Created.
 
 ## The idea
 
@@ -17,7 +17,7 @@ field facts again, and record per bug which of the asked-for items arrived and w
 complete bugs are not followed up. One more row status is not needed: a `follow_up` JSON column
 on the same row (asked, arrived, at).
 
-The TUI then shows "asked → added" per requirement, which is the success metric of the PRD
+The UI then shows "asked → added" per requirement, which is the success metric of the PRD
 measured directly, not through the triage count.
 
 ## Open

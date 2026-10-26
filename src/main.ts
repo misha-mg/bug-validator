@@ -1,6 +1,7 @@
 import { check } from './commands/check.ts';
 import { requeue } from './commands/requeue.ts';
 import { run } from './commands/run.ts';
+import { ui } from './commands/ui.ts';
 import { log } from './log.ts';
 
 const USAGE = `usage:
@@ -8,6 +9,7 @@ const USAGE = `usage:
   node src/main.ts check <KEY>     check one bug and print the result; writes nothing
     [--recheck]                    as a re-check: the agent edits the comment recorded for the bug
   node src/main.ts requeue <KEY>   check a failed bug again at the next poll
+  node src/main.ts ui              serve the web UI (UI_HOST, UI_PORT); reads the database and the log
 `;
 
 const [command, arg, ...flags] = process.argv.slice(2);
@@ -25,14 +27,16 @@ try {
     await check(arg, flags.includes('--recheck'));
   } else if (command === 'requeue' && arg) {
     requeue(arg);
+  } else if (command === 'ui' && !arg) {
+    await ui();
   } else {
     process.stderr.write(USAGE);
     process.exit(2);
   }
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
-  // The service's log is JSON lines; a fatal error is one too, so the TUI can show it.
-  if (command === 'run') log.error('fatal', { error: message });
+  // The service's log is JSON lines; a fatal error is one too, so the UI can show it.
+  if (command === 'run' || command === 'ui') log.error('fatal', { error: message });
   else process.stderr.write(`${message}\n`);
   process.exit(1);
 }

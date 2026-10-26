@@ -1,6 +1,5 @@
 node_modules
 state
 .env
-tui
 test
 docs
