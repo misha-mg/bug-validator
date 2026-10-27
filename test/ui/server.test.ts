@@ -45,11 +45,16 @@ describe('server', () => {
     assert.equal((await get('/bugs/x')).status, 400);
     assert.equal((await fetch(`${base}/`, { method: 'POST' })).status, 405);
   });
-  it('serves the stylesheet and the script with no-store and a CSP', async () => {
+  it('serves the stylesheet, its fonts and the scripts with no-store and a CSP', async () => {
     const css = await get('/app.css');
     assert.equal(css.status, 200);
     assert.equal(css.type, 'text/css; charset=utf-8');
-    assert.match(css.body, /--primary/);
+    assert.match(css.body, /--slate/);
+    const font = await fetch(`${base}/fonts/barlow-latin-400-normal.woff2`);
+    assert.equal(font.status, 200);
+    assert.equal(font.headers.get('content-type'), 'font/woff2');
+    assert.equal((await font.arrayBuffer()).byteLength > 10_000, true);
+    assert.equal((await get('/fonts/nothing.woff2')).status, 404);
     const js = await get('/app.js');
     assert.equal(js.type, 'text/javascript; charset=utf-8');
     assert.match(js.body, /setInterval/);

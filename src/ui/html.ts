@@ -40,6 +40,7 @@ export function layout(title: string, main: string, ctx: PageContext): string {
 <body>
 <header class="top">
 <a class="brand" href="/">Bug validator</a>
+<span class="divider"></span>
 <nav><a href="/">Home</a><a href="/bugs">Bugs</a></nav>
 ${mode}
 <form class="request" method="post" action="/requests"><input name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button>Check</button></form>
@@ -260,7 +261,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
 <input type="hidden" name="result" value="${query.result}">
 <input type="search" name="q" value="${esc(query.q)}" placeholder="Search a bug, its summary or reporter">
 </form>
-${bugs.length ? `<table class="list bugs"><thead><tr><th>Bug</th><th>Summary</th><th>Checked</th><th>Result</th><th>Missing</th><th>Related</th><th>Checks</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No bug matches.</p>'}`;
+${bugs.length ? `<table class="list bugs"><thead><tr><th>Bug</th><th>Summary</th><th>Checked</th><th>Result</th><th>Missing</th><th class="num">Related</th><th class="num">Checks</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No bug matches.</p>'}`;
   return layout(`Bugs · Bug validator`, main, ctx);
 }
 

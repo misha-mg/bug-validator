@@ -40,8 +40,8 @@ src/
     service-log.ts   service.log → the service's state and its latest events, read as it grows
     stats.ts         counts by period, the most common gaps, checks per day, items added after the comment
     html.ts          the three pages as pure functions: HTML strings from what was read
-    server.ts        node:http: the pages, app.css and app.js; nothing cached
-    static/          the stylesheet, the theme switch (runs in <head>) and the refresh script
+    server.ts        node:http: the pages and the static files; nothing cached
+    static/          the stylesheet, its fonts (Barlow, OFL), the theme switch (runs in <head>) and the refresh script
 agent/instructions.md   the agent's system prompt
 deploy/*.service     systemd user units: the service and the UI
 scripts/late-changes.ts   how reports change after creation (read-only measurement): `node scripts/late-changes.ts [days]`
@@ -226,8 +226,11 @@ The pages are rendered on the server (`html.ts`, pure functions tested in `test/
 fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden
 or the search box has focus; `theme.js` keeps the light or dark choice made with the header's
 button in the browser (the system's setting until then). Everything works with JavaScript off,
-minus the refresh and the switch. Times are
-the server's local time. Jira links use `JIRA_BASE_URL`.
+minus the refresh and the switch. The look is pipeline-ui's drafting sheet: one surface, hairline
+frames with a cross at each corner, Barlow Condensed for titles and values, letter-spaced capitals
+for labels, slate for the one action and for a comment, moss for ok, rust for an error; the dark
+theme is the same sheet in the dark. Times are the server's local time. Jira links use
+`JIRA_BASE_URL`.
 
 ### Deploy
 

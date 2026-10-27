@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { ISSUE_KEY } from '../domain/key.ts';
 import { describeError, log } from '../log.ts';
@@ -9,13 +9,15 @@ import { readBug, readBugs, readRequests } from './read.ts';
 import { ServiceLog } from './service-log.ts';
 
 const STATIC: Record<string, string> = { '/app.css': 'text/css', '/app.js': 'text/javascript', '/theme.js': 'text/javascript' };
+/** The Barlow faces the stylesheet names, under static/fonts. */
+const FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/;
 
 /** A posted form is small; anything bigger is not one. */
 const MAX_BODY = 4096;
 
 /**
- * The web UI: three pages rendered from the database and the log on every request, plus a
- * stylesheet and the refresh script. Nothing is cached: an edit to a static file shows on reload,
+ * The web UI: three pages rendered from the database and the log on every request, plus the
+ * stylesheet, its fonts and the scripts. Nothing is cached: an edit to a static file shows on reload,
  * and the pages are always what the files say now. The one write is `POST /requests`: a check
  * asked for by hand, which the service serves.
  */
@@ -38,9 +40,11 @@ export function startUi(config: UiConfig, host = config.host, port = config.port
 async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfig, serviceLog: ServiceLog): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost');
   const path = url.pathname;
-  const type = STATIC[path];
+  const type = STATIC[path] ?? (FONT.test(path) ? 'font/woff2' : undefined);
   if (type) {
-    send(res, 200, type, readFileSync(new URL(`./static${path}`, import.meta.url)));
+    const file = new URL(`./static${path}`, import.meta.url);
+    if (existsSync(file)) send(res, 200, type, readFileSync(file));
+    else send(res, 404, 'text/plain', `No file at ${path}.`);
     return;
   }
   const status = serviceLog.read();
@@ -94,7 +98,7 @@ function body(req: IncomingMessage): Promise<string> {
 
 function send(res: ServerResponse, status: number, type: string, body: string | Buffer): void {
   res.writeHead(status, {
-    'Content-Type': `${type}; charset=utf-8`,
+    'Content-Type': type.startsWith('text/') ? `${type}; charset=utf-8` : type,
     'Cache-Control': 'no-store',
     'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'",
   });
