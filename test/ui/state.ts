@@ -10,6 +10,13 @@ export const DAY = 24 * HOUR;
 
 export const ago = (ms: number, now = new Date()): Date => new Date(now.getTime() - ms);
 
+/** The same time of day n days earlier: stable across a clock change, unlike ago(n * DAY). */
+export const daysAgo = (days: number, now: Date): Date => {
+  const d = new Date(now);
+  d.setDate(d.getDate() - days);
+  return d;
+};
+
 /** A time as the service writes it: ISO, UTC, "Z". */
 export const stamp = (at: Date): string => at.toISOString();
 
@@ -66,7 +73,7 @@ export function request(dbFile: string, key: string, at: Date, error: string | n
 export function sampleState(): State {
   const state = emptyState();
   const { dbFile, now } = state;
-  insert(dbFile, { key: 'KAZ-1', status: 'skipped', checked_at: stamp(ago(20 * DAY, now)) });
+  insert(dbFile, { key: 'KAZ-1', status: 'skipped', checked_at: stamp(daysAgo(20, now)) });
   insert(dbFile, {
     key: 'KAZ-2',
     status: 'dry_run',
@@ -85,18 +92,18 @@ export function sampleState(): State {
     key: 'KAZ-3',
     status: 'complete',
     attempts: 1,
-    checked_at: stamp(ago(3 * DAY, now)),
+    checked_at: stamp(daysAgo(3, now)),
     summary: 'Login page freezes',
     reporter: 'B Tester',
     base_checks: baseChecks([]),
     verdict: JSON.stringify({ comment_needed: false, comment: '', missing: [], related: [] }),
   });
-  insert(dbFile, { key: 'RPG-4', status: 'failed', attempts: 3, checked_at: stamp(ago(DAY, now)), error: 'Error: agent run timed out' });
+  insert(dbFile, { key: 'RPG-4', status: 'failed', attempts: 3, checked_at: stamp(daysAgo(1, now)), error: 'Error: agent run timed out' });
   insert(dbFile, {
     key: 'KAZ-5',
     status: 'dry_run',
     attempts: 1,
-    checked_at: stamp(ago(10 * DAY, now)),
+    checked_at: stamp(daysAgo(10, now)),
     summary: 'Device list is cut <b>',
     base_checks: baseChecks(['R6']),
     verdict: JSON.stringify({ comment_needed: true, comment: '…', missing: ['R6'], related: [] }),
