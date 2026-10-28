@@ -8,7 +8,7 @@ import { type PageContext, bugPage, bugsPage, bugsQuery, errorPage, homePage } f
 import { readBug, readBugs, readRequests } from './read.ts';
 import { ServiceLog } from './service-log.ts';
 
-const STATIC: Record<string, string> = { '/app.css': 'text/css', '/app.js': 'text/javascript', '/theme.js': 'text/javascript' };
+const STATIC: Record<string, string> = { '/sheet.css': 'text/css', '/app.css': 'text/css', '/app.js': 'text/javascript', '/theme.js': 'text/javascript' };
 /** The Barlow faces the stylesheet names, under static/fonts. */
 const FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/;
 
@@ -17,7 +17,7 @@ const MAX_BODY = 4096;
 
 /**
  * The web UI: three pages rendered from the database and the log on every request, plus the
- * stylesheet, its fonts and the scripts. Nothing is cached: an edit to a static file shows on reload,
+ * stylesheets (the drafting sheet shared with pipeline-ui, and the UI's own), their fonts and the scripts. Nothing is cached: an edit to a static file shows on reload,
  * and the pages are always what the files say now. The one write is `POST /requests`: a check
  * asked for by hand, which the service serves.
  */
@@ -48,7 +48,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
     return;
   }
   const status = serviceLog.read();
-  const ctx: PageContext = { jiraBaseUrl: config.jiraBaseUrl, dryRun: status?.dryRun ?? null, now: new Date() };
+  const ctx: PageContext = { jiraBaseUrl: config.jiraBaseUrl, dryRun: status?.dryRun ?? null, now: new Date(), host: req.headers.host };
   if (req.method === 'POST' && path === '/requests') {
     const form = new URLSearchParams(await body(req));
     try {

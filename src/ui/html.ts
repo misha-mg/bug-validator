@@ -19,6 +19,8 @@ export interface PageContext {
   /** The service's mode from its log; null when the log does not say. */
   dryRun: boolean | null;
   now: Date;
+  /** The host the page was asked from, for the masthead. */
+  host?: string | undefined;
 }
 
 export const esc = (value: unknown): string =>
@@ -26,27 +28,33 @@ export const esc = (value: unknown): string =>
 
 // ---- Layout
 
-export function layout(title: string, main: string, ctx: PageContext): string {
-  const mode = ctx.dryRun === null ? '' : ctx.dryRun ? '<span class="badge dry">dry run</span>' : '<span class="badge live">live</span>';
+/** The pages the masthead lists; a bug's page is under Bugs. */
+export type Section = 'home' | 'bugs';
+
+export function layout(title: string, main: string, ctx: PageContext, section: Section | null = null): string {
+  const nav = (s: Section, href: string, name: string): string => `<a class="btn${s === section ? ' active' : ''}" href="${href}">${name}</a>`;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
+<link rel="stylesheet" href="/sheet.css">
 <link rel="stylesheet" href="/app.css">
 <script src="/theme.js"></script>
 </head>
 <body>
-<header class="top">
+<header class="masthead">
 <a class="brand" href="/">Bug validator</a>
 <span class="divider"></span>
-<nav><a href="/">Home</a><a href="/bugs">Bugs</a></nav>
-${mode}
-<form class="request" method="post" action="/requests"><input name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button>Check</button></form>
-<button class="theme" type="button" aria-label="Switch between light and dark"></button>
+<span class="where">console${ctx.host ? ` · ${esc(ctx.host)}` : ''}</span>
+${modePill(ctx.dryRun)}
+<span class="spacer"></span>
+<form class="request" method="post" action="/requests"><input class="field" name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button class="btn">Check</button></form>
+<nav>${nav('home', '/', 'Home')}${nav('bugs', '/bugs', 'Bugs')}</nav>
+<button class="btn theme" type="button" aria-label="Switch between light and dark"></button>
 </header>
-<main>
+<main class="sheet">
 ${main}
 </main>
 <script src="/app.js"></script>
@@ -56,7 +64,7 @@ ${main}
 }
 
 export function errorPage(status: number, message: string, ctx: PageContext): string {
-  return layout(`${status} · Bug validator`, `<section class="block"><h2>${status}</h2><p>${esc(message)}</p></section>`, ctx);
+  return layout(`${status} · Bug validator`, `<section class="frame"><h2>${status}</h2><p>${esc(message)}</p></section>`, ctx);
 }
 
 // ---- Home
@@ -75,18 +83,20 @@ export function homePage(m: HomeModel, ctx: PageContext): string {
   const total = found[0]?.share.total ?? 0;
   const attention = needsAttention(m.bugs);
   const main = `
-<section class="tiles">${tiles(m.bugs, ctx.now)}</section>
-<section class="block service"><h2>Service</h2>${kv(serviceRows(m, ctx.now))}</section>
-<section class="block statistics"><h2>Bugs checked per day <small>${CHART_DAYS} days</small></h2>
+<div class="home">
+<section class="cards">${tiles(m.bugs, ctx.now)}</section>
+<section class="frame service">${frameHead('Service')}${kv(serviceRows(m, ctx.now))}</section>
+<section class="frame statistics">${frameHead('Bugs checked per day', `${CHART_DAYS} days`)}
 <figure class="chart">${dayChart(checksPerDay(m.bugs, ctx.now, CHART_DAYS))}
 <div class="legend"><span class="sw no_comment"></span>without comment <span class="sw comment"></span>with comment <span class="sw error"></span>error</div></figure></section>
-<section class="block problems"><h2>Most common gaps <small>${total ? `of ${bugsText(total)} checked · all time` : ''}</small></h2>
+<section class="frame problems">${frameHead('Most common gaps', total ? `of ${bugsText(total)} checked · all time` : '')}
 ${total ? problemsTable(found) : '<p class="muted">No bug has been checked yet.</p>'}</section>
-<section class="block attention"><h2>Needs attention <small>failed checks</small></h2>
+<section class="frame attention">${frameHead('Needs attention', 'failed checks')}
 ${attention.length ? attentionTable(attention, ctx) : '<p class="muted">No check has failed.</p>'}</section>
-<section class="block activity"><h2>Activity <small>the latest events of the log</small></h2>
-${m.recent.length ? activityTable(m.recent, ctx) : '<p class="muted">Nothing logged yet.</p>'}</section>`;
-  return layout('Bug validator', main, ctx);
+<section class="frame activity">${frameHead('Activity', 'the latest events of the log')}
+${m.recent.length ? activityTable(m.recent, ctx) : '<p class="muted">Nothing logged yet.</p>'}</section>
+</div>`;
+  return layout('Bug validator', main, ctx, 'home');
 }
 
 function serviceRows(m: HomeModel, now: Date): [string, string][] {
@@ -104,8 +114,7 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
       rows.push(['Error', `<span class="err">${errorText(s.pollError)}</span>`]);
     } else if (s.lastPoll) rows.push(['Last poll', ago(now, s.lastPoll)]);
     else rows.push(['Last poll', '<span class="muted">none yet</span>']);
-    if (s.dryRun === true) rows.push(['Mode', '<span class="badge dry">dry run</span>']);
-    else if (s.dryRun === false) rows.push(['Mode', '<span class="badge live">live</span>']);
+    if (s.dryRun !== null) rows.push(['Mode', modePill(s.dryRun)]);
     if (s.inQuery !== null && !s.pollError) rows.push(['In Created', `${s.inQuery}${s.waiting ? ` · ${s.waiting} waiting` : ''}`]);
     if (s.started) rows.push(['Started', fmtTime(s.started)]);
     if (s.model) rows.push(['Model', esc(s.model)]);
@@ -133,7 +142,7 @@ function tiles(bugs: BugView[], now: Date): string {
     ['Checked in 7 days', periodStats(bugs, new Date(now.getTime() - WEEK_MS))],
     ['Checked all time', periodStats(bugs)],
   ] as const;
-  const tile = (label: string, value: string, caption: string): string => `<div class="block tile"><div class="label">${label}</div><div class="value">${value}</div><div class="caption">${caption}</div></div>`;
+  const tile = (label: string, value: string, note: string): string => `<div class="frame card"><div class="label">${label}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
   const added = itemsAddedAfterComment(bugs);
   return (
     periods
@@ -141,7 +150,7 @@ function tiles(bugs: BugView[], now: Date): string {
         const failed = s.errors ? ` · <span class="err">${s.errors} failed</span>` : '';
         return tile(label, String(s.checked), s.checked ? `${shareText(s.withComment)} with comment${failed}` : `no checks${failed}`);
       })
-      .join('') + tile('Items added after the comment', added.total ? `${added.count} of ${added.total}` : '–', 're-checked bugs, all time')
+      .join('') + tile('Items added after the comment', added.total ? `${added.count} <small>of ${added.total}</small>` : '–', 're-checked bugs, all time')
   );
 }
 
@@ -241,7 +250,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
   const bugs = filterBugs(all, query);
   const narrowed = [query.result !== 'all' ? FILTERS[query.result] : null, query.q ? `“${query.q}”` : null].filter(Boolean);
   const chips = (Object.keys(FILTERS) as Filter[])
-    .map((f) => `<a class="chip${f === query.result ? ' active' : ''}" href="/bugs?${new URLSearchParams({ result: f, q: query.q })}">${FILTERS[f]}</a>`)
+    .map((f) => `<a class="chip${f === query.result ? ' on' : ''}" href="/bugs?${new URLSearchParams({ result: f, q: query.q })}">${FILTERS[f]}</a>`)
     .join('');
   let rows = '';
   let day = '';
@@ -250,19 +259,19 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
     const d = fmtDay(b.checkedAt);
     if (d !== day) {
       day = d;
-      rows += `<tr class="day"><th colspan="7">${d}</th></tr>`;
+      rows += `<tr class="day"><th class="label" colspan="7">${d}</th></tr>`;
     }
-    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${b.key}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td><span class="result ${result(b)}">${esc(resultLabel(b))}</span></td><td>${chips_(b.missing)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`;
+    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${b.key}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${chips_(b.missing)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`;
   }
   const main = `
-<h1>All bugs${narrowed.map((n) => ` · ${esc(n)}`).join('')} <small>${bugsText(bugs.length)}</small></h1>
+<div class="page-head"><h1>All bugs${narrowed.map((n) => ` · ${esc(n)}`).join('')}</h1><span class="stats">${bugsText(bugs.length)}</span></div>
 <form class="toolbar" method="get" action="/bugs">
 <nav class="chips">${chips}</nav>
 <input type="hidden" name="result" value="${query.result}">
-<input type="search" name="q" value="${esc(query.q)}" placeholder="Search a bug, its summary or reporter">
+<input class="field" type="search" name="q" value="${esc(query.q)}" placeholder="Search a bug, its summary or reporter">
 </form>
 ${bugs.length ? `<table class="list bugs"><thead><tr><th>Bug</th><th>Summary</th><th>Checked</th><th>Result</th><th>Missing</th><th class="num">Related</th><th class="num">Checks</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No bug matches.</p>'}`;
-  return layout(`Bugs · Bug validator`, main, ctx);
+  return layout(`Bugs · Bug validator`, main, ctx, 'bugs');
 }
 
 const chips_ = (missing: string[]): string => missing.map((id) => `<span class="req" title="${esc(REQUIREMENTS[id as keyof typeof REQUIREMENTS] ?? '')}">${esc(id)}</span>`).join(' ');
@@ -283,7 +292,7 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
   const rows: [string, string][] = [];
   if (b?.reporter) rows.push(['Reporter', esc(b.reporter)]);
   if (b) {
-    rows.push(['Result', `<span class="result ${result(b)}">${esc(resultLabel(b))}</span>`]);
+    rows.push(['Result', resultPill(b)]);
     rows.push(['Checked', fmtTime(b.checkedAt)]);
     if (b.history.length > 1) rows.push(['Checks', `${b.history.length} · first ${fmtTime(b.history[0]!.at)}`]);
     if (b.error) rows.push(['Error', `<span class="err">${esc(b.error)}</span>`]);
@@ -291,17 +300,17 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
   if (request) rows.push(['Request', request.error ? `<span class="err">failed · ${esc(request.error)}</span>` : `waiting · ${ago(ctx.now, request.at)}`]);
   rows.push(['Jira', jiraLink(key, ctx, esc(`${ctx.jiraBaseUrl}/browse/${key}`))]);
   // A pending request is enough; otherwise one click asks for the next check.
-  const button = request && !request.error ? '' : `<form class="request" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button>${b ? 'Check again' : 'Check'}</button></form>`;
-  const head = `<header class="bug-head"><h1>${esc(key)} <span class="summary">${esc(b?.summary ?? '')}</span></h1>${kv(rows)}${button}</header>`;
-  if (!b) return layout(`${key} · Bug validator`, `${head}<p class="muted">Not checked yet. The page fills in when the service has checked the bug.</p>`, ctx);
+  const button = request && !request.error ? '' : `<form class="request" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button class="btn primary">${b ? 'Check again' : 'Check'}</button></form>`;
+  const head = `<header class="bug-head"><div class="page-head"><h1>${esc(key)}</h1><span class="stats">${esc(b?.summary ?? '')}</span></div>${kv(rows)}${button}</header>`;
+  if (!b) return layout(`${key} · Bug validator`, `${head}<p class="muted">Not checked yet. The page fills in when the service has checked the bug.</p>`, ctx, 'bugs');
   const subtitle = { dry_run: 'dry run · not posted', commented: 'posted to Jira', posting: 'interrupted while posting · look in Jira' }[b.status as string] ?? '';
   const main = `
 ${head}
 <div class="columns">
-<section class="block"><h2>Requirements</h2>${requirements(b, ctx)}</section>
-<section class="block comment"><h2>Comment <small>${subtitle}</small></h2>${commentBlock(b)}</section>
+<section class="frame">${frameHead('Requirements')}${requirements(b, ctx)}</section>
+<section class="frame comment">${frameHead('Comment', subtitle)}${commentBlock(b)}</section>
 </div>`;
-  return layout(`${key} · Bug validator`, main, ctx);
+  return layout(`${key} · Bug validator`, main, ctx, 'bugs');
 }
 
 
@@ -389,6 +398,15 @@ export function resultLabel(b: BugView): string {
       return b.status;
   }
 }
+
+/** A frame's title line: its name and, beside it, a note. */
+const frameHead = (title: string, note = ''): string => `<div class="frame-head"><h2>${title}</h2>${note ? `<span class="note">${note}</span>` : ''}</div>`;
+
+const modePill = (dryRun: boolean | null): string => (dryRun === null ? '' : dryRun ? '<span class="pill">dry run</span>' : '<span class="pill ok">live</span>');
+
+/** A bug's result as a pill: slate for a comment, moss for none needed, rust for an error. */
+const TONE: Record<Result, string> = { comment: ' slate', no_comment: ' ok', error: ' bad', skipped: '' };
+const resultPill = (b: BugView): string => `<span class="pill${TONE[result(b)]}">${esc(resultLabel(b))}</span>`;
 
 const kv = (rows: [string, string][]): string => `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
 

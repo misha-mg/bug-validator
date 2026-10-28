@@ -22,7 +22,7 @@ const text = (html: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 const section = (html: string, cls: string): string => {
-  const start = html.indexOf(`<section class="block ${cls}"`);
+  const start = html.indexOf(`<section class="frame ${cls}"`);
   return html.slice(start, html.indexOf('</section>', start));
 };
 
@@ -41,9 +41,9 @@ describe('home', () => {
     assert.match(service, /Requested KAZ-1 · 2m ago Skipped/, 'the pending request, not the failed one');
     assert.match(section(html, 'service'), /<a class="key" href="\/bugs\/KAZ-1">KAZ-1<\/a> · 2m ago/);
 
-    const tiles = text(html.slice(html.indexOf('<section class="tiles">'), html.indexOf('<section class="block service">')));
+    const tiles = text(html.slice(html.indexOf('<section class="cards">'), html.indexOf('<section class="frame service">')));
     assert.match(tiles, /^Checked today 1 100% \(1\) with comment Checked in 7 days 2 50% \(1\) with comment · 1 failed Checked all time 3 67% \(2\) with comment · 1 failed Items added after the comment 1 of 3 re-checked bugs, all time$/);
-    assert.match(html, /<button class="theme" type="button"/);
+    assert.match(html, /<button class="btn theme" type="button"/);
 
     const problems = text(section(html, 'problems'));
     assert.match(problems, /of 3 bugs checked · all time/);
@@ -67,7 +67,7 @@ describe('home', () => {
     assert.match(page, /No check has failed/);
     assert.match(page, /Nothing logged yet/);
     assert.match(page, /Checked today 0 no checks/);
-    assert.doesNotMatch(empty, /class="badge/);
+    assert.doesNotMatch(empty, /<span class="pill[^"]*">(dry run|live)</);
   });
   it('the chart has one bar per day, stacked in order, with its count', () => {
     const svg = dayChart(checksPerDay(bugs, state.now, 30));
@@ -114,12 +114,12 @@ describe('bugs', () => {
     const commented = bugsPage(bugs, bugsQuery(new URLSearchParams('result=comment')), ctx);
     assert.deepEqual([...commented.matchAll(/<a class="key" href="\/bugs\/([A-Z]+-\d+)"/g)].map((m) => m[1]), ['KAZ-2', 'KAZ-5']);
     assert.match(text(commented), /All bugs · with comment 2 bugs/);
-    assert.match(commented, /<a class="chip active" href="\/bugs\?result=comment&q=">with comment<\/a>/);
+    assert.match(commented, /<a class="chip on" href="\/bugs\?result=comment&q=">with comment<\/a>/);
 
     const searched = bugsPage(bugs, bugsQuery(new URLSearchParams('q=LOGIN')), ctx);
     assert.deepEqual(filterBugs(bugs, { result: 'all', q: 'login' }).map((b) => b.key), ['KAZ-3']);
     assert.match(text(searched), /All bugs · “LOGIN” 1 bug/);
-    assert.match(searched, /<input type="search" name="q" value="LOGIN"/);
+    assert.match(searched, /<input class="field" type="search" name="q" value="LOGIN"/);
     assert.match(text(bugsPage(bugs, bugsQuery(new URLSearchParams('result=nonsense&q=zzz')), ctx)), /No bug matches/);
   });
   it('escapes what the database holds', () => {
@@ -144,7 +144,7 @@ describe('one bug', () => {
     assert.match(page, /Checks .* first check missing R1 R4 R6 comment .* re-check VerdictError: a re-check must keep the comment .* re-check missing R4 R6 comment/);
     assert.match(page, /Comment dry run · not posted @A Tester Please add: Steps to reproduce Affects versions HAR file/);
     assert.match(html, /<li><s>Steps to reproduce<\/s><\/li><li>Affects versions<\/li>/);
-    assert.match(html, /<form class="request" method="post" action="\/requests"><input type="hidden" name="key" value="KAZ-2"><button>Check again<\/button>/);
+    assert.match(html, /<form class="request" method="post" action="\/requests"><input type="hidden" name="key" value="KAZ-2"><button class="btn primary">Check again<\/button>/);
     assert.doesNotMatch(page, /Request /);
   });
   it('shows the check asked for: pending, failed, or for a bug not checked yet', () => {
@@ -153,7 +153,7 @@ describe('one bug', () => {
     assert.doesNotMatch(pending, /name="key" value="KAZ-1"/, 'already asked: no button');
     const unknown = bugPage(bugModel('KAZ-77'), ctx);
     assert.match(text(unknown), /KAZ-77 Request failed · JiraError: HTTP 404 on GET \/issue\/KAZ-77 Jira .* Not checked yet\./);
-    assert.match(unknown, /<input type="hidden" name="key" value="KAZ-77"><button>Check<\/button>/);
+    assert.match(unknown, /<input type="hidden" name="key" value="KAZ-77"><button class="btn primary">Check<\/button>/);
     assert.doesNotMatch(unknown, /Requirements/);
   });
   it('explains a failed, a skipped and a complete bug', () => {

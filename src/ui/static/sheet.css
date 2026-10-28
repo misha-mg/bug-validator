@@ -1,0 +1,156 @@
+/* The drafting sheet: the design system pipeline-ui and bug-validator share. This file is the same
+   in both repositories (pipeline-ui ui/src/sheet.css, bug-validator src/ui/static/sheet.css); an
+   edit to one is copied to the other. It holds the tokens and the parts: the masthead, the page,
+   frames, headings, labels, cards, controls, pills, chips, tables, notices. Each app loads the
+   Barlow faces itself, and its own stylesheet lays out its pages with the colours named here.
+
+   One light surface, hairline frames with a cross at each corner, Barlow Condensed for titles and
+   values, letter-spaced capitals for labels, and colour only where it says something: slate for
+   the one thing to press, moss for ok, rust for an error. Dark by data-theme on <html>, set by
+   theme.js before the page paints. */
+
+:root {
+  --bg: #f3f3f1; --text: #2a2e35; --muted: #7b818b; --faint: #a4a9b1;
+  --line: #d6d8d3; --line-soft: #e5e6e2; --field: #ebebe9; --cross: #9aa0a8;
+  --slate: #6f89aa; --slate-ink: #5b759a; --rust: #a8583c; --moss: #5f7f5a; --on-slate: #fff;
+  --sans: 'Barlow', system-ui, sans-serif; --cond: 'Barlow Condensed', 'Barlow', sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  /* The page: as wide as the sheet gets, the space at its sides, the space between frames. */
+  --page: 1480px; --gutter: 28px; --gap: 26px;
+}
+:root[data-theme="dark"] {
+  --bg: #1f2124; --text: #dddcd7; --muted: #8e939b; --faint: #666b73;
+  --line: #3d4046; --line-soft: #2e3136; --field: #292b2f; --cross: #6b7078;
+  --slate: #7893b4; --slate-ink: #95abc9; --rust: #c98066; --moss: #85a67f;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
+a { color: var(--slate-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--text); }
+code, pre { font-family: var(--mono); font-size: 12.5px; }
+button { font: inherit; }
+.muted, .dim { color: var(--muted); }
+.ok { color: var(--moss); }
+.err, .warn { color: var(--rust); }
+
+/* The masthead: the name, what and where, the state; then the pages and the theme switch. Its
+   content lines up with the sheet's under it, however wide the window. */
+.masthead {
+  display: flex; align-items: center; gap: 18px; height: 60px;
+  padding: 0 max(var(--gutter), calc((100% - var(--page)) / 2 + var(--gutter)));
+  border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 2;
+}
+.masthead .brand { font: 600 27px/1 var(--cond); letter-spacing: 0.18em; text-transform: uppercase; text-decoration: none; color: var(--text); white-space: nowrap; }
+.masthead .divider { width: 1px; height: 24px; background: var(--line); flex: none; }
+.masthead .where { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.masthead .offline { color: var(--rust); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; }
+.masthead .spacer { flex: 1; }
+.masthead nav { display: flex; gap: 10px; }
+.masthead form { display: flex; gap: 8px; }
+.masthead .field { width: 15rem; }
+.theme { color: var(--muted); }
+.theme::before { content: "Dark"; }
+:root[data-theme="dark"] .theme::before { content: "Light"; }
+
+/* The sheet: the page under the masthead. */
+.sheet { max-width: var(--page); margin: 0 auto; padding: 30px var(--gutter) 60px; }
+.stack { display: grid; gap: var(--gap); min-width: 0; }
+.cards { display: grid; gap: var(--gap); margin-bottom: 34px; }
+
+/* Frames: a hairline border, a cross at each corner, no fill. */
+.frame { position: relative; border: 1px solid var(--line); padding: 20px 22px 22px; min-width: 0; }
+.frame::before {
+  content: ''; position: absolute; inset: -7px; pointer-events: none;
+  --arm: linear-gradient(var(--cross), var(--cross));
+  background: var(--arm) left 0 top 6px / 13px 1px, var(--arm) left 6px top 0 / 1px 13px,
+    var(--arm) right 0 top 6px / 13px 1px, var(--arm) right 6px top 0 / 1px 13px,
+    var(--arm) left 0 bottom 6px / 13px 1px, var(--arm) left 6px bottom 0 / 1px 13px,
+    var(--arm) right 0 bottom 6px / 13px 1px, var(--arm) right 6px bottom 0 / 1px 13px;
+  background-repeat: no-repeat;
+}
+/* A frame's title line: the name, a count, a note, something on the right. */
+.frame-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.frame-head h2 { margin: 0; }
+.frame-head .count { font-size: 12px; letter-spacing: 0.1em; color: var(--muted); }
+.frame-head .note { font-size: 12px; color: var(--muted); flex: 1 1 260px; }
+.frame-head .right { margin-left: auto; }
+
+/* Headings: the page's title, a frame's, and a label-like one inside a frame. */
+h1 { font: 600 38px/1 var(--cond); letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+h2 { font: 600 22px/1 var(--cond); letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 14px; }
+.page-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin: 6px 0 26px; }
+.page-head .stats { font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
+.page-head .action { font: 600 11px/1 var(--cond); letter-spacing: 0.16em; text-transform: uppercase; }
+
+/* Labels: small letter-spaced capitals wherever something is named rather than said. */
+.label, h3, thead th, dl.kv dt { font: 500 11px/1.45 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.label { margin-bottom: 12px; }
+h3 { margin: 24px 0 10px; }
+
+/* Cards: a label, a value in the condensed face, a note under it. */
+.card .value { font: 500 38px/1 var(--cond); letter-spacing: 0.02em; text-transform: uppercase; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.card .value small { font: 400 12px/1.3 var(--sans); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.card .note { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+/* Controls. */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; height: 36px; border: 1px solid var(--line); background: transparent; color: var(--text); font: 600 12px/1 var(--cond); letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; border-radius: 2px; text-decoration: none; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--muted); color: var(--text); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary, .btn.active { background: var(--slate); border-color: var(--slate); color: var(--on-slate); }
+.btn.primary:hover:not(:disabled), .btn.active:hover { background: var(--slate-ink); border-color: var(--slate-ink); color: var(--on-slate); }
+.btn.big { height: 48px; font-size: 16px; letter-spacing: 0.2em; flex: 1; }
+.btn.danger:hover:not(:disabled) { border-color: var(--rust); color: var(--rust); }
+.btn.tiny { height: 24px; padding: 0 8px; font-size: 10px; letter-spacing: 0.1em; }
+.field { width: 100%; height: 36px; padding: 0 12px; border: 1px solid var(--line); background: var(--field); color: var(--text); font: 14px var(--sans); border-radius: 2px; }
+.field::placeholder { color: var(--faint); }
+.field:disabled { color: var(--faint); }
+.field:focus { outline: none; border-color: var(--slate); }
+.ctl { display: flex; gap: 8px; align-items: center; }
+.ctl .field { flex: 1; min-width: 0; }
+.hint { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+.hint.err { color: var(--rust); }
+.empty { color: var(--muted); font-size: 13px; padding: 8px 0; margin: 0; }
+.rule { height: 1px; background: var(--line-soft); margin: 22px 0; }
+
+/* Pills: a state in a hairline box, coloured by what it says. */
+.pill { display: inline-block; padding: 3px 9px; border: 1px solid var(--line); border-radius: 2px; font-size: 11px; letter-spacing: 0.08em; color: var(--muted); white-space: nowrap; line-height: 1.2; text-decoration: none; }
+.pill.ok { color: var(--moss); border-color: color-mix(in srgb, var(--moss) 35%, var(--line)); }
+.pill.bad { color: var(--rust); border-color: color-mix(in srgb, var(--rust) 35%, var(--line)); }
+.pill.slate { color: var(--slate-ink); border-color: color-mix(in srgb, var(--slate) 45%, var(--line)); }
+.pill.strong { color: var(--text); border-color: var(--muted); }
+
+/* Chips: the filters over a list. */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { padding: 0 12px; height: 30px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 2px; background: transparent; font: 600 11px/1 var(--cond); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.chip:hover { border-color: var(--muted); color: var(--text); }
+.chip.on { border-color: var(--slate-ink); color: var(--slate-ink); }
+.chip b { font-weight: 500; color: var(--faint); }
+
+/* Tables: capitals over a line, rows parted by a softer one. */
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 11px 10px 11px 0; vertical-align: top; border-bottom: 1px solid var(--line-soft); }
+thead th { padding: 0 10px 10px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+tbody th { font-weight: 500; white-space: nowrap; }
+td.key, th.key { white-space: nowrap; }
+.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.summary { color: var(--text); }
+.small-link { font: 600 11px/1 var(--cond); letter-spacing: 0.14em; text-transform: uppercase; }
+
+/* Facts: a name and its value per line. */
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0 22px; margin: 0; }
+dl.kv dt, dl.kv dd { padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+dl.kv dt { padding-top: 10px; }
+dl.kv dt:nth-last-child(2), dl.kv dd:last-child { border-bottom: 0; }
+dl.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Notices: something the page has to say above everything else. */
+.notice { border: 1px solid color-mix(in srgb, var(--rust) 35%, var(--line)); color: var(--rust); padding: 10px 14px; margin: 0 0 22px; font-size: 13px; display: flex; gap: 12px; align-items: center; }
+.notice.calm { border-color: var(--line); color: var(--muted); }
+.notice .btn { margin-left: auto; }
+
+@media (max-width: 800px) {
+  .masthead { height: auto; min-height: 60px; flex-wrap: wrap; padding-block: 10px; }
+  .masthead .field { width: 11rem; }
+}

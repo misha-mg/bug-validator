@@ -49,7 +49,8 @@ describe('server', () => {
     const css = await get('/app.css');
     assert.equal(css.status, 200);
     assert.equal(css.type, 'text/css; charset=utf-8');
-    assert.match(css.body, /--slate/);
+    assert.match(css.body, /@font-face/);
+    assert.match((await get('/sheet.css')).body, /--slate/);
     const font = await fetch(`${base}/fonts/barlow-latin-400-normal.woff2`);
     assert.equal(font.status, 200);
     assert.equal(font.headers.get('content-type'), 'font/woff2');
