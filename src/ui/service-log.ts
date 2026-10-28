@@ -1,12 +1,20 @@
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
+import { StringDecoder } from 'node:string_decoder';
 
-// config.ts's default, for a log that starts after the service did.
+// config.ts's defaults, for a log that starts after the service did.
 const DEFAULT_INTERVAL_MS = 3 * 60 * 1000;
-// A poll that checks bugs logs nothing while the agent runs, up to its timeout (3 minutes).
-const AGENT_MARGIN_MS = 5 * 60 * 1000;
+const DEFAULT_AGENT_TIMEOUT_MS = 3 * 60 * 1000;
+// A poll that checks bugs logs nothing while the agent runs, up to its timeout; two more minutes
+// cover the Jira requests around it.
+const AGENT_SLACK_MS = 2 * 60 * 1000;
+/** Polls failed in a row before /healthz says so: a quarter of an hour at the default interval. */
+export const UNHEALTHY_POLL_FAILURES = 5;
 /** How many of the latest events (other than `poll` and `check_start`) are kept for the Activity block. */
 export const RECENT = 30;
-const CHECK_ENDS = new Set(['bug_complete', 'comment_dry_run', 'comment_posted', 'comment_edited', 'check_failed', 'poll', 'poll_failed', 'service_stopped', 'fatal']);
+const CHECK_ENDS = new Set([
+  'bug_complete', 'comment_dry_run', 'comment_posted', 'comment_edited', 'check_failed', 'check_deferred',
+  'poll', 'poll_failed', 'service_start', 'service_stopped', 'fatal',
+]);
 
 export interface ServiceStatus {
   /** From the latest `service_start`; null when the log does not reach back to it. */
@@ -14,9 +22,14 @@ export interface ServiceStatus {
   dryRun: boolean | null;
   model: string | null;
   pollIntervalMs: number | null;
+  agentTimeoutMs: number | null;
   claudeVersion: string | null;
   claudeAuth: string | null;
   stopped: boolean;
+  /** Asked to stop, not stopped yet (a check is being cut short). */
+  stopping: boolean;
+  /** The error it died of, when its latest start ended in `fatal`; systemd starts it again. */
+  crashed: string | null;
   /** The latest line of any kind. */
   lastSeen: Date | null;
   lastPoll: Date | null;
@@ -25,6 +38,8 @@ export interface ServiceStatus {
   waiting: number | null;
   /** The latest poll's error, when it failed. */
   pollError: string | null;
+  /** Polls failed in a row. */
+  pollFailures: number;
   /** The bug whose check started and has not ended: the agent is running. */
   checking: { key: string; since: Date } | null;
 }
@@ -36,40 +51,59 @@ export interface LogEvent {
   fields: Record<string, unknown>;
 }
 
-export type Liveness = 'running' | 'stopped' | 'silent';
+export type Liveness = 'running' | 'stopping' | 'stopped' | 'crashed' | 'silent';
 
 const EMPTY: ServiceStatus = {
   started: null,
   dryRun: null,
   model: null,
   pollIntervalMs: null,
+  agentTimeoutMs: null,
   claudeVersion: null,
   claudeAuth: null,
   stopped: false,
+  stopping: false,
+  crashed: null,
   lastSeen: null,
   lastPoll: null,
   inQuery: null,
   waiting: null,
   pollError: null,
+  pollFailures: 0,
   checking: null,
 };
 
-/** Stopped when it said so; silent when it has written nothing for two polls and an agent run. */
+/**
+ * Crashed when its latest start ended in `fatal`, stopped or stopping when it said so; silent when
+ * it has written nothing for two polls and an agent run.
+ */
 export function liveness(status: ServiceStatus, now: Date): Liveness {
+  if (status.crashed !== null) return 'crashed';
   if (status.stopped) return 'stopped';
   const interval = status.pollIntervalMs ?? DEFAULT_INTERVAL_MS;
-  if (!status.lastSeen || now.getTime() - status.lastSeen.getTime() > 2 * interval + AGENT_MARGIN_MS) return 'silent';
-  return 'running';
+  const agent = (status.agentTimeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS) + AGENT_SLACK_MS;
+  if (!status.lastSeen || now.getTime() - status.lastSeen.getTime() > 2 * interval + agent) return 'silent';
+  return status.stopping ? 'stopping' : 'running';
+}
+
+/** What `/healthz` answers: ok while the service runs and its polls go through. */
+export function health(status: ServiceStatus | null, now: Date): { ok: boolean; state: Liveness | 'no_log'; pollFailures: number; lastSeen: string | null } {
+  if (!status) return { ok: false, state: 'no_log', pollFailures: 0, lastSeen: null };
+  const state = liveness(status, now);
+  return { ok: state === 'running' && status.pollFailures < UNHEALTHY_POLL_FAILURES, state, pollFailures: status.pollFailures, lastSeen: status.lastSeen?.toISOString() ?? null };
 }
 
 /**
  * `state/service.log`, one JSON line per event (src/log.ts), read as it grows: each read takes
- * only the bytes added since the last one.
+ * only the bytes added since the last one. When the file is new to the reader, or was cut
+ * (`maintain`), the cut part (`<log>.1`) is read first, so the service's start is still known.
  */
 export class ServiceLog {
   private offset = 0;
   /** The end of the file when it ends mid-line: the rest of the line comes with the next read. */
   private partial = '';
+  /** A character split across two reads is joined, not garbled. */
+  private decoder = new StringDecoder('utf8');
   private status: ServiceStatus = EMPTY;
   /** The latest events other than `poll` and `check_start`, oldest first, at most RECENT. */
   readonly recent: LogEvent[] = [];
@@ -90,22 +124,31 @@ export class ServiceLog {
     try {
       const size = fstatSync(fd).size;
       if (size < this.offset) {
-        // Rotated or emptied: read it again from the start.
+        // Cut or emptied: read it again from the start.
         this.offset = 0;
         this.partial = '';
+        this.decoder = new StringDecoder('utf8');
         this.status = EMPTY;
         this.recent.length = 0;
       }
+      if (this.offset === 0 && this.status === EMPTY) this.readCut();
       const buffer = Buffer.alloc(size - this.offset);
       const read = readSync(fd, buffer, 0, buffer.length, this.offset);
       this.offset += read;
-      const lines = (this.partial + buffer.toString('utf8', 0, read)).split('\n');
+      const lines = (this.partial + this.decoder.write(buffer.subarray(0, read))).split('\n');
       this.partial = lines.pop() ?? '';
       for (const line of lines) this.take(line);
     } finally {
       closeSync(fd);
     }
     return this.status;
+  }
+
+  /** The part `maintain` cut off, whole: older than anything in the log now. */
+  private readCut(): void {
+    const cut = `${this.path}.1`;
+    if (!existsSync(cut)) return;
+    for (const line of readFileSync(cut, 'utf8').split('\n')) this.take(line);
   }
 
   private take(line: string): void {
@@ -121,16 +164,24 @@ export class ServiceLog {
         dryRun: typeof f.dryRun === 'boolean' ? f.dryRun : null,
         model: str(f.model),
         pollIntervalMs: interval,
+        agentTimeoutMs: typeof f.agentTimeoutS === 'number' ? f.agentTimeoutS * 1000 : null,
         claudeVersion: str(f.claudeVersion),
         claudeAuth: str(f.claudeAuth),
         stopped: false,
+        stopping: false,
+        crashed: null,
+        pollFailures: 0,
       });
+    } else if (event.event === 'service_stopping') {
+      s.stopping = true;
     } else if (event.event === 'service_stopped') {
-      s.stopped = true;
+      Object.assign(s, { stopped: true, stopping: false });
+    } else if (event.event === 'fatal') {
+      Object.assign(s, { crashed: str(f.error) ?? 'unknown error', stopping: false });
     } else if (event.event === 'poll') {
-      Object.assign(s, { lastPoll: event.ts, inQuery: num(f.inQuery), waiting: num(f.waiting), pollError: null });
+      Object.assign(s, { lastPoll: event.ts, inQuery: num(f.inQuery), waiting: num(f.waiting), pollError: null, pollFailures: 0 });
     } else if (event.event === 'poll_failed') {
-      Object.assign(s, { lastPoll: event.ts, pollError: str(f.error) ?? 'unknown error' });
+      Object.assign(s, { lastPoll: event.ts, pollError: str(f.error) ?? 'unknown error', pollFailures: s.pollFailures + 1 });
     } else if (event.event === 'check_start' && typeof f.key === 'string') {
       s.checking = { key: f.key, since: event.ts };
     }

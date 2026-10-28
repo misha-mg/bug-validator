@@ -1,17 +1,27 @@
-# systemd user unit for the home server (WSL). Install and operate: docs/architecture.md, Deploy.
-# Two lines are machine-specific: WorkingDirectory and the node path (PATH must also hold `claude`).
+# systemd user unit for the service. Install and operate: docs/architecture.md, Deploy.
+# Machine-specific: WorkingDirectory, the node path (PATH and ExecStart; PATH must also hold
+# `claude`) and the log path (StandardOutput, StandardError).
 
 [Unit]
 Description=Bug Validator — checks new WebUI bugs in Jira
+# A service that cannot start (bad .env, claude missing) gives up after 5 tries in 10 minutes
+# instead of restarting forever; the UI then shows it crashed, /healthz answers 503.
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 WorkingDirectory=%h/npb/bug-validator
 Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
+# The team's day: the UI's "today" and every time on its pages.
+Environment=TZ=Europe/Warsaw
+# claude stays at the version it was tested with; update it by hand (docs/architecture.md, Deploy).
+Environment=DISABLE_AUTOUPDATER=1
 ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node src/main.ts run
 Restart=always
 RestartSec=15
-# A stop waits for the bug being checked (one agent run, up to AGENT_TIMEOUT_SECONDS) to finish.
-TimeoutStopSec=240
+# A stop kills the agent run in progress; the bug loses nothing and is checked at a later poll.
+TimeoutStopSec=30
+NoNewPrivileges=yes
 StandardOutput=append:%h/npb/bug-validator/state/service.log
 StandardError=append:%h/npb/bug-validator/state/service.log
 

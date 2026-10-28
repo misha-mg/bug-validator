@@ -17,9 +17,12 @@ export interface Stats {
   errors: number;
 }
 
-/** Stats of the checks made at or after `since` (all of them when it is not given). */
+/**
+ * Stats of the bugs first checked at or after `since` (all of them when it is not given): a bug
+ * counts on the day the report arrived, so a later re-check does not move it.
+ */
 export function periodStats(bugs: BugView[], since?: Date): Stats {
-  const inside = bugs.filter((b) => !since || b.checkedAt >= since);
+  const inside = bugs.filter((b) => !since || b.firstCheckedAt >= since);
   const done = inside.filter(checked);
   const commented = done.filter((b) => result(b) === 'comment');
   return {
@@ -55,7 +58,7 @@ export interface Day {
   counts: Record<Result, number>;
 }
 
-/** Checks by the local day they were made and their result, oldest day first; skipped bugs left out. */
+/** Bugs by the local day of their first check and their result now, oldest day first; skipped bugs left out. */
 export function checksPerDay(bugs: BugView[], lastDay: Date, days: number): Day[] {
   const start = startOfDay(lastDay);
   const perDay = new Map<string, Day>();
@@ -65,15 +68,15 @@ export function checksPerDay(bugs: BugView[], lastDay: Date, days: number): Day[
   }
   for (const bug of bugs) {
     const kind = result(bug);
-    const day = perDay.get(dayKey(bug.checkedAt));
+    const day = perDay.get(dayKey(bug.firstCheckedAt));
     if (kind !== 'skipped' && day) day.counts[kind] += 1;
   }
   return [...perDay.values()];
 }
 
-/** Checks whose last attempt failed, the latest first. */
+/** Bugs whose last check failed, a re-check of a commented bug included; the latest first. */
 export function needsAttention(bugs: BugView[]): BugView[] {
-  return bugs.filter((b) => result(b) === 'error');
+  return bugs.filter((b) => result(b) === 'error' || b.error !== null);
 }
 
 /**

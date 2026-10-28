@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { issueKey } from '../domain/key.ts';
 
 /** A bug as the query names it. The id survives a move between KAZ and RPG; the key changes with it. */
 export interface IssueRef {
@@ -33,8 +34,10 @@ export interface CheckResultRow {
   comment: string | null;
   /** The comment in Jira, kept when a re-check edits it; null until a comment is posted. */
   commentId: string | null;
+  agent?: RunFigures;
 }
 
+// The tables as the first database had them; later versions are migrations below.
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS checks (
   key         TEXT PRIMARY KEY,
@@ -73,10 +76,39 @@ CREATE TABLE IF NOT EXISTS requests (
 );
 `;
 
-// Columns added after the first database was made; an older one gets them when opened.
-const ADDED_COLUMNS = ['summary TEXT', 'reporter TEXT', 'issue_id TEXT', 'fingerprint TEXT'];
+/**
+ * The schema's versions, in order; `PRAGMA user_version` says how many a database has had. Only
+ * the service migrates (`new Store`); the UI and `check` open the file without changing it.
+ */
+const MIGRATIONS: ((db: DatabaseSync) => void)[] = [
+  // 1: the tables, and the columns databases from before 2026-10-26 lack.
+  (db) => {
+    db.exec(SCHEMA);
+    const have = new Set((db.prepare('PRAGMA table_info(checks)').all() as { name: string }[]).map((c) => c.name));
+    for (const column of ['summary TEXT', 'reporter TEXT', 'issue_id TEXT', 'fingerprint TEXT']) {
+      if (!have.has(column.split(' ')[0]!)) db.exec(`ALTER TABLE checks ADD COLUMN ${column}`);
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS checks_issue_id ON checks (issue_id)');
+  },
+  // 2: `attempts` counts the failed first checks since the last result, not every check; a
+  // request remembers how often the surroundings failed it; a run records the agent's figures.
+  (db) => {
+    db.exec("UPDATE checks SET attempts = 0 WHERE status NOT IN ('retry', 'failed')");
+    db.exec('ALTER TABLE requests ADD COLUMN tries INTEGER NOT NULL DEFAULT 0');
+    for (const column of ['model TEXT', 'instructions TEXT', 'cost_usd REAL', 'turns INTEGER', 'agent_ms INTEGER']) db.exec(`ALTER TABLE runs ADD COLUMN ${column}`);
+  },
+];
 
 const now = (): string => new Date().toISOString();
+
+/** What the agent spent on a check: stored with its run. */
+export interface RunFigures {
+  model?: string | undefined;
+  instructions?: string | undefined;
+  costUsd: number;
+  turns: number;
+  durationMs: number;
+}
 
 /** A check asked for by hand (`request <KEY>`, the UI), pending until the service takes it or failed to be. */
 export interface CheckRequest {
@@ -86,32 +118,81 @@ export interface CheckRequest {
   error: string | null;
 }
 
+/** Pending requests at most: a form is for a person asking for a few bugs, not for a script. */
+export const MAX_PENDING_REQUESTS = 20;
+/** A request the surroundings failed this many times in a row fails, so it stops holding up the rest. */
+export const MAX_REQUEST_TRIES = 3;
+
+/**
+ * Asks the service to check a bug: by key or by a link to it. Written to the service's database,
+ * so the service must have made it. Returns the key.
+ */
+export function requestCheck(dbFile: string, text: string): string {
+  const key = issueKey(text);
+  if (!key) throw new Error(`Not a KAZ or RPG issue: ${text.trim().slice(0, 100) || '(nothing)'}`);
+  Store.addRequest(dbFile, key);
+  return key;
+}
+
 /**
  * One row per bug the service has dealt with, its current state; one row in `runs` per check of
- * it, the history; `meta`; and `requests`, the checks asked for by hand. A bug's row is the only
- * thing that stops a second comment, so rows are never deleted; a request is the way to re-run a
- * bug.
+ * it, the history; `meta`; and `requests`, the checks asked for by hand. A bug's row keeps it from
+ * being checked as a new bug (the lookup in Jira before a post is what stops a second comment), so
+ * rows are never deleted; a request is the way to re-run a bug.
  */
 export class Store {
   private readonly db: DatabaseSync;
 
   constructor(file: string) {
     if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+    const existed = file !== ':memory:' && existsSync(file);
     // The UI reads the file while the service writes it: WAL lets both happen, the timeout
     // waits out the rare overlap instead of failing the write.
     this.db = new DatabaseSync(file, { timeout: 5000 });
     this.db.exec('PRAGMA journal_mode = WAL');
-    this.db.exec(SCHEMA);
-    const columns = this.db.prepare('PRAGMA table_info(checks)').all() as { name: string }[];
-    const have = new Set(columns.map((c) => c.name));
-    for (const column of ADDED_COLUMNS) {
-      const name = column.split(' ')[0] ?? column;
-      if (!have.has(name)) this.db.exec(`ALTER TABLE checks ADD COLUMN ${column}`);
+    const version = (this.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    if (version < MIGRATIONS.length && existed) {
+      // A copy as it was, in case a migration goes wrong: the rows are what stops a second comment.
+      const copy = `${file}.before-v${MIGRATIONS.length}-${now().replace(/[:.]/g, '')}`;
+      this.db.exec(`VACUUM INTO '${copy.replaceAll("'", "''")}'`);
     }
-    // After the columns: an older database has no issue_id until the loop above adds it.
-    this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS checks_issue_id ON checks (issue_id)');
+    for (let v = version; v < MIGRATIONS.length; v++) {
+      this.transaction(() => {
+        MIGRATIONS[v]!(this.db);
+        this.db.exec(`PRAGMA user_version = ${v + 1}`);
+      });
+    }
     // A database from before `meta` existed has done its first start: it has rows.
     if (!this.isBootstrapped() && !this.isEmpty()) this.setMeta('bootstrapped_at', now());
+  }
+
+  /**
+   * Asks the running service to check a bug: one row in `requests`, nothing else. The UI and the
+   * command line write it; the database must exist and be the service's own (never created here:
+   * a stray empty database would look like a first start to the service).
+   */
+  static addRequest(file: string, key: string): void {
+    if (!existsSync(file)) throw new Error(`No database at ${file}: the service has not started yet`);
+    const db = new DatabaseSync(file, { timeout: 5000 });
+    try {
+      const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'requests'").get();
+      if (!table) throw new Error(`The database at ${file} has no requests table: is the service up to date?`);
+      const { n } = db.prepare('SELECT COUNT(*) AS n FROM requests WHERE error IS NULL AND key <> ?').get(key) as { n: number };
+      if (n >= MAX_PENDING_REQUESTS) throw new Error(`${n} checks are already waiting; ask again when the service has made them`);
+      db.prepare('INSERT OR REPLACE INTO requests (key, at, error) VALUES (?, ?, NULL)').run(key, now());
+    } finally {
+      db.close();
+    }
+  }
+
+  /** A consistent copy of the database, taken while the service runs (`maintain`). */
+  static backup(file: string, to: string): void {
+    const db = new DatabaseSync(file, { readOnly: true, timeout: 5000 });
+    try {
+      db.exec(`VACUUM INTO '${to.replaceAll("'", "''")}'`);
+    } finally {
+      db.close();
+    }
   }
 
   /** The comment recorded for a bug, read without opening the database for writing (`check --recheck`). */
@@ -124,6 +205,11 @@ export class Store {
     } finally {
       db.close();
     }
+  }
+
+  /** How many bugs have a row: logged at start, so a database that is not the expected one shows. */
+  count(): number {
+    return (this.db.prepare('SELECT COUNT(*) AS n FROM checks').get() as { n: number }).n;
   }
 
   /** True once the first poll has recorded what was already in the query (a lost database starts over). */
@@ -205,21 +291,29 @@ export class Store {
     });
   }
 
-  /** A finished check, first or re-check: the bug's new state and one more run. */
+  /** A finished check, first or re-check: the bug's new state and one more run. A comment id, once known, is never forgotten. */
   recordResult(issue: IssueRef, r: CheckResultRow): void {
     this.transaction(() => {
       const at = now();
-      this.addRun(issue.key, at, { fingerprint: r.fingerprint, baseChecks: r.baseChecks, verdict: r.verdict, comment: r.comment });
+      this.addRun(issue.key, at, { fingerprint: r.fingerprint, baseChecks: r.baseChecks, verdict: r.verdict, comment: r.comment, agent: r.agent });
       this.db
         .prepare(
           `INSERT INTO checks (key, issue_id, status, attempts, checked_at, summary, reporter, fingerprint, base_checks, verdict, comment, comment_id, error)
-           VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-           ON CONFLICT(key) DO UPDATE SET status = excluded.status, attempts = attempts + 1, checked_at = excluded.checked_at,
+           VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+           ON CONFLICT(key) DO UPDATE SET status = excluded.status, attempts = 0, checked_at = excluded.checked_at,
              summary = excluded.summary, reporter = excluded.reporter, fingerprint = excluded.fingerprint, base_checks = excluded.base_checks,
-             verdict = excluded.verdict, comment = excluded.comment, comment_id = excluded.comment_id, error = NULL`,
+             verdict = excluded.verdict, comment = excluded.comment, comment_id = COALESCE(excluded.comment_id, comment_id), error = NULL`,
         )
         .run(issue.key, issue.id, r.status, at, r.summary, r.reporter, r.fingerprint, JSON.stringify(r.baseChecks), JSON.stringify(r.verdict), r.comment, r.commentId);
     });
+  }
+
+  /**
+   * A check recorded in the history only, the bug's row left as it is: a dry run's check of a bug
+   * whose comment is (or may be) in Jira, so the record of that comment stays true to Jira.
+   */
+  recordRun(key: string, r: Pick<CheckResultRow, 'fingerprint' | 'baseChecks' | 'verdict' | 'comment' | 'agent'>): void {
+    this.addRun(key, now(), r);
   }
 
   /** The comment is in Jira: `posting` → `commented`. */
@@ -227,9 +321,27 @@ export class Store {
     this.db.prepare("UPDATE checks SET status = 'commented', comment_id = ? WHERE key = ?").run(commentId, key);
   }
 
+  /**
+   * Jira refused the post, so the comment does not exist: `posting` → back in line as `retry`.
+   * The refusal is the run's error. It costs an attempt only when it was about this bug.
+   */
+  postRefused(key: string, error: string, maxAttempts: number, costsAttempt: boolean): { status: CheckStatus; attempts: number } {
+    return this.transaction(() => {
+      this.db.prepare('UPDATE runs SET error = ? WHERE rowid = (SELECT MAX(rowid) FROM runs WHERE key = ?)').run(error, key);
+      const add = costsAttempt ? 1 : 0;
+      const row = this.db
+        .prepare(
+          `UPDATE checks SET attempts = attempts + ?, status = CASE WHEN attempts + ? >= ? THEN 'failed' ELSE 'retry' END, error = ?
+           WHERE key = ? AND status = 'posting' RETURNING status, attempts`,
+        )
+        .get(add, add, maxAttempts, error, key) as { status: CheckStatus; attempts: number };
+      return { status: row.status, attempts: row.attempts };
+    });
+  }
+
   /** Asks for a check of the bug; a request already pending or failed for the key is replaced. */
   request(key: string): void {
-    this.db.prepare('INSERT OR REPLACE INTO requests (key, at, error) VALUES (?, ?, NULL)').run(key, now());
+    this.db.prepare('INSERT OR REPLACE INTO requests (key, at, error, tries) VALUES (?, ?, NULL, 0)').run(key, now());
   }
 
   /** Every request, oldest first: the pending ones and the ones the service could not serve. */
@@ -237,9 +349,17 @@ export class Store {
     return this.db.prepare('SELECT key, at, error FROM requests ORDER BY at, rowid').all() as unknown as CheckRequest[];
   }
 
-  /** The request is served: the check's outcome is in the bug's row. */
-  requestDone(key: string): void {
-    this.db.prepare('DELETE FROM requests WHERE key = ?').run(key);
+  /** The request is served: the check's outcome is in the bug's row. One asked again meanwhile (a later `at`) stays. */
+  requestDone(key: string, at: string): void {
+    this.db.prepare('DELETE FROM requests WHERE key = ? AND at = ?').run(key, at);
+  }
+
+  /** The surroundings failed the request once more; after MAX_REQUEST_TRIES it fails. True when it failed. */
+  requestTried(key: string, error: string): boolean {
+    const row = this.db.prepare('UPDATE requests SET tries = tries + 1 WHERE key = ? RETURNING tries').get(key) as { tries: number } | undefined;
+    if (!row || row.tries < MAX_REQUEST_TRIES) return false;
+    this.requestFailed(key, `failed ${row.tries} times: ${error}`);
+    return true;
   }
 
   /** The request cannot be served (no such issue); kept with the reason until it is replaced. */
@@ -256,11 +376,16 @@ export class Store {
     this.db.close();
   }
 
-  private addRun(key: string, at: string, run: { fingerprint?: string; baseChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string }): void {
+  private addRun(
+    key: string,
+    at: string,
+    run: { fingerprint?: string; baseChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string; agent?: RunFigures | undefined },
+  ): void {
     const json = (value: unknown): string | null => (value === undefined ? null : JSON.stringify(value));
+    const a = run.agent;
     this.db
-      .prepare('INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(key, at, run.fingerprint ?? null, json(run.baseChecks), json(run.verdict), run.comment ?? null, run.error ?? null);
+      .prepare('INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(key, at, run.fingerprint ?? null, json(run.baseChecks), json(run.verdict), run.comment ?? null, run.error ?? null, a?.model ?? null, a?.instructions ?? null, a?.costUsd ?? null, a?.turns ?? null, a?.durationMs ?? null);
   }
 
   private transaction<T>(fn: () => T): T {

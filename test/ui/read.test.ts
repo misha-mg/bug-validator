@@ -39,10 +39,10 @@ describe('readBugs', () => {
     assert.deepEqual(bugs.map((b) => [b.key, b.summary, b.history.length, b.checkedAt.getTime()]), [['KAZ-1', null, 0, Date.parse('2026-10-17T12:50:50.282Z')], ['KAZ-2', null, 0, 0]]);
     assert.deepEqual(firstMissing(bugs[0]!), []);
   });
-  it('a file that is not a database, or without the table yet, is no bugs', () => {
+  it('a file without the table yet is no bugs; one that is not a database is an error, not an empty state', () => {
     const dir = emptyState().dir;
     writeFileSync(join(dir, 'text.sqlite'), 'not a database');
-    assert.deepEqual(readBugs(join(dir, 'text.sqlite')), []);
+    assert.throws(() => readBugs(join(dir, 'text.sqlite')), /not a database/);
     new DatabaseSync(join(dir, 'bare.sqlite')).close();
     assert.deepEqual(readBugs(join(dir, 'bare.sqlite')), []);
   });

@@ -29,13 +29,19 @@ export interface Plan {
  * Which bugs of the query to check on this poll. A new bug waits until it is 30 minutes old; a
  * checked one whose report changed waits until nothing has moved on it for 15 minutes, so a burst
  * of edits gives one re-check. A re-check edits the comment made in the current mode: a dry-run
- * comment was never posted, and a dry run never overwrites a posted one.
+ * comment was never posted, and a dry run never overwrites a posted one. Live, a bug left
+ * `posting` is checked again at once: the check finds the comment in Jira, if it got there, and
+ * adopts it (handle.ts).
  */
 export function plan(watched: Watched[], rows: Map<string, BugRow>, now: number, dryRun: boolean): Plan {
   const recheckable = recheckableStatuses(dryRun);
   const out: Plan = { first: [], recheck: [], waiting: 0 };
   for (const bug of watched) {
     const row = rows.get(bug.key);
+    if (row?.status === 'posting') {
+      if (!dryRun && row.runs < MAX_CHECKS) out.first.push(bug);
+      continue;
+    }
     if (!row || row.status === 'retry') {
       if (row || now - bug.created >= FIRST_CHECK_AGE_MS) out.first.push(bug);
       else out.waiting += 1;

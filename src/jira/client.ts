@@ -17,6 +17,11 @@ export class JiraError extends Error {
   get environmental(): boolean {
     return this.status === undefined || this.status === 401 || this.status === 403 || this.status === 429 || this.status >= 500;
   }
+
+  /** Jira answered with an error, so a write it was asked for was not made. Without a status nobody knows. */
+  get refused(): boolean {
+    return this.status !== undefined;
+  }
 }
 
 export interface RawIssue {
@@ -43,6 +48,8 @@ export interface ChangelogEntry {
 export interface Jira {
   search(jql: string, fields: string[], maxResults: number): Promise<RawIssue[]>;
   getIssue(key: string): Promise<RawIssue>;
+  /** The account the service writes as: its comments are found among a bug's by this id. */
+  myself(): Promise<{ accountId: string }>;
   addComment(key: string, body: string): Promise<{ id: string }>;
   editComment(key: string, commentId: string, body: string): Promise<void>;
 }
@@ -53,7 +60,7 @@ export const ISSUE_FIELDS = [
 ];
 
 /** What the poll reads of every bug in the query: the report (domain/fingerprint.ts) and its times. */
-export const REPORT_FIELDS = ['summary', 'description', 'status', 'project', 'versions', 'customfield_10033', 'attachment', 'created', 'updated'];
+export const REPORT_FIELDS = ['summary', 'description', 'status', 'project', 'versions', 'customfield_10033', 'attachment', 'reporter', 'comment', 'created', 'updated'];
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -61,6 +68,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 export class JiraClient implements Jira {
   private readonly api: string;
   private readonly auth: string;
+  private self: Promise<{ accountId: string }> | undefined;
 
   constructor(jira: Config['jira']) {
     this.api = `https://api.atlassian.com/ex/jira/${jira.cloudId}/rest/api/2`;
@@ -82,6 +90,15 @@ export class JiraClient implements Jira {
 
   getIssue(key: string): Promise<RawIssue> {
     return this.request<RawIssue>(`/issue/${encodeURIComponent(key)}?fields=${ISSUE_FIELDS.join(',')}`);
+  }
+
+  /** Asked once; a failed ask is asked again next time. */
+  myself(): Promise<{ accountId: string }> {
+    this.self ??= this.request<{ accountId: string }>('/myself').catch((err: unknown) => {
+      this.self = undefined;
+      throw err;
+    });
+    return this.self;
   }
 
   /** Every change to the issue, oldest first. Used by `scripts/`, not by the service. */
@@ -114,21 +131,26 @@ export class JiraClient implements Jira {
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     let res: Response;
+    let body: string;
+    // The body is read inside the try as well: a timeout or a reset while it arrives is a request
+    // that failed without an answer, like one that never reached Jira.
     try {
       res = await fetch(this.api + path, {
         ...init,
         headers: { Authorization: this.auth, Accept: 'application/json', 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
+      body = await res.text();
     } catch (err) {
       // fetch says only "fetch failed"; the reason (ENOTFOUND, ECONNREFUSED, timeout) is the cause.
       const cause = err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : '';
       throw new JiraError(`request failed: ${err instanceof Error ? err.message : String(err)}${cause}`);
     }
-    if (!res.ok) {
-      const text = (await res.text()).slice(0, 300);
-      throw new JiraError(`HTTP ${res.status} on ${init.method ?? 'GET'} ${path}: ${text}`, res.status);
+    if (!res.ok) throw new JiraError(`HTTP ${res.status} on ${init.method ?? 'GET'} ${path}: ${body.slice(0, 300)}`, res.status);
+    try {
+      return (body ? JSON.parse(body) : null) as T;
+    } catch {
+      throw new JiraError(`HTTP ${res.status} on ${init.method ?? 'GET'} ${path}: not JSON: ${body.slice(0, 200)}`);
     }
-    return (await res.json()) as T;
   }
 }

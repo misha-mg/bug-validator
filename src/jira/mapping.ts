@@ -17,7 +17,14 @@ const IssueFields = z.object({
   reporter: z.object({ accountId: z.string(), displayName: z.string() }).nullable().default(null),
   comment: z
     .object({
-      comments: z.array(z.object({ author: z.object({ displayName: z.string() }).nullable(), created: z.string(), body: z.string().nullable() })),
+      comments: z.array(
+        z.object({
+          id: z.string(),
+          author: z.object({ accountId: z.string().optional(), displayName: z.string() }).nullable().default(null),
+          created: z.string(),
+          body: z.string().nullable(),
+        }),
+      ),
     })
     .optional(),
   created: z.string(),
@@ -57,7 +64,13 @@ export function toBug(raw: RawIssue): Bug {
     versions: f.versions.map((v) => v.name),
     devices: (f.customfield_10033 ?? []).map((v) => v.value),
     attachments: f.attachment.map((a) => ({ filename: a.filename })),
-    comments: (f.comment?.comments ?? []).map((c) => ({ author: c.author?.displayName ?? '(unknown)', created: c.created, body: c.body ?? '' })),
+    comments: (f.comment?.comments ?? []).map((c) => ({
+      id: c.id,
+      author: c.author?.displayName ?? '(unknown)',
+      authorId: c.author?.accountId ?? null,
+      created: c.created,
+      body: c.body ?? '',
+    })),
     created: f.created,
     updated: f.updated,
   };

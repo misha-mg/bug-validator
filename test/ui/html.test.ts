@@ -94,6 +94,11 @@ describe('home', () => {
     const line = at('poll_failed', { error: long });
     assert.ok(line.startsWith(`poll failed · <span title="${long}">HTTP 403 on GET /search?xxx`) && line.endsWith('…</span>'));
     assert.equal(line.length, long.length + 'poll failed · <span title="">'.length + 120 + '</span>'.length);
+    assert.equal(at('first_start', { skipped: ['KAZ-1', 'RPG-2'] }), 'first start · 2 bugs already in Created skipped');
+    assert.equal(at('check_deferred', { key: 'KAZ-1', error: 'HTTP 500' }), 'check put off · HTTP 500');
+    assert.equal(at('request_failed', { key: 'KAZ-1', error: 'HTTP 503', gaveUp: true }), 'request failed, gave up · HTTP 503');
+    assert.match(at('comment_adopted', { key: 'KAZ-1', commentId: '7' }), /found the service&#39;s comment in Jira \(7\)/);
+    assert.equal(at('comment_edited', { key: 'KAZ-1', changed: false, missing: [] }), 're-check: comment unchanged · nothing missing');
     assert.equal(at('something_new'), 'something_new');
   });
 });

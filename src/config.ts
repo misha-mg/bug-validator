@@ -10,8 +10,12 @@ export const Env = z.object({
   DRY_RUN: z.enum(['true', 'false']).default('true'),
   POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().default(180),
   DB_FILE: z.string().min(1).default('state/bug-validator.sqlite'),
+  // The service logs to stdout; this is where the systemd unit appends it (the UI and `maintain` read it).
+  LOG_FILE: z.string().min(1).default('state/service.log'),
   AGENT_MODEL: z.string().min(1).default('haiku'),
   AGENT_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(180),
+  // A check costs about $0.002 on haiku; the cap stops a run that loops, not a normal one.
+  AGENT_MAX_BUDGET_USD: z.coerce.number().positive().default(0.5),
   // Long-lived token from `claude setup-token`; without it claude uses the machine's own login.
   CLAUDE_CODE_OAUTH_TOKEN: z.string().min(1).optional(),
 });
@@ -24,7 +28,7 @@ export interface Config {
   dryRun: boolean;
   pollIntervalMs: number;
   dbFile: string;
-  agent: { model: string; timeoutMs: number; auth: 'oauth_token' | 'cli_login' };
+  agent: { model: string; timeoutMs: number; maxBudgetUsd: number; auth: 'oauth_token' | 'cli_login' };
   maxAttempts: number;
 }
 
@@ -46,7 +50,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dryRun: e.DRY_RUN === 'true',
     pollIntervalMs: e.POLL_INTERVAL_SECONDS * 1000,
     dbFile: e.DB_FILE,
-    agent: { model: e.AGENT_MODEL, timeoutMs: e.AGENT_TIMEOUT_SECONDS * 1000, auth: e.CLAUDE_CODE_OAUTH_TOKEN ? 'oauth_token' : 'cli_login' },
+    agent: {
+      model: e.AGENT_MODEL,
+      timeoutMs: e.AGENT_TIMEOUT_SECONDS * 1000,
+      maxBudgetUsd: e.AGENT_MAX_BUDGET_USD,
+      auth: e.CLAUDE_CODE_OAUTH_TOKEN ? 'oauth_token' : 'cli_login',
+    },
     maxAttempts: MAX_ATTEMPTS,
   };
 }

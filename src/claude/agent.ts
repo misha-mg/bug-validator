@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,17 +8,22 @@ import { fileURLToPath } from 'node:url';
 import type { Config } from '../config.ts';
 
 /**
- * The agent did not deliver a verdict. `start`: claude could not be started at all — about the
- * machine, not the bug, so it must not count against the bug. `run`: this run failed (timeout,
- * non-zero exit, output that is not a verdict).
+ * The agent did not deliver a verdict. Of the kinds, only `run` is about this bug: the run failed
+ * (timeout, a bad exit, output that is not a verdict). The others must not count against it:
+ * `start`, claude could not be started; `service`, the Claude service or the agent's Jira failed
+ * (auth, a usage or rate limit, overload, a 5xx); `stopped`, the service is stopping.
  */
 export class AgentError extends Error {
-  readonly kind: 'start' | 'run';
+  readonly kind: 'start' | 'service' | 'stopped' | 'run';
 
-  constructor(message: string, kind: 'start' | 'run' = 'run') {
+  constructor(message: string, kind: AgentError['kind'] = 'run') {
     super(message);
     this.name = 'AgentError';
     this.kind = kind;
+  }
+
+  get environmental(): boolean {
+    return this.kind !== 'run';
   }
 }
 
@@ -26,6 +32,9 @@ export interface AgentRun {
   costUsd: number;
   durationMs: number;
   turns: number;
+  /** The model and a hash of agent/instructions.md the run used: which prompt wrote which comment. */
+  model?: string;
+  instructions?: string;
 }
 
 export interface Agent {
@@ -34,6 +43,7 @@ export interface Agent {
 
 interface ClaudeResult {
   is_error?: boolean;
+  subtype?: string;
   result?: string;
   structured_output?: unknown;
   total_cost_usd?: number;
@@ -46,6 +56,18 @@ const JIRA_MCP = fileURLToPath(new URL('./jira-mcp.ts', import.meta.url));
 const JIRA_TOOLS = ['mcp__jira__search_issues', 'mcp__jira__get_issue'];
 /** Enough for a few searches and reads; a run that needs more is lost anyway. */
 const MAX_TURNS = 25;
+/** The variable that tells the Jira tool where to note Jira's failures (jira-mcp.ts). */
+export const TOOL_ERRORS_ENV = 'BUG_VALIDATOR_TOOL_ERRORS';
+
+// What claude says when the trouble is the Claude service, not the run: auth, limits, overload,
+// the API or the network. A prompt too long for the model is the bug's.
+const SERVICE_TROUBLE = /rate.?limit|usage limit|limit reached|overloaded|\b5\d\d\b|api error|authenticat|unauthori[sz]ed|invalid api key|oauth|token.{0,20}expired|\/login|credit balance|quota|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|network/i;
+const RUN_TROUBLE = /prompt is too long|max.?tokens|max.?turns|budget/i;
+
+/** Which kind of failure claude's message describes. */
+export function troubleKind(message: string): 'service' | 'run' {
+  return SERVICE_TROUBLE.test(message) && !RUN_TROUBLE.test(message) ? 'service' : 'run';
+}
 
 /** What `claude -p --output-format json` printed → the run, or an AgentError saying why not. */
 export function parseClaudeResult(stdout: string): AgentRun {
@@ -55,7 +77,10 @@ export function parseClaudeResult(stdout: string): AgentRun {
   } catch {
     throw new AgentError(`claude printed something other than JSON: ${stdout.slice(0, 200)}`);
   }
-  if (result.is_error) throw new AgentError(`claude reported an error: ${result.result ?? '(no message)'}`);
+  if (result.is_error) {
+    const message = `claude reported an error${result.subtype ? ` (${result.subtype})` : ''}: ${result.result ?? '(no message)'}`;
+    throw new AgentError(message, troubleKind(message));
+  }
   if (result.structured_output === undefined) throw new AgentError(`claude returned no structured output: ${(result.result ?? '').slice(0, 200)}`);
   return {
     output: result.structured_output,
@@ -67,16 +92,20 @@ export function parseClaudeResult(stdout: string): AgentRun {
 
 /**
  * Claude Code headless (`claude -p`). No built-in tools, no settings, no CLAUDE.md: it runs in a
- * temp directory with one MCP server, the project's read-only Jira search and read. The bug comes
- * in the prompt, the verdict comes back as structured output.
+ * private temp directory with one MCP server, the project's read-only Jira search and read. The
+ * server's config, Jira credentials included, is a file only this user can read, never a
+ * command-line argument (which every user on the machine can see). The bug comes in the prompt,
+ * the verdict comes back as structured output.
  */
 export class ClaudeAgent implements Agent {
   private readonly opts: Config['agent'];
-  private readonly cwd = join(tmpdir(), 'bug-validator-agent');
+  private readonly dir: string;
 
   constructor(opts: Config['agent']) {
     this.opts = opts;
-    mkdirSync(this.cwd, { recursive: true });
+    // mkdtemp makes it 0700 and unique: no other user can read it or create it first.
+    this.dir = mkdtempSync(join(tmpdir(), 'bug-validator-'));
+    process.once('exit', () => rmSync(this.dir, { recursive: true, force: true }));
   }
 
   /** The installed claude's version; throws when it cannot be started — fail at start, not per bug. */
@@ -90,39 +119,52 @@ export class ClaudeAgent implements Agent {
   async run(prompt: string, jsonSchema: object, signal?: AbortSignal): Promise<AgentRun> {
     // Read on every run, so an edit to the instructions reaches the next bug without a restart.
     const instructions = await readFile(INSTRUCTIONS, 'utf8');
-    const { JIRA_BASE_URL, JIRA_CLOUD_ID, JIRA_EMAIL, JIRA_API_TOKEN } = process.env;
-    const mcpConfig = {
-      mcpServers: { jira: { command: process.execPath, args: [JIRA_MCP], env: { JIRA_BASE_URL, JIRA_CLOUD_ID, JIRA_EMAIL, JIRA_API_TOKEN } } },
-    };
-    const args = [
-      '-p',
-      '--model', this.opts.model,
-      '--tools', '',
-      '--mcp-config', JSON.stringify(mcpConfig),
-      '--strict-mcp-config',
-      '--allowedTools', JIRA_TOOLS.join(','),
-      '--setting-sources', '',
-      '--no-session-persistence',
-      '--max-turns', String(MAX_TURNS),
-      '--output-format', 'json',
-      '--json-schema', JSON.stringify(jsonSchema),
-      '--system-prompt', instructions,
-    ];
-    return parseClaudeResult(await this.exec(args, prompt, signal));
+    const runDir = mkdtempSync(join(this.dir, 'run-'));
+    try {
+      const toolErrors = join(runDir, 'tool-errors');
+      const { JIRA_BASE_URL, JIRA_CLOUD_ID, JIRA_EMAIL, JIRA_API_TOKEN } = process.env;
+      const mcpConfig = join(runDir, 'mcp.json');
+      const env = { JIRA_BASE_URL, JIRA_CLOUD_ID, JIRA_EMAIL, JIRA_API_TOKEN, [TOOL_ERRORS_ENV]: toolErrors };
+      writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { jira: { command: process.execPath, args: [JIRA_MCP], env } } }), { mode: 0o600 });
+      const args = [
+        '-p',
+        '--model', this.opts.model,
+        '--tools', '',
+        '--mcp-config', mcpConfig,
+        '--strict-mcp-config',
+        '--allowedTools', JIRA_TOOLS.join(','),
+        '--setting-sources', '',
+        '--no-session-persistence',
+        '--max-turns', String(MAX_TURNS),
+        '--max-budget-usd', String(this.opts.maxBudgetUsd),
+        '--output-format', 'json',
+        '--json-schema', JSON.stringify(jsonSchema),
+        '--system-prompt', instructions,
+      ];
+      const run = parseClaudeResult(await this.exec(args, prompt, runDir, signal));
+      // A search that failed on Jira's side reads to the agent as "nothing found": a related bug
+      // missed for no reason of the bug's. The run is not trusted.
+      const failed = readIfAny(toolErrors);
+      if (failed) throw new AgentError(`Jira failed for the agent: ${failed.trim().split('\n')[0]?.slice(0, 300)}`, 'service');
+      return { ...run, model: this.opts.model, instructions: createHash('sha256').update(instructions).digest('hex').slice(0, 12) };
+    } finally {
+      rmSync(runDir, { recursive: true, force: true });
+    }
   }
 
-  private exec(args: string[], stdin: string, signal?: AbortSignal): Promise<string> {
+  private exec(args: string[], stdin: string, cwd: string, signal?: AbortSignal): Promise<string> {
+    if (signal?.aborted) return Promise.reject(new AgentError('the service is stopping', 'stopped'));
     return new Promise((resolve, reject) => {
-      const child = spawn('claude', args, { cwd: this.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn('claude', args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
       let out = '';
       let err = '';
-      let killedBy: string | undefined;
-      const kill = (reason: string): void => {
+      let killedBy: AgentError | undefined;
+      const kill = (reason: AgentError): void => {
         killedBy = reason;
         child.kill('SIGKILL');
       };
-      const timer = setTimeout(() => kill(`timed out after ${this.opts.timeoutMs / 1000}s`), this.opts.timeoutMs);
-      const onAbort = (): void => kill('the service is stopping');
+      const timer = setTimeout(() => kill(new AgentError(`timed out after ${this.opts.timeoutMs / 1000}s`)), this.opts.timeoutMs);
+      const onAbort = (): void => kill(new AgentError('the service is stopping', 'stopped'));
       signal?.addEventListener('abort', onAbort, { once: true });
       const done = (): void => {
         clearTimeout(timer);
@@ -139,11 +181,26 @@ export class ClaudeAgent implements Agent {
       });
       child.on('close', (code) => {
         done();
-        if (killedBy) reject(new AgentError(killedBy));
-        else if (code !== 0) reject(new AgentError(`claude exited with ${code}: ${err.trim().slice(0, 300)}`));
-        else resolve(out);
+        if (killedBy) return reject(killedBy);
+        if (code === 0) return resolve(out);
+        // claude prints its JSON result on stdout even when it exits badly; that says more than stderr.
+        try {
+          parseClaudeResult(out);
+        } catch (e) {
+          if (e instanceof AgentError && out.trim().startsWith('{')) return reject(e);
+        }
+        const message = `claude exited with ${code}: ${(err.trim() || out.trim()).slice(0, 300)}`;
+        reject(new AgentError(message, troubleKind(message)));
       });
       child.stdin.end(stdin);
     });
+  }
+}
+
+function readIfAny(file: string): string {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return '';
   }
 }

@@ -41,6 +41,8 @@ export interface BugView {
   attempts: number;
   /** The last attempt; the epoch on a hand-made row without a time, so it sorts last. */
   checkedAt: Date;
+  /** The first check that finished: the report as it arrived, what the statistics count by. */
+  firstCheckedAt: Date;
   /** Rows written before the service kept them have neither, and a skipped bug was never read. */
   summary: string | null;
   reporter: string | null;
@@ -69,24 +71,38 @@ export const firstMissing = (bug: BugView): RequirementId[] => bug.history.find(
  * the service.
  */
 export function readBugs(dbFile: string): BugView[] {
-  if (!existsSync(dbFile)) return [];
-  // Read-only; the timeout waits out the service's write instead of failing.
-  const db = new DatabaseSync(dbFile, { readOnly: true, timeout: 5000 });
-  try {
+  return read(dbFile, [], (db) => {
     const rows = db.prepare('SELECT * FROM checks').all() as Record<string, unknown>[];
     const history = readRuns(db);
     return rows.map((row) => toBug(row, history.get(row.key as string) ?? [])).sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime());
+  });
+}
+
+/** One bug, read by its key alone. */
+export function readBug(dbFile: string, key: string): BugView | null {
+  return read(dbFile, null, (db) => {
+    const row = db.prepare('SELECT * FROM checks WHERE key = ?').get(key) as Record<string, unknown> | undefined;
+    return row ? toBug(row, readRuns(db, key).get(key) ?? []) : null;
+  });
+}
+
+/**
+ * The database opened read-only for one read; `none` without it. The file is never created: a
+ * stray empty database would look like a first start to the service. The timeout waits out the
+ * service's write instead of failing.
+ */
+function read<T>(dbFile: string, none: T, fn: (db: DatabaseSync) => T): T {
+  if (!existsSync(dbFile)) return none;
+  const db = new DatabaseSync(dbFile, { readOnly: true, timeout: 5000 });
+  try {
+    return fn(db);
   } catch (err) {
-    // The file is there, the table not yet (the service is creating it), or it is not a database.
-    if (err instanceof Error && /no such table|not a database/.test(err.message)) return [];
+    // The service is creating the tables right now.
+    if (err instanceof Error && /no such table/.test(err.message)) return none;
     throw err;
   } finally {
     db.close();
   }
-}
-
-export function readBug(dbFile: string, key: string): BugView | null {
-  return readBugs(dbFile).find((bug) => bug.key === key) ?? null;
 }
 
 /** A check asked for by hand, pending or failed, as the pages show it. */
@@ -96,27 +112,22 @@ export interface Request {
   error: string | null;
 }
 
-/** Every request, oldest first; none without the database or its table (a service from before requests). */
+/** Every request, oldest first; none without the database. */
 export function readRequests(dbFile: string): Request[] {
-  if (!existsSync(dbFile)) return [];
-  const db = new DatabaseSync(dbFile, { readOnly: true, timeout: 5000 });
-  try {
+  return read(dbFile, [], (db) => {
     const rows = db.prepare('SELECT key, at, error FROM requests ORDER BY at, rowid').all() as unknown as CheckRequest[];
     return rows.map((r) => ({ key: r.key, at: time(r.at), error: r.error }));
-  } catch (err) {
-    if (err instanceof Error && /no such table|not a database/.test(err.message)) return [];
-    throw err;
-  } finally {
-    db.close();
-  }
+  });
 }
 
-/** The runs of every bug, oldest first; none in a database from before runs were kept. */
-function readRuns(db: DatabaseSync): Map<string, Run[]> {
+/** The runs of every bug, or of one, oldest first; none before the service has migrated an old database. */
+function readRuns(db: DatabaseSync, key?: string): Map<string, Run[]> {
   const runs = new Map<string, Run[]>();
-  const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'runs'").get();
-  if (!table) return runs;
-  for (const row of db.prepare('SELECT * FROM runs ORDER BY at, rowid').all() as Record<string, unknown>[]) {
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'runs'").get()) return runs;
+  const rows = key
+    ? db.prepare('SELECT * FROM runs WHERE key = ? ORDER BY at, rowid').all(key)
+    : db.prepare('SELECT * FROM runs ORDER BY at, rowid').all();
+  for (const row of rows as Record<string, unknown>[]) {
     const verdict = json(row.verdict) as { missing?: RequirementId[] } | null;
     const run: Run = { at: time(row.at), missing: verdict?.missing ?? [], comment: text(row.comment), error: text(row.error) };
     const list = runs.get(row.key as string);
@@ -128,11 +139,13 @@ function readRuns(db: DatabaseSync): Map<string, Run[]> {
 
 function toBug(row: Record<string, unknown>, history: Run[]): BugView {
   const verdict = (json(row.verdict) ?? {}) as { missing?: RequirementId[]; related?: Related[] };
+  const checkedAt = time(row.checked_at);
   return {
     key: row.key as string,
     status: row.status as CheckStatus,
     attempts: Number(row.attempts ?? 0),
-    checkedAt: time(row.checked_at),
+    checkedAt,
+    firstCheckedAt: history.find((run) => run.error === null)?.at ?? checkedAt,
     summary: text(row.summary),
     reporter: text(row.reporter),
     baseChecks: (json(row.base_checks) as BaseCheck[] | null) ?? [],
@@ -146,6 +159,14 @@ function toBug(row: Record<string, unknown>, history: Run[]): BugView {
 }
 
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
-const json = (value: unknown): unknown => (typeof value === 'string' && value ? JSON.parse(value) : null);
+// One broken value shows as missing, not as a page that fails.
+const json = (value: unknown): unknown => {
+  if (typeof value !== 'string' || !value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
 // Times are ISO UTC as the service writes them; a Date is an instant, the pages format it in local time.
 const time = (value: unknown): Date => (typeof value === 'string' && value ? new Date(value) : new Date(0));

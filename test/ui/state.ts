@@ -1,11 +1,12 @@
-import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Store } from '../../src/db/store.ts';
 
 export const MENTION = '[~accountid:712020:abc]';
-const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
 export const DAY = 24 * HOUR;
 
 export const ago = (ms: number, now = new Date()): Date => new Date(now.getTime() - ms);
@@ -35,9 +36,16 @@ export interface State {
   now: Date;
 }
 
+const dirs: string[] = [];
+// Every test file that makes a state cleans up after itself.
+process.once('exit', () => {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+});
+
 /** The service's tables, made by the real Store, in a fresh directory. */
 export function emptyState(): State {
   const dir = mkdtempSync(join(tmpdir(), 'ui-'));
+  dirs.push(dir);
   const dbFile = join(dir, 'bug-validator.sqlite');
   new Store(dbFile).close();
   return { dir, dbFile, logFile: join(dir, 'service.log'), now: new Date() };
@@ -85,8 +93,9 @@ export function sampleState(): State {
     verdict: JSON.stringify({ comment_needed: true, comment: '…', missing: ['R4', 'R6'], related: [{ key: 'KAZ-1', reason: 'the same empty table' }] }),
     comment: `${MENTION}\nPlease add:\n- -Steps to reproduce-\n- Affects versions\n- HAR file`,
   });
-  run(dbFile, 'KAZ-2', ago(2 * HOUR, now), ['R1', 'R4', 'R6'], null, `${MENTION}\nPlease add:\n- Steps to reproduce\n- Affects versions\n- HAR file`);
-  run(dbFile, 'KAZ-2', ago(HOUR, now), null, 'VerdictError: a re-check must keep the comment');
+  // Minutes apart, not hours: the first check must fall on today whenever the tests run.
+  run(dbFile, 'KAZ-2', ago(2 * MINUTE, now), ['R1', 'R4', 'R6'], null, `${MENTION}\nPlease add:\n- Steps to reproduce\n- Affects versions\n- HAR file`);
+  run(dbFile, 'KAZ-2', ago(MINUTE, now), null, 'VerdictError: a re-check must keep the comment');
   run(dbFile, 'KAZ-2', now, ['R4', 'R6'], null, `${MENTION}\nPlease add:\n- -Steps to reproduce-\n- Affects versions\n- HAR file`);
   insert(dbFile, {
     key: 'KAZ-3',

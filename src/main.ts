@@ -1,4 +1,5 @@
 import { check } from './commands/check.ts';
+import { maintain } from './commands/maintain.ts';
 import { request } from './commands/request.ts';
 import { run } from './commands/run.ts';
 import { ui } from './commands/ui.ts';
@@ -10,6 +11,7 @@ const USAGE = `usage:
     [--recheck]                    as a re-check: the agent edits the comment recorded for the bug
   node src/main.ts request <KEY|URL>  the running service checks the bug next, whatever its state
   node src/main.ts ui              serve the web UI (UI_HOST, UI_PORT); reads the database and the log
+  node src/main.ts maintain        back up the database, cut the log down to size (daily, from a timer)
 `;
 
 const [command, arg, ...flags] = process.argv.slice(2);
@@ -29,6 +31,8 @@ try {
     request(arg);
   } else if (command === 'ui' && !arg) {
     await ui();
+  } else if (command === 'maintain' && !arg) {
+    maintain();
   } else {
     process.stderr.write(USAGE);
     process.exit(2);

@@ -5,7 +5,10 @@ export interface Attachment {
 }
 
 export interface Comment {
+  id: string;
   author: string;
+  /** Null for a deleted user. */
+  authorId: string | null;
   created: string;
   body: string;
 }

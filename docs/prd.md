@@ -1,7 +1,8 @@
 # Bug Validator — PRD
 
-Status: dry run (rollout step 2) on the home server since 2026-10-17. Decisions are dated in
-the Decisions section; the rest of the document states the current state.
+Status: dry run (rollout step 2) on the home server since 2026-10-17; reviewed and hardened for
+the move to a server on 2026-10-28. Decisions are dated in the Decisions section; the rest of the
+document states the current state.
 
 A service that watches new WebUI bugs in Jira and, before the PM triages them, comments on what
 the report is missing: steps, expected and actual result, build, device, HAR, the right project;
@@ -55,13 +56,14 @@ comments, and edits only its own comment); new Jira fields; any UI outside Jira 
 ## Bug requirements
 
 **Field facts** (R4–R6) are plain code over the Jira API; the agent must name every one that
-fails. For **R1–R3** the code only looks for a heading; the agent reads the description and
-decides whether the content is there (numbered steps without a "Steps" heading are still steps).
+fails. For **R1–R3** the code only looks for a heading; the agent reads the description and the
+reporter's own comments and decides whether the content is there (numbered steps without a
+"Steps" heading are still steps).
 **R7** is the agent's judgement alone. A bug is *complete* when nothing in R1–R7 is missing.
 
 | # | Requirement | Rule |
 |---|---|---|
-| R1 | Steps to reproduce | Real steps a developer can follow, in text. A video is not steps |
+| R1 | Steps to reproduce | Real steps a developer can follow, in text: the way to the page and what was done there counts; for a visual bug, the way to the screen. A video is not steps |
 | R2 | Expected result | How it should work. May be implicit when the summary makes it obvious |
 | R3 | Actual result | What happens now |
 | R4 | Affects versions | The field is not empty (daily builds like `5.10.0-commit.3089`) |
@@ -81,6 +83,9 @@ Board types and products: `jira-reference.md`.
   the item's name and nothing else. Reporters are QA engineers; how-to text read as noise.
 - Related bugs, if found, as a short list of keys with a reason of a few words.
 - Short enough to read in ten seconds: long questions go unanswered (research report).
+- Nothing else: every line is the mention, "Please add:", an item, the project question, a
+  related bug or blank. The program refuses any other line, so no text a report talks the agent
+  into (a link, an image, a remark) reaches Jira under the personal account.
 - A complete bug gets no comment unless a related bug is worth naming; then the comment is only
   that. The database records every checked bug either way.
 - When the report changes while the bug is in Created, the comment is edited in place. Items
@@ -100,9 +105,10 @@ triage (median time in Created 2.4 h over the last 90 days, 17 h over the year, 
   a quarter of the reports change after their first 3 minutes, and a tenth after 30 minutes.
 - **Re-check** when the report has changed since the last check and nothing has moved on the
   bug for 15 minutes, so a burst of edits gives one re-check. "The report" is a fingerprint of
-  summary, description, attachment names, Affects versions, Devices and project. Comments,
-  labels, assignee and status are left out: the service's own comment and the QA lead's hand-off
-  are not changes.
+  summary, description, attachment names, Affects versions, Devices, project and the reporter's
+  own comments (an answer in a comment is an addition to the report). Other comments, labels,
+  assignee and status are left out: the service's own comment and the QA lead's hand-off are not
+  changes.
 - At most 5 checks per bug, failed ones included. Re-checks stop when the bug leaves Created.
 - **On request**: whoever runs the service can ask for a check of any KAZ or RPG bug, by key or
   link, from the web UI or the command line. It runs next, whatever the bug's age, status or
@@ -122,20 +128,29 @@ Every WebUI bug counts, whoever reported it.
 - Bugs checked during the dry run stay recorded, and their dry-run comments are never posted or
   edited live. A bug found complete in the dry run gets a comment live only if its report
   changes and it then lacks something.
-- Live, the row is written before a comment is posted. A service that dies in between leaves
-  the bug as "posting": shown for a human, never posted again by the service. An edit can be
-  repeated, so it goes before its record: a service that dies in between edits again at a later
-  poll. A comment a human deleted makes the edit fail. The re-checks then stop at the cap, and
-  no new comment is posted.
-- A failed read is an error, never a clean result. A failure of the surroundings — Jira
-  unreachable or refusing (401, 403, 429, 5xx), claude not startable — ends the poll as an
-  error and costs no bug an attempt; the next poll tries again. A failure of one bug's check —
+- Live, before a first comment is posted, Jira is read for a comment of the service's on the bug
+  (by the service's account, opening with the reporter's mention). One found — after a crash
+  while posting, a lost database, a second service — is adopted and edited, never posted again.
+  The row is written before the post. A post Jira refused made no comment, and the bug goes back
+  in line; a post with no answer leaves the bug "posting", and the next poll finds the comment, if
+  it got there, and adopts it. An edit can be repeated, so it goes before its record: a service
+  that dies in between edits again at a later poll. A comment a human deleted makes the edit
+  fail. The re-checks then stop at the cap, and no new comment is posted. A dry run never writes
+  over the record of a comment in Jira.
+- A failed read is an error, never a clean result; that includes a Jira search the agent made.
+  A failure of the surroundings — Jira unreachable or refusing (401, 403, 429, 5xx), Claude
+  failing (auth, a usage or rate limit, overload), claude not startable, the service stopping —
+  costs no bug an attempt. One such failure puts its bug off to the next poll and the poll goes on;
+  a second in a row ends the poll as an error, and the next poll tries again. A request the
+  surroundings failed three times in a row fails, so it holds up nothing. A failure of one bug's
+  check —
   the agent's verdict breaks the contract, times out, the issue JSON is not as expected — is
   tried at most 3 times, then the bug is recorded as "failed" and left alone. A failed re-check
   leaves the comment as it was and is tried at the next poll, within the 5 checks. A request
   (`request <KEY>`, the UI) checks a failed bug again; `check <KEY> [--recheck]` runs a bug by
   hand without writing anything.
-- The service checks that claude starts before its first poll.
+- The service checks that claude starts before its first poll, and refuses to start on a
+  database another running service holds.
 
 ## Rollout
 
@@ -223,6 +238,38 @@ Every WebUI bug counts, whoever reported it.
   service's loop, so there is one checker and one record; it ignores the age, the status and
   the caps, because a person asked. `requeue` only put a failed bug back in line for the next
   poll; a request does that and more.
+
+- 2026-10-28 — Before the move to a server, from a review of the code, the processing and the
+  dry run's data:
+  - No second comment, whatever happened before: before a first post, the service reads Jira
+    for a comment of its own and adopts it. A `posting` row is checked again at the next poll
+    instead of waiting for a human; a post Jira refused goes back in line. A comment id is never
+    forgotten, and a dry run's check of a commented bug goes to the history only. One service per
+    database (a lock file).
+  - The comment's text is checked line by line against its format; any other line fails the
+    check. The guardrails had covered the list, the mentions and the keys, and left free text —
+    links, images, a remark a report talked the agent into — free to reach Jira. The related bugs
+    recorded are the ones the comment names; a key is checked by reading it, which follows a
+    moved bug.
+  - Claude failing (auth, limits, overload, 5xx) and a stop of the service are failures of the
+    surroundings: a 6-minute Claude outage had marked every due bug failed, and every restart
+    had cost the bug being checked an attempt. A bug the surroundings fail on no longer holds up
+    the poll.
+  - The reporter's own comments are part of the report (fingerprint and prompt): a reporter who
+    answers "Please add" in a comment is the natural case, and was ignored.
+  - R1 counts the way to the page and the action, and for a visual bug the way to the screen:
+    22 of 27 dry-run bugs were asked for steps, several of them wrongly (RPG-6245, RPG-6248,
+    KAZ-9044). Related bugs are named only after reading them; half the dry run's matched a
+    shared word.
+  - The web UI listens on this machine unless its unit opens it, serves only known host names,
+    takes requests only from its own pages, and may ask for a login (`UI_USER`); the 2026-10-26
+    "no login" holds on the LAN. `/healthz` for a monitor; the UI tells a crashed service from a
+    running one.
+  - Operations: the schema is versioned and backed up before a migration; `maintain` (a daily
+    timer) backs up the database and cuts the log at 5 MB; the Jira token goes to the agent's
+    tool in a private file, not on a command line; each agent run has a budget cap and records
+    its model, cost and instructions. systemd stays the deployment; Docker is kept building, not
+    used.
 
 ## Sources
 

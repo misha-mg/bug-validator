@@ -1,8 +1,10 @@
 # Bug Validator
 
 Checks new WebUI bugs in Jira (KAZ, RPG) before triage and comments on what they are missing.
-Stage: dry run on the home server (PRD rollout step 2), systemd user units `bug-validator` and
-`bug-validator-ui` (the web UI, `http://<server-ip>:8081/`). Nothing is posted to Jira.
+Stage: dry run on the home server (PRD rollout step 2), systemd user units `bug-validator`,
+`bug-validator-ui` (the web UI, `http://<server-ip>:8081/`) and the `bug-validator-maintain` timer
+(backup, log size). Nothing is posted to Jira. Moving it to another machine: `docs/architecture.md`,
+Deploy.
 
 - Scope, requirements, decisions: `docs/prd.md`. A decision made or changed goes into the PRD in
   the same change. Ideas discussed but not decided: `docs/open-ideas/`, one file each.

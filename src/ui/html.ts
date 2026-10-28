@@ -107,10 +107,14 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
   } else {
     const state = liveness(s, now);
     if (state === 'running') rows.push(['State', '<span class="ok">running</span>']);
+    else if (state === 'stopping') rows.push(['State', '<span class="warn">stopping</span>']);
     else if (state === 'stopped') rows.push(['State', `<span class="warn">stopped${s.lastSeen ? ` · ${ago(now, s.lastSeen)}` : ''}</span>`]);
-    else rows.push(['State', `<span class="err">silent${s.lastSeen ? ` · ${span(now.getTime() - s.lastSeen.getTime())}` : ''}</span>`]);
+    else if (state === 'crashed') {
+      rows.push(['State', `<span class="err">crashed${s.lastSeen ? ` · ${ago(now, s.lastSeen)}` : ''}</span>`]);
+      rows.push(['Error', `<span class="err">${errorText(s.crashed)}</span>`]);
+    } else rows.push(['State', `<span class="err">silent${s.lastSeen ? ` · ${span(now.getTime() - s.lastSeen.getTime())}` : ''}</span>`]);
     if (s.pollError) {
-      rows.push(['Last poll', `<span class="err">failed · ${ago(now, s.lastPoll ?? now)}</span>`]);
+      rows.push(['Last poll', `<span class="err">failed${s.pollFailures > 1 ? ` ${s.pollFailures} times in a row` : ''} · ${ago(now, s.lastPoll ?? now)}</span>`]);
       rows.push(['Error', `<span class="err">${errorText(s.pollError)}</span>`]);
     } else if (s.lastPoll) rows.push(['Last poll', ago(now, s.lastPoll)]);
     else rows.push(['Last poll', '<span class="muted">none yet</span>']);
@@ -168,8 +172,9 @@ function problemsTable(found: ReturnType<typeof problems>): string {
 function attentionTable(bugs: BugView[], ctx: PageContext): string {
   return `<table class="list"><thead><tr><th>Bug</th><th>Last try</th><th>Attempts</th><th>Error</th></tr></thead><tbody>${bugs
     .map((b) => {
-      const attempts = `${b.attempts} of ${MAX_ATTEMPTS}${b.status === 'failed' ? ', gave up' : ''}`;
-      const error = b.status === 'posting' ? 'interrupted while posting · look in Jira' : (b.error ?? '');
+      // A failed re-check leaves the bug's result as it was: its comment stands, only the error is new.
+      const attempts = result(b) !== 'error' ? 're-check' : b.status === 'posting' ? '' : `${b.attempts} of ${MAX_ATTEMPTS}${b.status === 'failed' ? ', gave up' : ''}`;
+      const error = b.status === 'posting' ? `interrupted while posting · the next check looks in Jira${b.error ? ` · ${b.error}` : ''}` : (b.error ?? '');
       return `<tr><td>${bugLink(b.key)}</td><td class="time">${fmtTime(b.checkedAt)}</td><td>${attempts}</td><td class="err">${esc(error)}</td></tr>`;
     })
     .join('')}</tbody></table>`;
@@ -199,24 +204,30 @@ export function eventText(e: LogEvent): string {
       return esc(`stopping · ${f.signal ?? ''}`);
     case 'service_stopped':
       return 'service stopped';
-    case 'first_start':
-      return esc(`first start · ${f.skipped ?? 0} bugs already in Created skipped`);
+    case 'first_start': {
+      const n = Array.isArray(f.skipped) ? f.skipped.length : 0;
+      return esc(`first start · ${n} ${n === 1 ? 'bug' : 'bugs'} already in Created skipped`);
+    }
     case 'poll_failed':
       return `poll failed · ${errorText(f.error)}`;
+    case 'check_deferred':
+      return `check put off · ${errorText(f.error)}`;
     case 'request_failed':
-      return `request failed · ${errorText(f.error)}`;
+      return `request failed${f.gaveUp === true ? ', gave up' : ''} · ${errorText(f.error)}`;
+    case 'comment_adopted':
+      return esc(`found the service's comment in Jira (${f.commentId}); edits it, posts none`);
     case 'key_changed':
       return esc(`moved: ${f.from} → ${f.to}`);
     case 'bug_complete':
       return esc(`${by}${re ? 're-check: ' : ''}complete, no comment${missing}`);
     case 'comment_dry_run':
-      return esc(`${by}${re ? 're-check: ' : ''}comment · dry run${missing}`);
+      return esc(`${by}${re ? 're-check: ' : ''}comment · dry run${f.kept === true ? ', the posted one kept' : ''}${missing}`);
     case 'comment_posted':
       return esc(`${by}comment posted${missing}`);
     case 'comment_edited':
-      return esc(`${by}comment edited${missing}`);
+      return esc(`${by}${f.changed === false ? 're-check: comment unchanged' : 'comment edited'}${missing}`);
     case 'check_failed':
-      return `${by}${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${f.attempts}` : ''} · ${errorText(f.error)}`;
+      return `${by}${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${esc(f.attempts)}` : ''} · ${errorText(f.error)}`;
     case 'mentions_stripped':
       return esc(`mentions stripped: ${Array.isArray(f.stripped) ? f.stripped.join(', ') : ''}`);
     case 'fatal':
@@ -238,7 +249,7 @@ export interface BugsQuery {
 
 export function bugsQuery(params: URLSearchParams): BugsQuery {
   const result = params.get('result') ?? 'all';
-  return { result: result in FILTERS ? (result as Filter) : 'all', q: (params.get('q') ?? '').trim() };
+  return { result: Object.hasOwn(FILTERS, result) ? (result as Filter) : 'all', q: (params.get('q') ?? '').trim() };
 }
 
 export function filterBugs(bugs: BugView[], query: BugsQuery): BugView[] {
@@ -261,7 +272,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
       day = d;
       rows += `<tr class="day"><th class="label" colspan="7">${d}</th></tr>`;
     }
-    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${b.key}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${chips_(b.missing)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`;
+    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${chips_(b.missing)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`;
   }
   const main = `
 <div class="page-head"><h1>All bugs${narrowed.map((n) => ` · ${esc(n)}`).join('')}</h1><span class="stats">${bugsText(bugs.length)}</span></div>
@@ -303,7 +314,7 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
   const button = request && !request.error ? '' : `<form class="request" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button class="btn primary">${b ? 'Check again' : 'Check'}</button></form>`;
   const head = `<header class="bug-head"><div class="page-head"><h1>${esc(key)}</h1><span class="stats">${esc(b?.summary ?? '')}</span></div>${kv(rows)}${button}</header>`;
   if (!b) return layout(`${key} · Bug validator`, `${head}<p class="muted">Not checked yet. The page fills in when the service has checked the bug.</p>`, ctx, 'bugs');
-  const subtitle = { dry_run: 'dry run · not posted', commented: 'posted to Jira', posting: 'interrupted while posting · look in Jira' }[b.status as string] ?? '';
+  const subtitle = { dry_run: 'dry run · not posted', commented: 'posted to Jira', posting: 'interrupted while posting · the next check looks in Jira' }[b.status as string] ?? '';
   const main = `
 ${head}
 <div class="columns">
@@ -332,7 +343,7 @@ function requirements(b: BugView, ctx: PageContext): string {
     // Every check of the bug, oldest first: what each found missing, so what the reporter added shows.
     html += `<h3>Checks</h3><table class="history"><tbody>${b.history
       .map((run, i) => {
-        const found = run.error ? `<span class="err">${esc(run.error)}</span>` : `<span class="muted">${run.missing.length ? `missing ${run.missing.join(' ')}` : 'nothing missing'}</span>`;
+        const found = run.error ? `<span class="err">${esc(run.error)}</span>` : `<span class="muted">${run.missing.length ? `missing ${esc(run.missing.join(' '))}` : 'nothing missing'}</span>`;
         const comment = run.comment ? `<details><summary>comment</summary><div class="jira-comment">${commentHtml(run.comment, b.reporter)}</div></details>` : '';
         return `<tr><td class="time">${fmtTime(run.at)}</td><td class="muted">${i === 0 ? 'first check' : 're-check'}</td><td>${found}${comment}</td></tr>`;
       })
@@ -343,7 +354,7 @@ function requirements(b: BugView, ctx: PageContext): string {
 
 function commentBlock(b: BugView): string {
   if (result(b) === 'skipped') return `<p class="muted">${SKIPPED}</p>`;
-  if (b.status === 'posting') return `<p class="warn">The service stopped while posting this comment. Look in Jira: if it is not there, ask for a check again.</p><div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>`;
+  if (b.status === 'posting') return `<p class="warn">The service stopped while posting this comment. Its next check of the bug, at the next poll, looks in Jira first: a comment found there is kept and edited, never posted twice.</p><div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>`;
   if (result(b) === 'error') return '<p class="muted">No comment: the check did not finish.</p>';
   if (!b.comment) return '<p class="muted">Nothing is missing, so the bug got no comment.</p>';
   return `<div class="jira-comment">${commentHtml(b.comment, b.reporter)}</div>`;

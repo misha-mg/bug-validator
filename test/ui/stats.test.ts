@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readBugs } from '../../src/ui/read.ts';
 import { checksPerDay, itemsAddedAfterComment, needsAttention, periodStats, problems, startOfDay } from '../../src/ui/stats.ts';
-import { DAY, ago, sampleState } from './state.ts';
+import { DAY, ago, daysAgo, emptyState, insert, run, sampleState, stamp } from './state.ts';
 
 const state = sampleState();
 const bugs = readBugs(state.dbFile);
@@ -33,8 +33,20 @@ describe('stats', () => {
     assert.equal(days[9]?.counts.skipped, 0);
     assert.equal(days.reduce((n, d) => n + d.counts.comment + d.counts.no_comment + d.counts.error, 0), 4);
   });
-  it('needs attention is the failed checks', () => {
+  it('a bug counts on the day of its first check: a later re-check does not move it', () => {
+    const s = emptyState();
+    insert(s.dbFile, { key: 'KAZ-8', status: 'dry_run', checked_at: stamp(s.now), comment: 'c' });
+    run(s.dbFile, 'KAZ-8', daysAgo(3, s.now), ['R6']);
+    run(s.dbFile, 'KAZ-8', s.now, []);
+    const moved = readBugs(s.dbFile);
+    assert.equal(periodStats(moved, startOfDay(s.now)).checked, 0, 'not checked today: re-checked today');
+    assert.equal(checksPerDay(moved, s.now, 7)[3]?.counts.comment, 1);
+  });
+  it('needs attention is the failed checks, a failed re-check of a bug with a comment included', () => {
     assert.deepEqual(needsAttention(bugs).map((b) => b.key), ['RPG-4']);
+    const s = emptyState();
+    insert(s.dbFile, { key: 'KAZ-9', status: 'commented', checked_at: stamp(s.now), comment: 'c', comment_id: '1', error: 'WriteRefused: HTTP 404' });
+    assert.deepEqual(needsAttention(readBugs(s.dbFile)).map((b) => b.key), ['KAZ-9']);
   });
   it('items added after the comment are the struck-through ones of re-checked bugs', () => {
     // KAZ-2 was re-checked and its comment strikes one of three items; KAZ-5 was checked once.

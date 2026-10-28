@@ -1,17 +1,20 @@
 // The agent's only tool: read-only Jira search and issue read, served over MCP on stdio.
 // Hand-written JSON-RPC (initialize, tools/list, tools/call) so the project keeps one dependency.
 // Started by claude itself (see agent.ts), which passes the JIRA_* variables in its environment.
+import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { loadConfig } from '../config.ts';
-import { JiraClient } from '../jira/client.ts';
+import { ISSUE_KEY } from '../domain/key.ts';
+import { JiraError, JiraClient } from '../jira/client.ts';
 import { toBug } from '../jira/mapping.ts';
+import { scopedJql } from '../jira/queries.ts';
+import { TOOL_ERRORS_ENV } from './agent.ts';
 
 const jira = new JiraClient(loadConfig().jira);
 
-const OUR_KEY = /^(KAZ|RPG)-\d+$/;
 const SearchInput = z.object({ jql: z.string().min(1), maxResults: z.number().int().min(1).max(20).default(10) });
-const IssueInput = z.object({ key: z.string().regex(OUR_KEY) });
+const IssueInput = z.object({ key: z.string().regex(ISSUE_KEY) });
 
 const TOOLS = [
   {
@@ -42,11 +45,11 @@ const TOOLS = [
 async function callTool(name: string, args: unknown): Promise<string> {
   if (name === 'search_issues') {
     const { jql, maxResults } = SearchInput.parse(args);
-    const issues = await jira.search(jql, ['summary', 'status', 'resolution', 'updated'], maxResults);
+    const issues = await jira.search(scopedJql(jql), ['summary', 'status', 'resolution', 'updated'], maxResults);
     return JSON.stringify(
       issues
         // The personal account sees every project; the agent sees only the two in scope.
-        .filter((i) => OUR_KEY.test(i.key))
+        .filter((i) => ISSUE_KEY.test(i.key))
         .map((i) => {
           const f = i.fields as { summary?: string; status?: { name: string }; resolution?: { name: string } | null; updated?: string };
           return { key: i.key, summary: f.summary, status: f.status?.name, resolution: f.resolution?.name ?? null, updated: f.updated?.slice(0, 10) };
@@ -92,7 +95,11 @@ async function handle(req: Request): Promise<void> {
           const text = await callTool(name, params['arguments'] ?? {});
           send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text }] } });
         } catch (err) {
-          send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `error: ${err instanceof Error ? err.message : String(err)}` }], isError: true } });
+          const message = err instanceof Error ? err.message : String(err);
+          // A bad JQL is the agent's to fix; Jira itself failing makes the run untrustworthy (agent.ts).
+          const file = process.env[TOOL_ERRORS_ENV];
+          if (file && err instanceof JiraError && err.environmental) appendFileSync(file, `${name}: ${message}\n`);
+          send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `error: ${message}` }], isError: true } });
         }
         return;
       }

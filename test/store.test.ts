@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, it } from 'node:test';
-import { type IssueRef, Store } from '../src/db/store.ts';
+import { after, describe, it } from 'node:test';
+import { type IssueRef, MAX_PENDING_REQUESTS, requestCheck, Store } from '../src/db/store.ts';
+
+const dirs: string[] = [];
+const tempDir = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'store-'));
+  dirs.push(dir);
+  return dir;
+};
+after(() => {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+});
 
 const ref = (key: string): IssueRef => ({ id: `id-${key}`, key });
 const result = { status: 'complete' as const, summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1', baseChecks: [], verdict: {}, comment: null, commentId: null };
@@ -34,10 +44,44 @@ describe('Store', () => {
     s.request('KAZ-1');
     assert.deepEqual(s.requests().map((r) => r.key), ['KAZ-2', 'KAZ-1'], 'one per key, oldest first; asked again is asked anew');
     s.requestFailed('KAZ-2', 'no such issue');
-    s.requestDone('KAZ-1');
+    const asked = s.requests().find((r) => r.key === 'KAZ-1')!;
+    s.requestDone('KAZ-1', 'an older time');
+    assert.equal(s.requests().length, 2, 'asked again since: kept');
+    s.requestDone('KAZ-1', asked.at);
     assert.deepEqual(s.requests().map((r) => [r.key, r.error]), [['KAZ-2', 'no such issue']]);
     s.request('KAZ-2');
     assert.deepEqual(s.requests().map((r) => r.error), [null], 'asked again: pending again');
+  });
+  it('counts failed first checks since the last result; a result resets them', () => {
+    const s = new Store(':memory:');
+    s.recordResult(ref('KAZ-7'), { ...result, status: 'dry_run', comment: 'c' });
+    s.recordResult(ref('KAZ-7'), { ...result, status: 'dry_run', comment: 'c' });
+    assert.deepEqual(s.recordFailure(ref('KAZ-7'), 'boom', 3), { status: 'retry', attempts: 1 }, 'earlier results do not count');
+  });
+  it('a post Jira refused puts the bug back in line, at the cost of an attempt only when asked', () => {
+    const s = new Store(':memory:');
+    s.recordResult(ref('KAZ-8'), { ...result, status: 'posting', comment: 'c' });
+    assert.deepEqual(s.postRefused('KAZ-8', 'HTTP 503', 3, false), { status: 'retry', attempts: 0 });
+    s.recordResult(ref('KAZ-8'), { ...result, status: 'posting', comment: 'c' });
+    assert.deepEqual(s.postRefused('KAZ-8', 'HTTP 400', 3, true), { status: 'retry', attempts: 1 });
+    assert.equal(s.rows(['KAZ-8']).get('KAZ-8')?.runs, 2, 'the refusal is the run\'s error, not a run of its own');
+  });
+  it('never forgets a comment id', () => {
+    const s = new Store(':memory:');
+    s.recordResult(ref('KAZ-9'), { ...result, status: 'commented', comment: 'c', commentId: '42' });
+    s.recordResult(ref('KAZ-9'), { ...result, status: 'dry_run', comment: 'c', commentId: null });
+    assert.equal(s.rows(['KAZ-9']).get('KAZ-9')?.commentId, '42');
+  });
+  it('takes a request from the UI into the service\'s database only, up to a cap', () => {
+    const dir = tempDir();
+    const file = join(dir, 'db.sqlite');
+    assert.throws(() => requestCheck(file, 'KAZ-1'), /No database/);
+    assert.equal(existsSync(file), false, 'never created');
+    assert.throws(() => requestCheck(file, 'ABC-1'), /Not a KAZ or RPG issue/);
+    new Store(file).close();
+    for (let n = 1; n <= MAX_PENDING_REQUESTS; n++) requestCheck(file, `KAZ-${n}`);
+    assert.equal(requestCheck(file, 'https://x.atlassian.net/browse/KAZ-1'), 'KAZ-1', 'asked again: replaced, not added');
+    assert.throws(() => requestCheck(file, 'KAZ-999'), /already waiting/);
   });
   it('a result after a failure closes the bug; posting becomes commented', () => {
     const s = new Store(':memory:');
@@ -63,7 +107,8 @@ describe('Store', () => {
     assert.deepEqual(s.track([{ id: 'id-RPG-6223', key: 'KAZ-9040' }]), [], 'nothing moves twice');
   });
   it('opens a database made before meta and the late columns, and treats its rows as the first start', () => {
-    const file = join(mkdtempSync(join(tmpdir(), 'store-')), 'old.sqlite');
+    const dir = tempDir();
+    const file = join(dir, 'old.sqlite');
     const old = new DatabaseSync(file);
     old.exec('CREATE TABLE checks (key TEXT PRIMARY KEY, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, checked_at TEXT, base_checks TEXT, verdict TEXT, comment TEXT, comment_id TEXT, error TEXT)');
     old.exec("INSERT INTO checks (key, status, checked_at, comment) VALUES ('KAZ-1', 'dry_run', 't', 'old comment')");
@@ -71,14 +116,30 @@ describe('Store', () => {
 
     const s = new Store(file);
     assert.equal(s.isBootstrapped(), true);
+    assert.equal(readdirSync(dir).filter((f) => f.startsWith('old.sqlite.before-v')).length, 1, 'a copy before migrating');
     assert.deepEqual(s.rows(['KAZ-1']).get('KAZ-1'), { status: 'dry_run', fingerprint: null, comment: 'old comment', commentId: null, runs: 0 });
     assert.deepEqual(s.track([ref('KAZ-1')]), []);
     assert.deepEqual(s.track([{ id: 'id-KAZ-1', key: 'RPG-2' }]), [{ from: 'KAZ-1', to: 'RPG-2' }], 'the old row got its id');
-    s.recordResult(ref('KAZ-5'), result);
+    s.recordResult(ref('KAZ-5'), { ...result, agent: { model: 'haiku', instructions: 'abc', costUsd: 0.002, turns: 3, durationMs: 900 } });
     s.close();
-    const row = new DatabaseSync(file).prepare("SELECT summary, reporter, fingerprint FROM checks WHERE key = 'KAZ-5'").get();
+    const db = new DatabaseSync(file);
+    const row = db.prepare("SELECT summary, reporter, fingerprint FROM checks WHERE key = 'KAZ-5'").get();
     assert.deepEqual({ ...row }, { summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1' });
+    const figures = db.prepare("SELECT model, instructions, cost_usd, turns, agent_ms FROM runs WHERE key = 'KAZ-5'").get();
+    assert.deepEqual({ ...figures }, { model: 'haiku', instructions: 'abc', cost_usd: 0.002, turns: 3, agent_ms: 900 });
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 2);
+    db.close();
+    new Store(file).close();
+    assert.equal(readdirSync(dir).filter((f) => f.startsWith('old.sqlite.before-v')).length, 1, 'no copy when there is nothing to migrate');
     assert.equal(Store.recordedComment(file, 'RPG-2'), 'old comment');
     assert.equal(Store.recordedComment(file, 'KAZ-404'), null);
+  });
+  it('backs up a database while it is open', () => {
+    const dir = tempDir();
+    const s = new Store(join(dir, 'db.sqlite'));
+    s.recordResult(ref('KAZ-1'), result);
+    Store.backup(join(dir, 'db.sqlite'), join(dir, 'copy.sqlite'));
+    s.close();
+    assert.equal(new Store(join(dir, 'copy.sqlite')).count(), 1);
   });
 });

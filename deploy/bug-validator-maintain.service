@@ -1,0 +1,12 @@
+# systemd user unit: a backup of the database and the log cut down to size (`maintain`), run daily
+# by bug-validator-maintain.timer. Machine-specific as bug-validator.service. Its output: journalctl.
+
+[Unit]
+Description=Bug Validator maintenance — database backup, log size
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/npb/bug-validator
+Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node src/main.ts maintain
+NoNewPrivileges=yes
