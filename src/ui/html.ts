@@ -215,7 +215,7 @@ export function eventText(e: LogEvent): string {
     case 'request_failed':
       return `request failed${f.gaveUp === true ? ', gave up' : ''} · ${errorText(f.error)}`;
     case 'comment_adopted':
-      return esc(`found the service's comment in Jira (${f.commentId}); edits it, posts none`);
+      return esc(`found the service's comment in Jira (${f.commentId}); keeps it, posts none`);
     case 'key_changed':
       return esc(`moved: ${f.from} → ${f.to}`);
     case 'bug_complete':
@@ -223,7 +223,9 @@ export function eventText(e: LogEvent): string {
     case 'comment_dry_run':
       return esc(`${by}${re ? 're-check: ' : ''}comment · dry run${f.kept === true ? ', the posted one kept' : ''}${missing}`);
     case 'comment_posted':
-      return esc(`${by}comment posted${missing}`);
+      return esc(f.byHand === true ? 'comment posted by hand' : `${by}comment posted${missing}`);
+    case 'post_failed':
+      return `post failed${f.gaveUp === true ? ', gave up' : ''} · ${errorText(f.error)}`;
     case 'comment_edited':
       return esc(`${by}${f.changed === false ? 're-check: comment unchanged' : 'comment edited'}${missing}`);
     case 'check_failed':
@@ -296,10 +298,17 @@ export interface BugModel {
   key: string;
   bug: BugView | null;
   request: Request | null;
+  /** The post of its comment asked for, if any. */
+  post?: Request | null;
+  /** The confirmation of a post shown open: the page without JavaScript (`?post`). */
+  confirmPost?: boolean;
 }
 
+/** A comment the service recorded and Jira does not have: a dry run's, or one whose post got no answer. */
+const postable = (b: BugView): boolean => b.comment !== null && b.commentId === null && (b.status === 'dry_run' || b.status === 'posting');
+
 export function bugPage(m: BugModel, ctx: PageContext): string {
-  const { key, bug: b, request } = m;
+  const { key, bug: b, request, post = null } = m;
   const rows: [string, string][] = [];
   if (b?.reporter) rows.push(['Reporter', esc(b.reporter)]);
   if (b) {
@@ -309,10 +318,14 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
     if (b.error) rows.push(['Error', `<span class="err">${esc(b.error)}</span>`]);
   }
   if (request) rows.push(['Request', request.error ? `<span class="err">failed · ${esc(request.error)}</span>` : `waiting · ${ago(ctx.now, request.at)}`]);
+  if (post) rows.push(['Post', post.error ? `<span class="err">failed · ${esc(post.error)}</span>` : `waiting · ${ago(ctx.now, post.at)}`]);
   rows.push(['Jira', jiraLink(key, ctx, esc(`${ctx.jiraBaseUrl}/browse/${key}`))]);
   // A pending request is enough; otherwise one click asks for the next check.
-  const button = request && !request.error ? '' : `<form class="request" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button class="btn primary">${b ? 'Check again' : 'Check'}</button></form>`;
-  const head = `<header class="bug-head"><div class="page-head"><h1>${esc(key)}</h1><span class="stats">${esc(b?.summary ?? '')}</span></div>${kv(rows)}${button}</header>`;
+  const check = request && !request.error ? '' : `<form class="request" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button class="btn primary">${b ? 'Check again' : 'Check'}</button></form>`;
+  // Posting asks first: the confirmation shows the comment as it will reach Jira.
+  const posting = b && postable(b) && !(post && !post.error) ? `<a class="btn" href="/bugs/${key}?post" data-dialog="confirm-post">Post to Jira</a>${confirmPost(b, m.confirmPost === true, ctx)}` : '';
+  const actions = check || posting ? `<div class="actions">${check}${posting}</div>` : '';
+  const head = `<header class="bug-head"><div class="page-head"><h1>${esc(key)}</h1><span class="stats">${esc(b?.summary ?? '')}</span></div>${kv(rows)}${actions}</header>`;
   if (!b) return layout(`${key} · Bug validator`, `${head}<p class="muted">Not checked yet. The page fills in when the service has checked the bug.</p>`, ctx, 'bugs');
   const subtitle = { dry_run: 'dry run · not posted', commented: 'posted to Jira', posting: 'interrupted while posting · the next check looks in Jira' }[b.status as string] ?? '';
   const main = `
@@ -324,6 +337,20 @@ ${head}
   return layout(`${key} · Bug validator`, main, ctx, 'bugs');
 }
 
+/**
+ * The confirmation of a post: the comment as Jira will show it, and what posting means. The form
+ * carries the check the person read, so a re-check made meanwhile refuses the post (store.ts).
+ * A modal opened by app.js; without JavaScript the Post link opens the page with it open.
+ */
+function confirmPost(b: BugView, open: boolean, ctx: PageContext): string {
+  const dry = ctx.dryRun === false ? '' : ' The service is in a dry run: this one comment is posted all the same, and re-checks in the dry run leave it as it is.';
+  return `<dialog id="confirm-post" class="frame confirm" aria-labelledby="confirm-post-title"${open ? ' open' : ''}>
+${frameHead(`<span id="confirm-post-title">Post this comment to ${esc(b.key)}?</span>`, `checked ${fmtTime(b.checkedAt)}`)}
+<p>It goes to Jira as it is, from the service's account, and mentions ${esc(b.reporter ?? 'the reporter')}: Jira notifies them. The UI cannot take it back.${dry}</p>
+<div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>
+<form method="post" action="/posts"><input type="hidden" name="key" value="${b.key}"><input type="hidden" name="checked" value="${b.checkedAt.toISOString()}"><button class="btn primary">Post</button><a class="btn" href="/bugs/${b.key}" data-close>Cancel</a></form>
+</dialog>`;
+}
 
 function requirements(b: BugView, ctx: PageContext): string {
   if (!checked(b) && b.status !== 'posting') return `<p class="muted">${result(b) === 'error' ? 'The check did not finish.' : 'Never checked.'}</p>`;
@@ -354,7 +381,7 @@ function requirements(b: BugView, ctx: PageContext): string {
 
 function commentBlock(b: BugView): string {
   if (result(b) === 'skipped') return `<p class="muted">${SKIPPED}</p>`;
-  if (b.status === 'posting') return `<p class="warn">The service stopped while posting this comment. Its next check of the bug, at the next poll, looks in Jira first: a comment found there is kept and edited, never posted twice.</p><div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>`;
+  if (b.status === 'posting') return `<p class="warn">The post of this comment got no answer. Its next check of the bug (live, at the next poll) or a post asked again looks in Jira first: a comment found there is kept, never posted twice.</p><div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>`;
   if (result(b) === 'error') return '<p class="muted">No comment: the check did not finish.</p>';
   if (!b.comment) return '<p class="muted">Nothing is missing, so the bug got no comment.</p>';
   return `<div class="jira-comment">${commentHtml(b.comment, b.reporter)}</div>`;

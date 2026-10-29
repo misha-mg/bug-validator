@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { request } from 'node:http';
 import { after, before, describe, it } from 'node:test';
 import { startUi } from '../../src/ui/server.ts';
-import { readRequests } from '../../src/ui/read.ts';
+import { readBug, readPosts, readRequests } from '../../src/ui/read.ts';
 import { appendLog, logLine, sampleState } from './state.ts';
 
 const state = sampleState();
@@ -82,6 +82,22 @@ describe('server', () => {
     const bad = await post('ABC-1');
     assert.equal(bad.status, 400);
     assert.match(await bad.text(), /Not a KAZ or RPG issue: ABC-1/);
+  });
+  it('takes a post of a recorded comment, only the one the page showed, and shows it on the bug page', async () => {
+    const post = (key: string, checked: string) => fetch(`${base}/posts`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ key, checked }), redirect: 'manual' });
+    assert.match((await get('/bugs/KAZ-5?post')).body, /<dialog [^>]* open>/);
+    const stale = await post('KAZ-5', '2026-01-01T00:00:00.000Z');
+    assert.equal(stale.status, 400);
+    assert.match(await stale.text(), /checked again after the page was shown/);
+    assert.equal((await post('KAZ-3', readBug(state.dbFile, 'KAZ-3')!.checkedAt.toISOString())).status, 400, 'no comment to post');
+    const res = await post('KAZ-5', readBug(state.dbFile, 'KAZ-5')!.checkedAt.toISOString());
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), '/bugs/KAZ-5');
+    assert.deepEqual(readPosts(state.dbFile).map((p) => [p.key, p.error]), [['KAZ-5', null]]);
+    const page = (await get('/bugs/KAZ-5')).body;
+    assert.match(page, /Post<\/dt><dd>waiting · just now/);
+    assert.doesNotMatch(page, /Post to Jira/);
+    assert.equal((await fetch(`${base}/posts`, { method: 'POST', headers: { origin: 'http://evil.example' }, body: 'key=KAZ-5', redirect: 'manual' })).status, 403);
   });
   it('shows the log as it grows', async () => {
     appendLog(state, logLine('poll_failed', new Date(), { error: 'Jira answered 503' }));

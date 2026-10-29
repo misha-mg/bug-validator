@@ -54,7 +54,12 @@ svg.days text.today { fill: var(--text); font-weight: 600; }
 .bug-head { margin-bottom: 26px; }
 .bug-head .page-head { margin-bottom: 14px; }
 .bug-head dl.kv { max-width: 760px; }
-.bug-head form { margin-top: 18px; }
+.bug-head .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+/* The confirmation of a post: a sheet over the page, the comment as Jira will show it. */
+dialog.confirm { width: min(560px, calc(100vw - 32px)); background: var(--bg); color: var(--text); }
+dialog.confirm::backdrop { background: rgb(0 0 0 / 0.35); }
+dialog.confirm p { margin: 0 0 14px; }
+dialog.confirm form { display: flex; gap: 10px; margin-top: 18px; }
 .columns { display: grid; grid-template-columns: 3fr 2fr; gap: var(--gap); align-items: start; }
 @media (max-width: 1100px) { .columns { grid-template-columns: 1fr; } }
 .requirements tbody th, .requirements td:nth-child(2), .requirements td:nth-child(3), .requirements thead th:not(:last-child) { width: 1%; white-space: nowrap; }

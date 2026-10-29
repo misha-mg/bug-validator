@@ -3,12 +3,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { isIP } from 'node:net';
 import { hostname } from 'node:os';
-import { requestCheck } from '../db/store.ts';
+import { requestCheck, requestPost } from '../db/store.ts';
 import { ISSUE_KEY } from '../domain/key.ts';
 import { describeError, log } from '../log.ts';
 import type { UiConfig } from './config.ts';
 import { type PageContext, bugPage, bugsPage, bugsQuery, errorPage, homePage } from './html.ts';
-import { readBug, readBugs, readRequests } from './read.ts';
+import { readBug, readBugs, readPosts, readRequests } from './read.ts';
 import { health, ServiceLog } from './service-log.ts';
 
 const STATIC: Record<string, string> = { '/sheet.css': 'text/css', '/app.css': 'text/css', '/app.js': 'text/javascript', '/theme.js': 'text/javascript' };
@@ -24,13 +24,20 @@ const HEADERS = {
   'Referrer-Policy': 'same-origin',
 };
 
+/** What a person can ask the service for: the form's path → the request it writes; returns the bug's key. */
+const ACTIONS: Record<string, (dbFile: string, form: URLSearchParams) => string> = {
+  '/requests': (dbFile, form) => requestCheck(dbFile, form.get('key') ?? ''),
+  '/posts': (dbFile, form) => requestPost(dbFile, form.get('key') ?? '', form.get('checked') ?? ''),
+};
+
 class TooLarge extends Error {}
 
 /**
  * The web UI: three pages rendered from the database and the log on every request, plus the
  * stylesheets (the drafting sheet shared with pipeline-ui, and the UI's own), their fonts and the
  * scripts. Pages, styles and scripts are not cached: an edit shows on reload; the fonts are. The
- * one write is `POST /requests`: a check asked for by hand, which the service serves. `/healthz`
+ * writes are `POST /requests`, a check asked for by hand, and `POST /posts`, a recorded comment
+ * to post to Jira: rows the service serves. `/healthz`
  * answers a monitor: 200 while the service runs and polls, 503 otherwise.
  *
  * A page is served only to a Host the UI knows (an IP address, localhost, this machine's name,
@@ -84,11 +91,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
   }
   const status = serviceLog.read();
   const ctx: PageContext = { jiraBaseUrl: config.jiraBaseUrl, dryRun: status?.dryRun ?? null, now: new Date(), host: req.headers.host };
-  if (req.method === 'POST' && path === '/requests') {
-    if (!sameOrigin(req)) return send(res, 403, 'text/html', errorPage(403, 'A check can be asked for from the UI’s own pages only.', ctx));
+  const action = req.method === 'POST' ? ACTIONS[path] : undefined;
+  if (action) {
+    if (!sameOrigin(req)) return send(res, 403, 'text/html', errorPage(403, 'A check or a post can be asked for from the UI’s own pages only.', ctx));
     const form = new URLSearchParams(await body(req));
     try {
-      const key = requestCheck(config.dbFile, form.get('key') ?? '');
+      const key = action(config.dbFile, form);
       res.writeHead(303, { ...HEADERS, Location: `/bugs/${key}` });
       res.end();
     } catch (err) {
@@ -106,8 +114,9 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
     if (!ISSUE_KEY.test(key)) return send(res, 400, 'text/html', errorPage(400, `Not a KAZ or RPG key: ${key}`, ctx));
     const bug = readBug(config.dbFile, key);
     const request = readRequests(config.dbFile).find((r) => r.key === key) ?? null;
+    const post = readPosts(config.dbFile).find((r) => r.key === key) ?? null;
     if (!bug && !request) send(res, 404, 'text/html', errorPage(404, `${key} is not in the database.`, ctx));
-    else send(res, 200, 'text/html', bugPage({ key, bug, request }, ctx));
+    else send(res, 200, 'text/html', bugPage({ key, bug, request, post, confirmPost: url.searchParams.has('post') }, ctx));
   } else {
     send(res, 404, 'text/html', errorPage(404, `No page at ${path}.`, ctx));
   }

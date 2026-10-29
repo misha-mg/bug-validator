@@ -97,6 +97,10 @@ const MIGRATIONS: ((db: DatabaseSync) => void)[] = [
     db.exec('ALTER TABLE requests ADD COLUMN tries INTEGER NOT NULL DEFAULT 0');
     for (const column of ['model TEXT', 'instructions TEXT', 'cost_usd REAL', 'turns INTEGER', 'agent_ms INTEGER']) db.exec(`ALTER TABLE runs ADD COLUMN ${column}`);
   },
+  // 3: comments a person posts by hand from the UI, in a dry run as well.
+  (db) => {
+    db.exec('CREATE TABLE posts (key TEXT PRIMARY KEY, at TEXT NOT NULL, comment TEXT NOT NULL, error TEXT, tries INTEGER NOT NULL DEFAULT 0)');
+  },
 ];
 
 const now = (): string => new Date().toISOString();
@@ -118,6 +122,18 @@ export interface CheckRequest {
   error: string | null;
 }
 
+/**
+ * A comment a person asked to post (the UI's Post button): the text they confirmed, pending until
+ * the service posts it, or failed to be.
+ */
+export interface PostRequest {
+  key: string;
+  at: string;
+  comment: string;
+  /** Why the service did not post it; null while pending. */
+  error: string | null;
+}
+
 /** Pending requests at most: a form is for a person asking for a few bugs, not for a script. */
 export const MAX_PENDING_REQUESTS = 20;
 /** A request the surroundings failed this many times in a row fails, so it stops holding up the rest. */
@@ -135,8 +151,21 @@ export function requestCheck(dbFile: string, text: string): string {
 }
 
 /**
+ * Asks the service to post a bug's recorded comment to Jira, in a dry run as well. `checkedAt` is
+ * the check whose comment the person read and confirmed: a check made since (a re-check that
+ * changed the comment) refuses the post. Returns the key.
+ */
+export function requestPost(dbFile: string, text: string, checkedAt: string): string {
+  const key = issueKey(text);
+  if (!key) throw new Error(`Not a KAZ or RPG issue: ${text.trim().slice(0, 100) || '(nothing)'}`);
+  Store.addPost(dbFile, key, checkedAt);
+  return key;
+}
+
+/**
  * One row per bug the service has dealt with, its current state; one row in `runs` per check of
- * it, the history; `meta`; and `requests`, the checks asked for by hand. A bug's row keeps it from
+ * it, the history; `meta`; `requests`, the checks asked for by hand; and `posts`, the comments a
+ * person posts from the UI. A bug's row keeps it from
  * being checked as a new bug (the lookup in Jira before a post is what stops a second comment), so
  * rows are never deleted; a request is the way to re-run a bug.
  */
@@ -180,6 +209,39 @@ export class Store {
       const { n } = db.prepare('SELECT COUNT(*) AS n FROM requests WHERE error IS NULL AND key <> ?').get(key) as { n: number };
       if (n >= MAX_PENDING_REQUESTS) throw new Error(`${n} checks are already waiting; ask again when the service has made them`);
       db.prepare('INSERT OR REPLACE INTO requests (key, at, error) VALUES (?, ?, NULL)').run(key, now());
+    } finally {
+      db.close();
+    }
+  }
+
+  /**
+   * Asks the running service to post a bug's comment: one row in `posts` with the comment as it
+   * is now, nothing else. Only a comment not in Jira can be posted (a `dry_run` row, or a
+   * `posting` one whose post got no answer), and only the one the person saw: the row's last
+   * check must be `checkedAt`.
+   */
+  static addPost(file: string, key: string, checkedAt: string): void {
+    if (!existsSync(file)) throw new Error(`No database at ${file}: the service has not started yet`);
+    const db = new DatabaseSync(file, { timeout: 5000 });
+    try {
+      const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'posts'").get();
+      if (!table) throw new Error(`The database at ${file} has no posts table: is the service up to date?`);
+      // IMMEDIATE: the row read is the row the post is asked for, whatever the service writes meanwhile.
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('SELECT status, comment, comment_id AS commentId, checked_at AS checkedAt FROM checks WHERE key = ?').get(key) as
+          | { status: CheckStatus; comment: string | null; commentId: string | null; checkedAt: string }
+          | undefined;
+        if (!row) throw new Error(`${key} is not in the database`);
+        if (row.commentId !== null) throw new Error(`${key}: the comment is already in Jira`);
+        if (!row.comment || (row.status !== 'dry_run' && row.status !== 'posting')) throw new Error(`${key} has no comment to post`);
+        if (new Date(row.checkedAt).getTime() !== new Date(checkedAt).getTime()) throw new Error(`${key} was checked again after the page was shown: read the comment again`);
+        db.prepare('INSERT OR REPLACE INTO posts (key, at, comment, error, tries) VALUES (?, ?, ?, NULL, 0)').run(key, now(), row.comment);
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        throw err;
+      }
     } finally {
       db.close();
     }
@@ -316,9 +378,19 @@ export class Store {
     this.addRun(key, now(), r);
   }
 
-  /** The comment is in Jira: `posting` → `commented`. */
-  markCommented(key: string, commentId: string): void {
-    this.db.prepare("UPDATE checks SET status = 'commented', comment_id = ? WHERE key = ?").run(commentId, key);
+  /** The comment is in Jira: `posting` → `commented`. `comment`: the text found there, when it was adopted. */
+  markCommented(key: string, commentId: string, comment?: string): void {
+    this.db.prepare("UPDATE checks SET status = 'commented', comment_id = ?, comment = COALESCE(?, comment) WHERE key = ?").run(commentId, comment ?? null, key);
+  }
+
+  /** A post by hand is about to be sent: the row goes first, as for any post (handle.ts). */
+  markPosting(key: string): void {
+    this.db.prepare("UPDATE checks SET status = 'posting' WHERE key = ? AND comment_id IS NULL AND status IN ('dry_run', 'posting')").run(key);
+  }
+
+  /** Jira refused a post by hand, so the comment does not exist: `posting` → `dry_run` as it was. */
+  postRefusedByHand(key: string): void {
+    this.db.prepare("UPDATE checks SET status = 'dry_run' WHERE key = ? AND status = 'posting'").run(key);
   }
 
   /**
@@ -356,15 +428,37 @@ export class Store {
 
   /** The surroundings failed the request once more; after MAX_REQUEST_TRIES it fails. True when it failed. */
   requestTried(key: string, error: string): boolean {
-    const row = this.db.prepare('UPDATE requests SET tries = tries + 1 WHERE key = ? RETURNING tries').get(key) as { tries: number } | undefined;
-    if (!row || row.tries < MAX_REQUEST_TRIES) return false;
-    this.requestFailed(key, `failed ${row.tries} times: ${error}`);
-    return true;
+    return this.tried('requests', key, error);
   }
 
   /** The request cannot be served (no such issue); kept with the reason until it is replaced. */
   requestFailed(key: string, error: string): void {
     this.db.prepare('UPDATE requests SET error = ? WHERE key = ?').run(error, key);
+  }
+
+  /** Asks for a post of the comment, as `addPost` does from outside the service; one pending or failed for the key is replaced. */
+  post(key: string, comment: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO posts (key, at, comment, error, tries) VALUES (?, ?, ?, NULL, 0)').run(key, now(), comment);
+  }
+
+  /** Every post asked for, oldest first: the pending ones and the ones the service did not make. */
+  posts(): PostRequest[] {
+    return this.db.prepare('SELECT key, at, comment, error FROM posts ORDER BY at, rowid').all() as unknown as PostRequest[];
+  }
+
+  /** The post is made (or the comment was found in Jira): the bug's row says so. */
+  postDone(key: string, at: string): void {
+    this.db.prepare('DELETE FROM posts WHERE key = ? AND at = ?').run(key, at);
+  }
+
+  /** The surroundings failed the post once more; after MAX_REQUEST_TRIES it fails. True when it failed. */
+  postTried(key: string, error: string): boolean {
+    return this.tried('posts', key, error);
+  }
+
+  /** The post will not be made (the comment changed, Jira refused it); kept with the reason until it is asked again. */
+  postFailed(key: string, error: string): void {
+    this.db.prepare('UPDATE posts SET error = ? WHERE key = ?').run(error, key);
   }
 
   status(key: string): CheckStatus | null {
@@ -374,6 +468,13 @@ export class Store {
 
   close(): void {
     this.db.close();
+  }
+
+  private tried(table: 'requests' | 'posts', key: string, error: string): boolean {
+    const row = this.db.prepare(`UPDATE ${table} SET tries = tries + 1 WHERE key = ? RETURNING tries`).get(key) as { tries: number } | undefined;
+    if (!row || row.tries < MAX_REQUEST_TRIES) return false;
+    this.db.prepare(`UPDATE ${table} SET error = ? WHERE key = ?`).run(`failed ${row.tries} times: ${error}`, key);
+    return true;
   }
 
   private addRun(

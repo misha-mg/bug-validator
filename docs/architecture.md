@@ -25,16 +25,16 @@ src/
     agent.ts         spawns `claude -p` with the Jira MCP server as its only tool
     jira-mcp.ts      that server: search_issues, get_issue — read-only, KAZ and RPG only
   db/
-    store.ts         SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta`, and `requests` (checks asked for by hand); the schema's migrations; a request written by the UI or the CLI; a backup
+    store.ts         SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta`, `requests` (checks asked for by hand) and `posts` (comments a person posts from the UI); the schema's migrations; a request written by the UI or the CLI, a post by the UI; a backup
   pipeline/
     deps.ts          what the pipeline needs: config, Jira, agent, store (Jira and agent are interfaces)
     checkBug.ts      one bug: fetch → base checks → agent → verdict → guardrails
     plan.ts          which bugs of a poll are due: first checks, re-checks, the waiting ones
     handle.ts        one check and its record / post / edit; the service's comment found in Jira; which failures are the surroundings'
-    requests.ts      the checks asked for by hand, served before each check of a poll and while the service waits
+    requests.ts      the posts and the checks asked for by hand, served before each check of a poll and while the service waits
     poll.ts          one poll: query → first-start bootstrap → moved bugs → plan → checks, requests first
   commands/          run (the loop), check (one bug, writes nothing), request (the service checks a bug next), ui (the web UI), maintain (backup, log size)
-  ui/                the web UI: a separate process that reads state/ and writes nothing but check requests
+  ui/                the web UI: a separate process that reads state/ and writes nothing but check and post requests
     config.ts        UI_HOST, UI_PORT, UI_HOSTNAMES, UI_USER, UI_PASSWORD, plus the service's DB_FILE, LOG_FILE and JIRA_BASE_URL
     read.ts          the database, read-only → one view per bug with its runs, the requests; never creates the file
     service-log.ts   service.log → the service's state and its latest events, read as it grows; /healthz's answer
@@ -110,14 +110,25 @@ a poll that succeeds. A key Jira does not know fails the request, which keeps th
 is asked again; so does a third failure of the surroundings in a row on it. At most 20 requests
 wait at a time. A request asked again while its check runs is kept for another check.
 
+A comment posted by hand (the UI's Post to Jira, after a confirmation) is a row in `posts` with the
+text the person read; it is served before the checks, in a dry run as well. Only a comment Jira
+does not have can be posted: a `dry_run` row, or a `posting` one. The UI refuses the post when
+the bug was checked again after the page was shown; the service refuses it when the row's comment
+is no longer the text confirmed, or is in Jira. Then as step 5 live: Jira is read for a comment of
+the service's (found → adopted, nothing posted), the row goes `posting`, the post, `commented`
+with the comment id. A post Jira refused puts the row back to `dry_run` and fails the request; one
+without an answer leaves it `posting` and the request pending, and the next try looks in Jira
+first. Failures count as a request's. In a dry run a `commented` row is not re-checked, and a
+requested check of it goes to the history only, so the comment posted stays as posted.
+
 ## Row statuses
 
 | status | meaning |
 |---|---|
 | `skipped` | was already in the query at the first start, never checked |
 | `complete` | checked, nothing missing, no comment |
-| `dry_run` | comment composed and recorded, not posted |
-| `posting` | written before a post whose outcome is unknown (the service stopped, or Jira did not answer); live, the next poll checks it again, finds the comment in Jira if it got there and adopts it |
+| `dry_run` | comment composed and recorded, not posted; a person may post it from the UI |
+| `posting` | written before a post whose outcome is unknown (the service stopped, or Jira did not answer); live, the next poll checks it again, finds the comment in Jira if it got there and adopts it; a post by hand tried again does the same |
 | `commented` | comment posted (`comment_id` set) |
 | `retry` | last attempt failed, tried again at the next poll |
 | `failed` | 3 attempts failed, left alone; a request (`request <KEY>`, the UI) checks it again |
@@ -186,11 +197,12 @@ from every event but `poll` and `check_start`, one line each.
 | `first_start` | skipped (the keys) | |
 | `key_changed` | from, to | |
 | `check_start` | key, recheck, requested | liveness, checking |
-| `bug_complete`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, requested, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId; `kept` (dry run, a comment in Jira left as recorded), `changed` (edit) | |
+| `bug_complete`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, requested, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId; `kept` (dry run, a comment in Jira left as recorded), `changed` (edit); a post by hand: key, `byHand`, commentId, comment | |
 | `comment_adopted` | key, commentId, status | |
 | `check_failed` | key, recheck, requested, attempts (first check only), status, error, ms | |
 | `check_deferred` | key, error | |
 | `request_failed` | key, error, gaveUp | |
+| `post_failed` | key, error, gaveUp | |
 | `mentions_stripped` | key, stripped | |
 | `fatal` | error | crashed, error |
 
@@ -255,16 +267,18 @@ fixture; the UI takes the ids and names from `bug.ts`.
 `npm run ui` serves three pages on `UI_PORT`, read from `DB_FILE` and `LOG_FILE` on every
 request; the log exists when the service runs under systemd (a local `npm start` logs to
 stdout, so the Service block shows "no log"). It opens the database read-only, never creates it,
-and writes nothing but a check request: the form in the header (a key or a link to the bug) and
-the button on a bug's page ask the service to check that bug next; the page then shows the
-request waiting and fills in with the result. No external resources: the pages work on a network
+and writes nothing but requests: the form in the header (a key or a link to the bug) and the
+button on a bug's page ask the service to check that bug next; Post to Jira on a bug's page, once
+confirmed, asks it to post the comment shown. The page then shows the request waiting and fills
+in with the result. No external resources: the pages work on a network
 without internet access.
 
 The UI is opened from the office network as `http://<server-ip>:8081/`; no TLS, no proxy, nothing
 outside the LAN (firewall the port to it). It serves only a Host it knows (an IP address,
 localhost, the machine's name, `UI_HOSTNAMES`), so a site that points its own name at the server
 cannot read the pages through a visitor's browser; it takes a request only from its own pages
-(`Origin`, `Sec-Fetch-Site`), so another site cannot make a visitor's browser ask for checks; a
+(`Origin`, `Sec-Fetch-Site`), so another site cannot make a visitor's browser ask for checks or
+posts; a
 body over 4 KB is refused. `UI_USER` and `UI_PASSWORD` add a login. The pages forbid framing.
 
 - `/` — the service (running, stopping, stopped, crashed or silent; last poll and how many failed
@@ -280,13 +294,16 @@ body over 4 KB is refused. `UI_USER` and `UI_PASSWORD` add a login. The pages fo
   summaries and reporters (the form; Enter submits).
 - `/bugs/<KEY>` — each requirement as the agent judged it beside the base check, the related
   bugs, every check with the comment it recorded, and the comment as it is (or would be) in
-  Jira, the mention by name and arrived items struck through. For a bug asked for and not
-  checked yet, the request alone.
+  Jira, the mention by name and arrived items struck through. A comment Jira does not have gets
+  Post to Jira: a confirmation with the comment, the check it came from and the reporter it
+  notifies, then a post request (`?post` opens the confirmation without JavaScript). For a bug
+  asked for and not checked yet, the request alone.
 - `/healthz` — JSON for a monitor: `ok`, `state`, `pollFailures`, `lastSeen`.
 
 The pages are rendered on the server (`html.ts`, pure functions tested in `test/ui/`); `app.js`
-fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden
-or the search box has focus, keeping an opened comment open; `theme.js` keeps the light or dark
+fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden,
+the search box has focus or a confirmation is open, keeping an opened comment open, and opens the
+confirmation as a modal; `theme.js` keeps the light or dark
 choice made with the header's button in the browser (the system's setting until then). Everything
 works with JavaScript off, minus the refresh and the switch. The look is the drafting sheet
 pipeline-ui shares: one surface, hairline frames with a cross at each corner, Barlow Condensed for

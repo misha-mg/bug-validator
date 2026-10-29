@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
-import { type IssueRef, MAX_PENDING_REQUESTS, requestCheck, Store } from '../src/db/store.ts';
+import { type IssueRef, MAX_PENDING_REQUESTS, requestCheck, requestPost, Store } from '../src/db/store.ts';
 
 const dirs: string[] = [];
 const tempDir = (): string => {
@@ -83,6 +83,30 @@ describe('Store', () => {
     assert.equal(requestCheck(file, 'https://x.atlassian.net/browse/KAZ-1'), 'KAZ-1', 'asked again: replaced, not added');
     assert.throws(() => requestCheck(file, 'KAZ-999'), /already waiting/);
   });
+  it('takes a post from the UI only for a comment not in Jira, and only the one the person read', () => {
+    const dir = tempDir();
+    const file = join(dir, 'db.sqlite');
+    assert.throws(() => requestPost(file, 'KAZ-1', 't'), /No database/);
+    const s = new Store(file);
+    s.recordResult(ref('KAZ-1'), { ...result, status: 'dry_run', comment: 'Please add: HAR file' });
+    s.recordResult(ref('KAZ-2'), result);
+    s.recordResult(ref('KAZ-3'), { ...result, status: 'commented', comment: 'posted', commentId: '9' });
+    const checkedAt = (key: string): string => {
+      const db = new DatabaseSync(file, { readOnly: true });
+      try {
+        return (db.prepare('SELECT checked_at AS at FROM checks WHERE key = ?').get(key) as { at: string }).at;
+      } finally {
+        db.close();
+      }
+    };
+    assert.throws(() => requestPost(file, 'KAZ-1', '2026-01-01T00:00:00.000Z'), /checked again after the page was shown/);
+    assert.equal(requestPost(file, 'kaz-1', checkedAt('KAZ-1')), 'KAZ-1');
+    assert.deepEqual(s.posts().map((p) => [p.key, p.comment, p.error]), [['KAZ-1', 'Please add: HAR file', null]]);
+    assert.throws(() => requestPost(file, 'KAZ-2', checkedAt('KAZ-2')), /no comment to post/);
+    assert.throws(() => requestPost(file, 'KAZ-3', checkedAt('KAZ-3')), /already in Jira/);
+    assert.throws(() => requestPost(file, 'KAZ-4', 't'), /not in the database/);
+    s.close();
+  });
   it('a result after a failure closes the bug; posting becomes commented', () => {
     const s = new Store(':memory:');
     s.recordFailure(ref('KAZ-4'), 'boom', 3);
@@ -127,7 +151,7 @@ describe('Store', () => {
     assert.deepEqual({ ...row }, { summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1' });
     const figures = db.prepare("SELECT model, instructions, cost_usd, turns, agent_ms FROM runs WHERE key = 'KAZ-5'").get();
     assert.deepEqual({ ...figures }, { model: 'haiku', instructions: 'abc', cost_usd: 0.002, turns: 3, agent_ms: 900 });
-    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 2);
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 3);
     db.close();
     new Store(file).close();
     assert.equal(readdirSync(dir).filter((f) => f.startsWith('old.sqlite.before-v')).length, 1, 'no copy when there is nothing to migrate');

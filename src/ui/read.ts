@@ -105,7 +105,7 @@ function read<T>(dbFile: string, none: T, fn: (db: DatabaseSync) => T): T {
   }
 }
 
-/** A check asked for by hand, pending or failed, as the pages show it. */
+/** A check or a post asked for by hand, pending or failed, as the pages show it. */
 export interface Request {
   key: string;
   at: Date;
@@ -116,6 +116,14 @@ export interface Request {
 export function readRequests(dbFile: string): Request[] {
   return read(dbFile, [], (db) => {
     const rows = db.prepare('SELECT key, at, error FROM requests ORDER BY at, rowid').all() as unknown as CheckRequest[];
+    return rows.map((r) => ({ key: r.key, at: time(r.at), error: r.error }));
+  });
+}
+
+/** Every post asked for, pending or failed, oldest first; none without the database or its table. */
+export function readPosts(dbFile: string): Request[] {
+  return read(dbFile, [], (db) => {
+    const rows = db.prepare('SELECT key, at, error FROM posts ORDER BY at, rowid').all() as unknown as CheckRequest[];
     return rows.map((r) => ({ key: r.key, at: time(r.at), error: r.error }));
   });
 }

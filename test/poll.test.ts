@@ -5,7 +5,7 @@ import { Store } from '../src/db/store.ts';
 import { JiraError, type Jira, type RawIssue } from '../src/jira/client.ts';
 import type { Deps } from '../src/pipeline/deps.ts';
 import { poll } from '../src/pipeline/poll.ts';
-import { serveRequests } from '../src/pipeline/requests.ts';
+import { servePosts, serveRequests } from '../src/pipeline/requests.ts';
 import { rawIssue } from './fixtures.ts';
 
 // KAZ-9021: a video, no HAR, Devices = All, Affects versions set. Its field facts fail only R6.
@@ -415,5 +415,82 @@ describe('a request', () => {
     await assert.rejects(served, /stopping/);
     assert.deepEqual(requests(d), [[KEY, null]]);
     assert.equal(row(d), undefined);
+  });
+});
+
+describe('a post by hand', () => {
+  const posts = (d: Deps) => d.store.posts().map((p) => [p.key, p.error]);
+  it('dry run: posts the comment confirmed, once; the dry run then leaves it as it is', async () => {
+    const d = deps(new FakeAgent(needsHar, harArrived));
+    await poll(d);
+    d.store.post(KEY, needsHar.comment);
+    const addComment = d.jira.addComment.bind(d.jira);
+    let before: string | null = null;
+    d.jira.addComment = async (key, body) => {
+      before = d.store.status(key);
+      return addComment(key, body);
+    };
+    await serveRequests(d);
+    assert.equal(before, 'posting', 'the row goes before the post');
+    assert.deepEqual(d.jira.posted, [{ key: KEY, body: needsHar.comment }]);
+    assert.deepEqual({ ...row(d), fingerprint: undefined }, { status: 'commented', fingerprint: undefined, comment: needsHar.comment, commentId: '1', runs: 1 });
+    assert.deepEqual(posts(d), [], 'served');
+
+    d.jira.attachHar(KEY);
+    assert.deepEqual(await poll(d), summary({}), 'a dry run does not re-check a comment in Jira');
+    d.store.request(KEY);
+    await serveRequests(d);
+    assert.deepEqual(d.jira.edited, [], 'nor edits it on request');
+    assert.equal(row(d)?.comment, needsHar.comment);
+  });
+  it('a comment already in Jira is adopted, not posted again', async () => {
+    const d = deps(new FakeAgent(needsHar));
+    await poll(d);
+    d.jira.comments[KEY] = [{ id: '7', author: { accountId: SERVICE, displayName: 'Service' }, created: minutesAgo(1), body: needsHar.comment }];
+    d.store.post(KEY, needsHar.comment);
+    await servePosts(d);
+    assert.deepEqual(d.jira.posted, []);
+    assert.equal(row(d)?.status, 'commented');
+    assert.equal(row(d)?.commentId, '7');
+  });
+  it('fails, posting nothing, when the comment changed after it was confirmed, or is in Jira already', async () => {
+    const d = deps(new FakeAgent(needsHar));
+    await poll(d);
+    d.store.post(KEY, 'the comment as it was before a re-check');
+    await servePosts(d);
+    assert.deepEqual(posts(d), [[KEY, 'Error: the comment changed after it was confirmed: read it again']]);
+    d.store.post(KEY, needsHar.comment);
+    await servePosts(d);
+    d.store.post(KEY, needsHar.comment);
+    await servePosts(d);
+    assert.deepEqual(posts(d), [[KEY, 'Error: nothing to post: the bug is commented']]);
+    assert.equal(d.jira.posted.length, 1);
+  });
+  it('a post Jira refuses leaves the comment unposted; one without an answer is looked up in Jira when tried again', async () => {
+    const d = deps(new FakeAgent(needsHar));
+    await poll(d);
+    d.jira.addComment = async () => {
+      throw new JiraError('HTTP 400 on POST: body too long', 400);
+    };
+    d.store.post(KEY, needsHar.comment);
+    await servePosts(d);
+    assert.equal(row(d)?.status, 'dry_run');
+    assert.match(String(posts(d)[0]?.[1]), /HTTP 400/);
+
+    const lost = deps(new FakeAgent(needsHar));
+    await poll(lost);
+    const addComment = lost.jira.addComment.bind(lost.jira);
+    lost.jira.addComment = async (key, body) => {
+      await addComment(key, body); // it reached Jira, the answer did not come back
+      throw new JiraError('request failed: fetch failed (socket hang up)');
+    };
+    lost.store.post(KEY, needsHar.comment);
+    await assert.rejects(serveRequests(lost), JiraError);
+    assert.equal(row(lost)?.status, 'posting');
+    assert.deepEqual(posts(lost), [[KEY, null]], 'still pending');
+    await servePosts(lost);
+    assert.equal(lost.jira.posted.length, 1, 'never a second comment');
+    assert.equal(row(lost)?.status, 'commented');
+    assert.deepEqual(posts(lost), []);
   });
 });

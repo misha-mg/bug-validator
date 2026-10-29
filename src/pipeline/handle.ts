@@ -28,7 +28,7 @@ const refusedForTheBug = (err: unknown): boolean =>
  * opening with the reporter's mention, as every comment the service makes does. The first one
  * wins; there is never meant to be a second.
  */
-async function ownComment(jira: Jira, issue: RawIssue): Promise<{ id: string; body: string } | null> {
+export async function ownComment(jira: Jira, issue: RawIssue): Promise<{ id: string; body: string } | null> {
   const bug = toBug(issue);
   if (!bug.reporter) return null;
   const { accountId } = await jira.myself();

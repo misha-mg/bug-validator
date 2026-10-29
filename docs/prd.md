@@ -113,6 +113,10 @@ triage (median time in Created 2.4 h over the last 90 days, 17 h over the year, 
 - **On request**: whoever runs the service can ask for a check of any KAZ or RPG bug, by key or
   link, from the web UI or the command line. It runs next, whatever the bug's age, status or
   record, the caps included, and its result is recorded (or posted) as any check's.
+- **Post on request**: whoever runs the service can post a bug's recorded comment from the web UI,
+  in a dry run as well, after a confirmation that shows the comment. The text posted is the one
+  confirmed; a comment changed since, or already in Jira, is not posted. The post follows the
+  rules of any first post (State and failures), and the comment is then the bug's one comment.
 
 Every WebUI bug counts, whoever reported it.
 
@@ -125,8 +129,8 @@ Every WebUI bug counts, whoever reported it.
 - On the first start, every bug already in the query is recorded as skipped; the first start
   itself is recorded, so a start on an empty query still counts. A missing database is a first
   start. A skipped bug is never checked, not even when it changes, unless asked for.
-- Bugs checked during the dry run stay recorded, and their dry-run comments are never posted or
-  edited live. A bug found complete in the dry run gets a comment live only if its report
+- Bugs checked during the dry run stay recorded, and the service never posts or edits their
+  dry-run comments live. A person may post one from the web UI (Trigger). A bug found complete in the dry run gets a comment live only if its report
   changes and it then lacks something.
 - Live, before a first comment is posted, Jira is read for a comment of the service's on the bug
   (by the service's account, opening with the reporter's mention). One found — after a crash
@@ -156,7 +160,8 @@ Every WebUI bug counts, whoever reported it.
 
 1. ✓ **Offline check** (2026-10-16): `check` on bugs the QA lead had sent back and on good ones.
 2. **Dry run**, current, from 2026-10-17: the whole process runs as it will live; only the post
-   is not sent. Comments go to the database and the log and are reviewed in the web UI; fixes to the
+   is not sent, unless a person posts it from the web UI. Comments go to the database and the log
+   and are reviewed in the web UI; fixes to the
    agent's instructions follow. A re-check's comment replaces the recorded one, and the history
    keeps both. Going live is a judgement call, no formal exit criterion.
 3. **Comments live** (`DRY_RUN=false`), from the personal account. Before that, check whether
@@ -174,7 +179,8 @@ Every WebUI bug counts, whoever reported it.
   fixtures.
 - AC3: Restarting the service, deleting the database, a crash while posting, or a re-check never
   produces a second comment on the same bug.
-- AC4: With `DRY_RUN=true` nothing is written to Jira.
+- AC4: With `DRY_RUN=true` the service writes nothing to Jira of its own accord; only a comment a
+  person confirms in the web UI is posted.
 - AC5: The agent's only tool is the project's read-only Jira server (search, read issue, KAZ and
   RPG only): no Jira write, no shell, no files, no web.
 - AC6: A failed query, issue read or agent run is reported as an error and produces no comment.
@@ -270,6 +276,13 @@ Every WebUI bug counts, whoever reported it.
     tool in a private file, not on a command line; each agent run has a budget cap and records
     its model, cost and instructions. systemd stays the deployment; Docker is kept building, not
     used.
+
+- 2026-10-29 — A comment can be posted by hand from the web UI, in a dry run as well: Post to
+  Jira on a bug's page, a confirmation showing the comment, then the post. Reviewing dry-run
+  comments showed ones worth posting before the whole service goes live. The UI writes a post
+  request and the service posts, as with checks on request: one writer to Jira, one record, the
+  same lookup before a post, so no second comment. The text confirmed is the text posted. A
+  posted comment is then left as it is in the dry run (not re-checked, not edited).
 
 ## Sources
 

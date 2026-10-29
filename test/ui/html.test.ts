@@ -99,6 +99,8 @@ describe('home', () => {
     assert.equal(at('request_failed', { key: 'KAZ-1', error: 'HTTP 503', gaveUp: true }), 'request failed, gave up · HTTP 503');
     assert.match(at('comment_adopted', { key: 'KAZ-1', commentId: '7' }), /found the service&#39;s comment in Jira \(7\)/);
     assert.equal(at('comment_edited', { key: 'KAZ-1', changed: false, missing: [] }), 're-check: comment unchanged · nothing missing');
+    assert.equal(at('comment_posted', { key: 'KAZ-1', byHand: true, commentId: '7' }), 'comment posted by hand');
+    assert.equal(at('post_failed', { key: 'KAZ-1', error: 'the comment changed', gaveUp: false }), 'post failed · the comment changed');
     assert.equal(at('something_new'), 'something_new');
   });
 });
@@ -160,6 +162,25 @@ describe('one bug', () => {
     assert.match(text(unknown), /KAZ-77 Request failed · JiraError: HTTP 404 on GET \/issue\/KAZ-77 Jira .* Not checked yet\./);
     assert.match(unknown, /<input type="hidden" name="key" value="KAZ-77"><button class="btn primary">Check<\/button>/);
     assert.doesNotMatch(unknown, /Requirements/);
+  });
+  it('offers to post a comment Jira does not have, behind a confirmation that names the check read', () => {
+    const html = bugPage(bugModel('KAZ-2'), ctx);
+    assert.match(html, /<a class="btn" href="\/bugs\/KAZ-2\?post" data-dialog="confirm-post">Post to Jira<\/a><dialog id="confirm-post" class="frame confirm" aria-labelledby="confirm-post-title">/);
+    const dialog = html.slice(html.indexOf('<dialog'), html.indexOf('</dialog>'));
+    assert.match(text(dialog), /Post this comment to KAZ-2\? checked .* mentions A Tester: Jira notifies them\. .* dry run: this one comment is posted all the same.* @A Tester Please add: Steps to reproduce Affects versions HAR file Post Cancel/);
+    assert.match(dialog, new RegExp(`<form method="post" action="/posts"><input type="hidden" name="key" value="KAZ-2"><input type="hidden" name="checked" value="${readBug(state.dbFile, 'KAZ-2')!.checkedAt.toISOString()}">`));
+    assert.doesNotMatch(text(bugPage(bugModel('KAZ-2'), { ...ctx, dryRun: false })), /dry run: this one/);
+    assert.match(bugPage({ ...bugModel('KAZ-2'), confirmPost: true }, ctx), /<dialog [^>]* open>/, 'open without JavaScript');
+
+    const pending = bugPage({ ...bugModel('KAZ-2'), post: { key: 'KAZ-2', at: state.now, error: null } }, ctx);
+    assert.match(text(pending), /Post waiting · just now/);
+    assert.doesNotMatch(pending, /Post to Jira|<dialog/, 'already asked: no button');
+    const failed = bugPage({ ...bugModel('KAZ-2'), post: { key: 'KAZ-2', at: state.now, error: 'Error: the comment changed' } }, ctx);
+    assert.match(text(failed), /Post failed · Error: the comment changed/);
+    assert.match(failed, /Post to Jira/, 'asked again after a failure');
+    for (const key of ['KAZ-3', 'RPG-4', 'KAZ-1']) assert.doesNotMatch(bugPage(bugModel(key), ctx), /Post to Jira/, `${key} has no comment to post`);
+    const posted = { ...readBug(state.dbFile, 'KAZ-2')!, status: 'commented' as const, commentId: '7' };
+    assert.doesNotMatch(bugPage({ key: 'KAZ-2', bug: posted, request: null }, ctx), /Post to Jira/, 'already in Jira');
   });
   it('explains a failed, a skipped and a complete bug', () => {
     const failed = text(bugPage(bugModel('RPG-4'), ctx));
