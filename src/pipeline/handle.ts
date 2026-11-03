@@ -3,13 +3,14 @@ import type { BugRow, IssueRef } from '../db/store.ts';
 import { type Jira, JiraError, type RawIssue } from '../jira/client.ts';
 import { toBug } from '../jira/mapping.ts';
 import { describeError, log } from '../log.ts';
+import { CloneError } from '../webui/clone.ts';
 import { checkBug } from './checkBug.ts';
 import type { Deps } from './deps.ts';
 import { recheckableStatuses } from './plan.ts';
 
-/** The failure is about the machine, Jira, Claude or the stop, not about this bug: it must not use up an attempt. */
+/** The failure is about the machine, Jira, Claude, the clone or the stop, not about this bug: it must not use up an attempt. */
 export function isEnvironmental(err: unknown): boolean {
-  return (err instanceof JiraError && err.environmental) || (err instanceof AgentError && err.environmental);
+  return (err instanceof JiraError && err.environmental) || (err instanceof AgentError && err.environmental) || err instanceof CloneError;
 }
 
 /** Jira refused a write for this bug's sake (a 4xx other than 401 and 429): the bug's failure, not the surroundings'. */
@@ -42,8 +43,9 @@ export async function ownComment(jira: Jira, issue: RawIssue): Promise<{ id: str
  * is first looked up in Jira: a comment of the service's found there (a crash while posting, a
  * lost database, a second instance) is adopted and edited, never posted again. A dry run never
  * writes over the record of a comment that is (or may be) in Jira: its check goes to the history
- * only. `requested` marks a check asked for by hand. True when the check finished; a failure of
- * the surroundings, or a stop, is thrown and changes nothing.
+ * only. A bug understood, or not a WebUI bug, is done: no comment, and a comment already in Jira
+ * is left as it is. `requested` marks a check asked for by hand. True when the check finished; a
+ * failure of the surroundings, or a stop, is thrown and changes nothing.
  */
 export async function handle(deps: Deps, bug: IssueRef, row: BugRow | null, signal?: AbortSignal, requested = false): Promise<boolean> {
   const { key } = bug;
@@ -68,33 +70,40 @@ export async function handle(deps: Deps, bug: IssueRef, row: BugRow | null, sign
     }
     const recheck = previousComment !== null;
     const out = await checkBug(deps, key, { signal, previousComment, issue, cloneMaxAgeMs: deps.config.pollIntervalMs });
-    const comment = out.verdict.outcome === 'not_understood' ? out.verdict.comment : null;
+    const { outcome } = out.verdict;
     const record = {
       summary: out.bug.summary,
       reporter: out.bug.reporter?.displayName ?? null,
       fingerprint: out.fingerprint,
       fieldChecks: out.fieldChecks,
       verdict: out.verdict,
+      webuiCommit: out.webuiCommit,
+      files: out.files,
       agent: out.agent,
     };
     const failedFields = out.fieldChecks.filter((c) => !c.passed).map((c) => c.id);
-    const fields = { key, recheck, requested, failedFields, related: out.verdict.related, agentMs: out.agent.durationMs, turns: out.agent.turns, costUsd: out.agent.costUsd };
+    const fields = {
+      key, recheck, requested, outcome, failedFields, related: out.verdict.related, webuiCommit: out.webuiCommit.slice(0, 12),
+      files: out.files.map((f) => `${f.filename}: ${f.kind}`), agentMs: out.agent.durationMs, turns: out.agent.turns, costUsd: out.agent.costUsd,
+    };
     if (out.strippedMentions.length > 0) log.warn('mentions_stripped', { key, stripped: out.strippedMentions });
-
     if (dryRun && inJira) {
-      deps.store.recordRun(key, { ...record, comment: comment });
-      log.info('comment_dry_run', { ...fields, comment: comment, kept: true });
+      const comment = outcome === 'not_understood' ? out.verdict.comment : null;
+      deps.store.recordRun(key, { ...record, comment });
+      log.info(outcome === 'not_understood' ? 'comment_dry_run' : `bug_${outcome}`, { ...fields, reason: out.verdict.reason, comment, kept: true });
       return true;
     }
-    // Only without an earlier comment: a re-check keeps the comment (verdict.ts).
-    if (comment === null) {
-      deps.store.recordResult(bug, { ...record, status: 'complete', comment: null, commentId: null });
-      log.info('bug_complete', fields);
+    if (outcome !== 'not_understood') {
+      // Done: no comment, never checked again. A comment already in Jira is left as it is, and
+      // the row keeps its text and id, so the record of Jira stays true.
+      deps.store.recordResult(bug, { ...record, status: outcome, comment: commentId === null ? null : previousComment, commentId: null });
+      log.info(`bug_${outcome}`, { ...fields, reason: out.verdict.reason, commentId });
       return true;
     }
+    const { comment } = out.verdict;
     if (dryRun) {
-      deps.store.recordResult(bug, { ...record, status: 'dry_run', comment: comment, commentId: null });
-      log.info('comment_dry_run', { ...fields, comment: comment });
+      deps.store.recordResult(bug, { ...record, status: 'dry_run', comment, commentId: null });
+      log.info('comment_dry_run', { ...fields, comment });
       return true;
     }
     if (commentId !== null) {
@@ -107,13 +116,13 @@ export async function handle(deps: Deps, bug: IssueRef, row: BugRow | null, sign
           throw refusedForTheBug(err) ? new WriteRefused(err as JiraError) : err;
         }
       }
-      deps.store.recordResult(bug, { ...record, status: 'commented', comment: comment, commentId });
-      log.info('comment_edited', { ...fields, commentId, comment: comment, changed: comment !== previousComment });
+      deps.store.recordResult(bug, { ...record, status: 'commented', comment, commentId });
+      log.info('comment_edited', { ...fields, commentId, comment, changed: comment !== previousComment });
       return true;
     }
     // A post cannot be repeated, so the row goes first: if the process dies between the post and
     // the record, the bug is `posting`, and its next check finds the comment in Jira and adopts it.
-    deps.store.recordResult(bug, { ...record, status: 'posting', comment: comment, commentId: null });
+    deps.store.recordResult(bug, { ...record, status: 'posting', comment, commentId: null });
     posting = true;
     let id: string;
     try {
@@ -130,7 +139,7 @@ export async function handle(deps: Deps, bug: IssueRef, row: BugRow | null, sign
       return false;
     }
     deps.store.markCommented(key, id);
-    log.info('comment_posted', { ...fields, commentId: id, comment: comment });
+    log.info('comment_posted', { ...fields, commentId: id, comment });
     return true;
   } catch (err) {
     // From `posting` on, only a human or the next check's lookup in Jira may change the row.

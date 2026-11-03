@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
+import { log } from '../log.ts';
 
 const git = promisify(execFile);
 /** A clone of the WebUI repository is about a gigabyte; a fetch is seconds. */
@@ -22,6 +23,8 @@ export class Clone {
   readonly dir: string;
   private readonly url: string;
   private fetchedAt = 0;
+  /** HEAD as last read; null before the first update. */
+  private commit: string | null = null;
 
   constructor(dir: string, url: string) {
     this.dir = dir;
@@ -45,8 +48,16 @@ export class Clone {
     }
     if (fetched) {
       this.fetchedAt = Date.now();
+      const before = this.commit === null ? null : await this.head();
       await this.run(['-C', this.dir, 'checkout', '--quiet', '--force', '--detach', 'origin/master'], 'checkout');
+      const after = await this.head();
+      if (before !== null && before !== after) log.info('webui_fetched', { from: before.slice(0, 12), to: after.slice(0, 12) });
+      this.commit = after;
     }
+    return this.commit ?? (this.commit = await this.head());
+  }
+
+  private async head(): Promise<string> {
     return (await this.run(['-C', this.dir, 'rev-parse', 'HEAD'], 'rev-parse')).trim();
   }
 

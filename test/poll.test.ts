@@ -16,6 +16,7 @@ const SERVICE = 'service-account';
 const needsHar = { outcome: 'not_understood', reasoning: 'the request that fails is not in the report', reason: '', comment: `[~accountid:${REPORTER}]\nPlease attach a HAR file of the page load.` };
 const harArrived = { ...needsHar, comment: `[~accountid:${REPORTER}]\n-Please attach a HAR file of the page load.-` };
 const understood = { outcome: 'understood', reasoning: 'found it', reason: '', comment: '' };
+const notWebui = { outcome: 'not_webui', reasoning: 'the UI shows what ConfD returns', reason: 'The counter comes from ConfD as shown.', comment: '' };
 const minutesAgo = (m: number): string => new Date(Date.now() - m * 60_000).toISOString();
 
 interface JiraComment {
@@ -115,11 +116,16 @@ describe('poll', () => {
     d.jira.changes[KEY] = { created: minutesAgo(31), updated: minutesAgo(10) };
     assert.deepEqual(await poll(d), summary({ pending: 1, checked: 1 }));
   });
-  it('a complete bug is recorded without a comment', async () => {
-    const d = deps(new FakeAgent(understood));
-    d.jira.inQuery = ['RPG-6192']; // HAR attached, every field fact passes
-    assert.deepEqual(await poll(d), summary({ pending: 1, checked: 1 }));
-    assert.equal(d.store.status('RPG-6192'), 'complete');
+  it('a bug understood, or not a WebUI bug, is recorded without a comment and never checked again', async () => {
+    const d = deps(new FakeAgent(understood, notWebui));
+    d.jira.inQuery = ['RPG-6192', 'KAZ-9025'];
+    assert.deepEqual(await poll(d), summary({ inQuery: 2, pending: 2, checked: 2 }));
+    assert.deepEqual(row(d, 'RPG-6192'), { status: 'understood', fingerprint: row(d, 'RPG-6192')?.fingerprint, comment: null, commentId: null, runs: 1 });
+    assert.equal(row(d, 'KAZ-9025')?.status, 'not_webui');
+    d.jira.attachHar('RPG-6192');
+    d.jira.attachHar('KAZ-9025');
+    assert.deepEqual(await poll(d), summary({ inQuery: 2 }), 'a change brings no re-check');
+    assert.deepEqual(d.jira.posted, []);
   });
   it('dry run: the comment is recorded, nothing is posted, an unchanged bug is not checked again', async () => {
     const d = deps(new FakeAgent(needsHar));
@@ -312,6 +318,16 @@ describe('a re-check', () => {
     d.jira.changes[KEY] = { ...d.jira.changes[KEY], updated: minutesAgo(16) };
     assert.equal((await poll(d)).checked, 1);
     assert.equal(row(d)?.comment, harArrived.comment);
+  });
+  it('a bug understood on a re-check is done: live, its comment stays in Jira as it is, and the row keeps it', async () => {
+    const d = deps(new FakeAgent(needsHar, understood), false);
+    await poll(d);
+    d.jira.attachHar(KEY);
+    assert.equal((await poll(d)).checked, 1);
+    assert.deepEqual(d.jira.edited, [], 'not edited');
+    assert.deepEqual({ ...row(d), fingerprint: undefined }, { status: 'understood', fingerprint: undefined, comment: needsHar.comment, commentId: '1', runs: 2 });
+    d.jira.changes[KEY] = { ...d.jira.changes[KEY], description: 'changed again' };
+    assert.deepEqual(await poll(d), summary({}), 'done');
   });
   it('a failed re-check leaves the comment and its fingerprint as they were and is tried again, up to 5 checks', async () => {
     const d = deps(new FakeAgent(needsHar, { ...needsHar, comment: '' }));

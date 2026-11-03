@@ -14,7 +14,8 @@ export type Result = 'comment' | 'no_comment' | 'error' | 'skipped';
 const RESULT_OF: Record<CheckStatus, Result> = {
   commented: 'comment',
   dry_run: 'comment',
-  complete: 'no_comment',
+  understood: 'no_comment',
+  not_webui: 'no_comment',
   posting: 'error',
   retry: 'error',
   failed: 'error',

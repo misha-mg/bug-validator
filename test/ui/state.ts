@@ -101,7 +101,7 @@ export function sampleState(): State {
   run(dbFile, 'KAZ-2', now, ['R4', 'R6'], null, `${MENTION}\nPlease add:\n- -Steps to reproduce-\n- Affects versions\n- HAR file`);
   insert(dbFile, {
     key: 'KAZ-3',
-    status: 'complete',
+    status: 'understood',
     attempts: 1,
     checked_at: stamp(daysAgo(3, now)),
     summary: 'Login page freezes',

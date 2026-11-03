@@ -10,7 +10,10 @@ export interface IssueRef {
 }
 
 /** A row's status: docs/architecture.md, Row statuses. */
-export type CheckStatus = 'skipped' | 'complete' | 'dry_run' | 'posting' | 'commented' | 'retry' | 'failed';
+export type CheckStatus = 'skipped' | 'understood' | 'not_webui' | 'dry_run' | 'posting' | 'commented' | 'retry' | 'failed';
+
+/** The check as it is now: 1 judged the report against the list, 2 reads the code (prd.md, 2026-11-03). */
+export const CHECK_VERSION = 2;
 
 /** A bug's row as the poll needs it to decide on a check. */
 export interface BugRow {
@@ -24,7 +27,7 @@ export interface BugRow {
 }
 
 export interface CheckResultRow {
-  status: Extract<CheckStatus, 'complete' | 'dry_run' | 'posting' | 'commented'>;
+  status: Extract<CheckStatus, 'understood' | 'not_webui' | 'dry_run' | 'posting' | 'commented'>;
   /** The bug's summary and reporter at the check, for the UI. */
   summary: string;
   reporter: string | null;
@@ -34,6 +37,9 @@ export interface CheckResultRow {
   comment: string | null;
   /** The comment in Jira, kept when a re-check edits it; null until a comment is posted. */
   commentId: string | null;
+  /** The WebUI commit the agent read, and the files it got of the attachments. */
+  webuiCommit: string;
+  files: unknown;
   agent?: RunFigures;
 }
 
@@ -101,7 +107,31 @@ const MIGRATIONS: ((db: DatabaseSync) => void)[] = [
   (db) => {
     db.exec('CREATE TABLE posts (key TEXT PRIMARY KEY, at TEXT NOT NULL, comment TEXT NOT NULL, error TEXT, tries INTEGER NOT NULL DEFAULT 0)');
   },
+  // 4: the check by code. `complete` is `understood`; a run records the WebUI commit, the files
+  // and the check's version; a verdict of the list's check is kept in the shape of the new one.
+  (db) => {
+    db.exec("UPDATE checks SET status = 'understood' WHERE status = 'complete'");
+    for (const column of ['webui_commit TEXT', 'files TEXT', 'version INTEGER NOT NULL DEFAULT 1']) db.exec(`ALTER TABLE runs ADD COLUMN ${column}`);
+    for (const table of ['checks', 'runs']) {
+      const rows = db.prepare(`SELECT rowid, verdict FROM ${table} WHERE verdict IS NOT NULL`).all() as { rowid: number; verdict: string }[];
+      const update = db.prepare(`UPDATE ${table} SET verdict = ? WHERE rowid = ?`);
+      for (const row of rows) update.run(JSON.stringify(listVerdict(row.verdict)), row.rowid);
+    }
+  },
 ];
+
+/** A verdict of the list's check (comment_needed, missing, related with reasons) in the new shape; a broken one is left as it is. */
+function listVerdict(text: string): unknown {
+  let old: { comment_needed?: boolean; comment?: string; related?: { key: string }[]; outcome?: string };
+  try {
+    old = JSON.parse(text) as typeof old;
+  } catch {
+    return text;
+  }
+  if (typeof old !== 'object' || old === null || 'outcome' in old) return old;
+  const comment = old.comment_needed && old.comment ? old.comment : '';
+  return { outcome: comment ? 'not_understood' : 'understood', reason: '', comment, related: (old.related ?? []).map((r) => r.key) };
+}
 
 const now = (): string => new Date().toISOString();
 
@@ -357,7 +387,7 @@ export class Store {
   recordResult(issue: IssueRef, r: CheckResultRow): void {
     this.transaction(() => {
       const at = now();
-      this.addRun(issue.key, at, { fingerprint: r.fingerprint, fieldChecks: r.fieldChecks, verdict: r.verdict, comment: r.comment, agent: r.agent });
+      this.addRun(issue.key, at, { fingerprint: r.fingerprint, fieldChecks: r.fieldChecks, verdict: r.verdict, comment: r.comment, webuiCommit: r.webuiCommit, files: r.files, agent: r.agent });
       this.db
         .prepare(
           `INSERT INTO checks (key, issue_id, status, attempts, checked_at, summary, reporter, fingerprint, base_checks, verdict, comment, comment_id, error)
@@ -374,7 +404,7 @@ export class Store {
    * A check recorded in the history only, the bug's row left as it is: a dry run's check of a bug
    * whose comment is (or may be) in Jira, so the record of that comment stays true to Jira.
    */
-  recordRun(key: string, r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'agent'>): void {
+  recordRun(key: string, r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'webuiCommit' | 'files' | 'agent'>): void {
     this.addRun(key, now(), r);
   }
 
@@ -480,13 +510,15 @@ export class Store {
   private addRun(
     key: string,
     at: string,
-    run: { fingerprint?: string; fieldChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string; agent?: RunFigures | undefined },
+    run: { fingerprint?: string; fieldChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string; webuiCommit?: string; files?: unknown; agent?: RunFigures | undefined },
   ): void {
     const json = (value: unknown): string | null => (value === undefined ? null : JSON.stringify(value));
     const a = run.agent;
     this.db
-      .prepare('INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(key, at, run.fingerprint ?? null, json(run.fieldChecks), json(run.verdict), run.comment ?? null, run.error ?? null, a?.model ?? null, a?.instructions ?? null, a?.costUsd ?? null, a?.turns ?? null, a?.durationMs ?? null);
+      .prepare(
+        'INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms, webui_commit, files, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(key, at, run.fingerprint ?? null, json(run.fieldChecks), json(run.verdict), run.comment ?? null, run.error ?? null, a?.model ?? null, a?.instructions ?? null, a?.costUsd ?? null, a?.turns ?? null, a?.durationMs ?? null, run.webuiCommit ?? null, json(run.files), CHECK_VERSION);
   }
 
   private transaction<T>(fn: () => T): T {

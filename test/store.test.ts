@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { after, describe, it } from 'node:test';
 import { type IssueRef, MAX_PENDING_REQUESTS, requestCheck, requestPost, Store } from '../src/db/store.ts';
@@ -17,7 +17,7 @@ after(() => {
 });
 
 const ref = (key: string): IssueRef => ({ id: `id-${key}`, key });
-const result = { status: 'complete' as const, summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1', fieldChecks: [], verdict: {}, comment: null, commentId: null };
+const result = { status: 'understood' as const, summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1', fieldChecks: [], verdict: {}, comment: null, commentId: null, webuiCommit: 'abc', files: [] };
 const statusOf = (s: Store, key: string) => s.rows([key]).get(key)?.status;
 
 describe('Store', () => {
@@ -127,7 +127,7 @@ describe('Store', () => {
     const s = new Store(':memory:');
     s.recordResult(ref('RPG-6223'), result);
     assert.deepEqual(s.track([{ id: 'id-RPG-6223', key: 'KAZ-9040' }]), [{ from: 'RPG-6223', to: 'KAZ-9040' }]);
-    assert.deepEqual(s.rows(['KAZ-9040']).get('KAZ-9040'), { status: 'complete', fingerprint: 'f1', comment: null, commentId: null, runs: 1 });
+    assert.deepEqual(s.rows(['KAZ-9040']).get('KAZ-9040'), { status: 'understood', fingerprint: 'f1', comment: null, commentId: null, runs: 1 });
     assert.deepEqual(s.track([{ id: 'id-RPG-6223', key: 'KAZ-9040' }]), [], 'nothing moves twice');
   });
   it('opens a database made before meta and the late columns, and treats its rows as the first start', () => {
@@ -151,12 +151,40 @@ describe('Store', () => {
     assert.deepEqual({ ...row }, { summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1' });
     const figures = db.prepare("SELECT model, instructions, cost_usd, turns, agent_ms FROM runs WHERE key = 'KAZ-5'").get();
     assert.deepEqual({ ...figures }, { model: 'haiku', instructions: 'abc', cost_usd: 0.002, turns: 3, agent_ms: 900 });
-    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 3);
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 4);
     db.close();
     new Store(file).close();
     assert.equal(readdirSync(dir).filter((f) => f.startsWith('old.sqlite.before-v')).length, 1, 'no copy when there is nothing to migrate');
     assert.equal(Store.recordedComment(file, 'RPG-2'), 'old comment');
     assert.equal(Store.recordedComment(file, 'KAZ-404'), null);
+  });
+  it('migrates a database of the list\'s check: complete is understood, old verdicts take the new shape, old runs are version 1', () => {
+    const file = join(tempDir(), 'v3.sqlite');
+    new Store(file).close();
+    const db = new DatabaseSync(file);
+    for (const column of ['webui_commit', 'files', 'version']) db.exec(`ALTER TABLE runs DROP COLUMN ${column}`);
+    db.exec('PRAGMA user_version = 3');
+    db.exec(`INSERT INTO checks (key, issue_id, status, checked_at, verdict, comment) VALUES
+      ('KAZ-1', 'i1', 'complete', 't', '{"comment_needed":false,"comment":"","missing":[],"related":[]}', NULL),
+      ('KAZ-2', 'i2', 'dry_run', 't', '{"comment_needed":true,"comment":"[~accountid:r]\\nPlease add:\\n- HAR file","missing":["R6"],"related":[{"key":"KAZ-1","reason":"same"}]}', 'c')`);
+    db.exec(`INSERT INTO runs (key, at, verdict, comment) VALUES ('KAZ-2', 't', '{"comment_needed":true,"comment":"c","missing":["R6"],"related":[]}', 'c'), ('KAZ-3', 't', 'broken', NULL)`);
+    db.close();
+    const s = new Store(file);
+    assert.equal(statusOf(s, 'KAZ-1'), 'understood');
+    const read = new DatabaseSync(file, { readOnly: true });
+    const verdicts = (read.prepare('SELECT verdict FROM checks ORDER BY key').all() as { verdict: string }[]).map((r) => JSON.parse(r.verdict));
+    assert.deepEqual(verdicts, [
+      { outcome: 'understood', reason: '', comment: '', related: [] },
+      { outcome: 'not_understood', reason: '', comment: '[~accountid:r]\nPlease add:\n- HAR file', related: ['KAZ-1'] },
+    ]);
+    const runs = read.prepare('SELECT key, verdict, version FROM runs ORDER BY key').all() as { key: string; verdict: string; version: number }[];
+    assert.deepEqual(runs.map((r) => [r.key, r.version]), [['KAZ-2', 1], ['KAZ-3', 1]]);
+    assert.equal(runs[1]!.verdict, '"broken"', 'a broken verdict is kept, as a string');
+    s.recordResult(ref('KAZ-4'), result);
+    assert.deepEqual({ ...read.prepare("SELECT version, webui_commit, files FROM runs WHERE key = 'KAZ-4'").get() }, { version: 2, webui_commit: 'abc', files: '[]' });
+    read.close();
+    s.close();
+    assert.ok(readdirSync(dirname(file)).some((f) => f.startsWith('v3.sqlite.before-v4-')), 'a copy before the migration');
   });
   it('backs up a database while it is open', () => {
     const dir = tempDir();

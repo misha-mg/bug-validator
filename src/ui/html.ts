@@ -428,7 +428,8 @@ export function resultLabel(b: BugView): string {
       return 'check failed';
     case 'posting':
       return 'interrupted while posting';
-    case 'complete':
+    case 'understood':
+    case 'not_webui':
       return 'no comment';
     case 'skipped':
       return 'skipped';
