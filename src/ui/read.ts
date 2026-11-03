@@ -1,39 +1,42 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { CheckRequest, CheckStatus } from '../db/store.ts';
-import type { RequirementId } from '../domain/bug.ts';
+import { OUTCOMES, type Outcome, type RunFile } from '../domain/bug.ts';
 import type { FieldCheck } from '../domain/checks.ts';
 
 /**
- * What a row's status means to a reader. A dry-run comment counts as a comment: it was written,
- * only not posted. A `posting` row was interrupted between the post and its record: whether the
- * comment reached Jira is for a human to check, so it needs attention.
+ * What a row's status means to a reader: the outcome of its last finished check, or that it has
+ * none. A dry-run comment counts as not understood: the comment was written, only not posted. A
+ * `posting` row was interrupted between the post and its record: whether the comment reached
+ * Jira is for a human to check, so it needs attention.
  */
-export type Result = 'comment' | 'no_comment' | 'error' | 'skipped';
+export type Result = Outcome | 'error' | 'skipped';
 
 const RESULT_OF: Record<CheckStatus, Result> = {
-  commented: 'comment',
-  dry_run: 'comment',
-  understood: 'no_comment',
-  not_webui: 'no_comment',
+  commented: 'not_understood',
+  dry_run: 'not_understood',
+  understood: 'understood',
+  not_webui: 'not_webui',
   posting: 'error',
   retry: 'error',
   failed: 'error',
   skipped: 'skipped',
 };
 
-/** One check of a bug: what it found missing, or why it failed. */
+/** One check of a bug: its outcome and what it found, or why it failed. */
 export interface Run {
   at: Date;
+  /** Null when the check failed. */
+  outcome: Outcome | null;
+  reason: string;
   fieldChecks: FieldCheck[];
-  missing: RequirementId[];
   comment: string | null;
   error: string | null;
-}
-
-export interface Related {
-  key: string;
-  reason: string;
+  webuiCommit: string | null;
+  files: RunFile[];
+  /** 1: the check against the list (before 2026-11-03); 2: the check by code. */
+  version: number;
+  costUsd: number | null;
 }
 
 /** A bug's row (`checks`) with its history (`runs`), as the pages show it. */
@@ -49,9 +52,10 @@ export interface BugView {
   summary: string | null;
   reporter: string | null;
   fieldChecks: FieldCheck[];
-  /** The agent's list of failed requirements, R1–R7. */
-  missing: RequirementId[];
-  related: Related[];
+  /** Why the bug is not a WebUI bug, when it is not. */
+  reason: string;
+  /** The bugs the comment names. */
+  related: string[];
   comment: string | null;
   commentId: string | null;
   error: string | null;
@@ -61,11 +65,11 @@ export interface BugView {
 
 export const result = (bug: BugView): Result => RESULT_OF[bug.status] ?? 'error';
 
-/** Checked to the end, with a comment or without one. */
-export const checked = (bug: BugView): boolean => result(bug) === 'comment' || result(bug) === 'no_comment';
+/** Checked to the end, whatever the outcome. */
+export const checked = (bug: BugView): boolean => (OUTCOMES as readonly string[]).includes(result(bug));
 
-/** What the first finished check found missing: the report as it arrived, before any re-check. */
-export const firstMissing = (bug: BugView): RequirementId[] => bug.history.find((run) => run.error === null)?.missing ?? bug.missing;
+/** The first check that finished: the report as it arrived, before any re-check. */
+export const firstRun = (bug: BugView): Run | null => bug.history.find((run) => run.error === null) ?? null;
 
 /**
  * Every row, the latest check first; none before the service has made its database. The file is
@@ -130,6 +134,16 @@ export function readPosts(dbFile: string): Request[] {
   });
 }
 
+/** The verdict as the service records it (domain/verdict.ts); a broken or missing one reads as nothing. */
+interface StoredVerdict {
+  outcome?: Outcome;
+  reason?: string;
+  related?: string[];
+}
+
+const verdictOf = (value: unknown): StoredVerdict => (json(value) ?? {}) as StoredVerdict;
+const outcomeOf = (v: StoredVerdict): Outcome | null => (v.outcome && (OUTCOMES as readonly string[]).includes(v.outcome) ? v.outcome : null);
+
 /** The runs of every bug, or of one, oldest first; none before the service has migrated an old database. */
 function readRuns(db: DatabaseSync, key?: string): Map<string, Run[]> {
   const runs = new Map<string, Run[]>();
@@ -138,8 +152,20 @@ function readRuns(db: DatabaseSync, key?: string): Map<string, Run[]> {
     ? db.prepare('SELECT * FROM runs WHERE key = ? ORDER BY at, rowid').all(key)
     : db.prepare('SELECT * FROM runs ORDER BY at, rowid').all();
   for (const row of rows as Record<string, unknown>[]) {
-    const verdict = json(row.verdict) as { missing?: RequirementId[] } | null;
-    const run: Run = { at: time(row.at), fieldChecks: (json(row.base_checks) as FieldCheck[] | null) ?? [], missing: verdict?.missing ?? [], comment: text(row.comment), error: text(row.error) };
+    const verdict = verdictOf(row.verdict);
+    const error = text(row.error);
+    const run: Run = {
+      at: time(row.at),
+      outcome: error === null ? outcomeOf(verdict) : null,
+      reason: typeof verdict.reason === 'string' ? verdict.reason : '',
+      fieldChecks: (json(row.base_checks) as FieldCheck[] | null) ?? [],
+      comment: text(row.comment),
+      error,
+      webuiCommit: text(row.webui_commit),
+      files: (json(row.files) as RunFile[] | null) ?? [],
+      version: typeof row.version === 'number' ? row.version : 1,
+      costUsd: typeof row.cost_usd === 'number' ? row.cost_usd : null,
+    };
     const list = runs.get(row.key as string);
     if (list) list.push(run);
     else runs.set(row.key as string, [run]);
@@ -148,7 +174,7 @@ function readRuns(db: DatabaseSync, key?: string): Map<string, Run[]> {
 }
 
 function toBug(row: Record<string, unknown>, history: Run[]): BugView {
-  const verdict = (json(row.verdict) ?? {}) as { missing?: RequirementId[]; related?: Related[] };
+  const verdict = verdictOf(row.verdict);
   const checkedAt = time(row.checked_at);
   return {
     key: row.key as string,
@@ -159,8 +185,8 @@ function toBug(row: Record<string, unknown>, history: Run[]): BugView {
     summary: text(row.summary),
     reporter: text(row.reporter),
     fieldChecks: (json(row.base_checks) as FieldCheck[] | null) ?? [],
-    missing: verdict.missing ?? [],
-    related: verdict.related ?? [],
+    reason: typeof verdict.reason === 'string' ? verdict.reason : '',
+    related: Array.isArray(verdict.related) ? verdict.related.filter((k): k is string => typeof k === 'string') : [],
     comment: text(row.comment),
     commentId: text(row.comment_id),
     error: text(row.error),

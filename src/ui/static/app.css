@@ -26,16 +26,18 @@
 /* The chart and the gaps: bars in the three result colours, the gap bar in slate. */
 .chart { margin: 0; }
 svg.days { display: block; }
-svg.days rect.no_comment { fill: var(--moss); }
-svg.days rect.comment { fill: var(--slate); }
+svg.days rect.understood { fill: var(--moss); }
+svg.days rect.not_understood { fill: var(--slate); }
+svg.days rect.not_webui { fill: var(--muted); }
 svg.days rect.error { fill: var(--rust); }
 svg.days text { font: 9px var(--sans); text-anchor: middle; fill: var(--muted); }
 svg.days text.count { fill: var(--text); }
 svg.days text.today { fill: var(--text); font-weight: 600; }
 .legend { font-size: 12px; color: var(--muted); margin-top: 10px; }
 .sw { display: inline-block; width: 0.7em; height: 0.7em; margin: 0 0.3em 0 0.8em; vertical-align: -1px; }
-.sw.no_comment { background: var(--moss); }
-.sw.comment { background: var(--slate); }
+.sw.understood { background: var(--moss); }
+.sw.not_understood { background: var(--slate); }
+.sw.not_webui { background: var(--muted); }
 .sw.error { background: var(--rust); }
 .problems td.bar { width: 35%; }
 .problems td.bar div { height: 6px; margin-top: 6px; background: var(--slate); opacity: 0.85; }

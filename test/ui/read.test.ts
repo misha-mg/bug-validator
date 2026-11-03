@@ -3,29 +3,32 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
-import { checked, firstMissing, readBug, readBugs, readRequests, result } from '../../src/ui/read.ts';
+import { checked, firstRun, readBug, readBugs, readRequests, result } from '../../src/ui/read.ts';
 import { emptyState, sampleState } from './state.ts';
 
 describe('readBugs', () => {
   it('reads every row, the latest check first', () => {
     const bugs = readBugs(sampleState().dbFile);
-    assert.deepEqual(bugs.map((b) => b.key), ['KAZ-2', 'RPG-4', 'KAZ-3', 'KAZ-5', 'KAZ-1']);
+    assert.deepEqual(bugs.map((b) => b.key), ['KAZ-2', 'RPG-4', 'KAZ-3', 'RPG-6', 'KAZ-5', 'KAZ-1']);
     const [kaz2] = bugs;
     assert.equal(kaz2?.summary, 'Ports table is empty after clearing the filter');
     assert.equal(kaz2?.reporter, 'A Tester');
-    assert.deepEqual(kaz2?.missing, ['R4', 'R6']);
-    assert.deepEqual(kaz2?.related, [{ key: 'KAZ-1', reason: 'the same empty table' }]);
+    assert.deepEqual(kaz2?.related, ['KAZ-1']);
     assert.equal(kaz2?.fieldChecks.find((c) => c.id === 'R6')?.passed, false);
-    assert.deepEqual(bugs.map(result), ['comment', 'error', 'no_comment', 'comment', 'skipped']);
-    assert.deepEqual(bugs.map(checked), [true, false, true, true, false]);
+    assert.equal(bugs[3]?.reason, 'The UI shows the counter ConfD returns.');
+    assert.deepEqual(bugs.map(result), ['not_understood', 'error', 'understood', 'not_webui', 'not_understood', 'skipped']);
+    assert.deepEqual(bugs.map(checked), [true, false, true, true, true, false]);
   });
-  it('reads the history and the first verdict', () => {
+  it('reads the history: each check\'s outcome or error, what it read, and the first finished one', () => {
     const bug = readBug(sampleState().dbFile, 'KAZ-2');
     assert.ok(bug);
-    assert.deepEqual(bug.history.map((r) => r.missing), [['R1', 'R4', 'R6'], [], ['R4', 'R6']]);
-    assert.equal(bug.history[1]?.error, 'VerdictError: a re-check must keep the comment');
+    assert.deepEqual(bug.history.map((r) => r.outcome), ['not_understood', null, 'not_understood']);
+    assert.deepEqual(bug.history.map((r) => r.fieldChecks.filter((c) => !c.passed).map((c) => c.id)), [['R1', 'R4', 'R6'], [], ['R4', 'R6']]);
+    assert.equal(bug.history[1]?.error, 'VerdictError: not_understood without a comment');
+    assert.deepEqual([bug.history[0]?.webuiCommit, bug.history[0]?.version, bug.history[0]?.costUsd, bug.history[0]?.files.map((f) => f.kind)], ['abc123def456', 2, 0.03, ['image']]);
     assert.ok(bug.history[0]!.at < bug.history[2]!.at);
-    assert.deepEqual(firstMissing(bug), ['R1', 'R4', 'R6']);
+    assert.equal(firstRun(bug), bug.history[0]);
+    assert.equal(readBug(sampleState().dbFile, 'KAZ-5')?.history[0]?.version, 1, 'a check by the list');
     assert.equal(readBug(sampleState().dbFile, 'KAZ-99'), null);
   });
   it('reads a database made before summary, reporter and runs existed, and rows without a time', () => {
@@ -37,7 +40,8 @@ describe('readBugs', () => {
     old.close();
     const bugs = readBugs(file);
     assert.deepEqual(bugs.map((b) => [b.key, b.summary, b.history.length, b.checkedAt.getTime()]), [['KAZ-1', null, 0, Date.parse('2026-10-17T12:50:50.282Z')], ['KAZ-2', null, 0, 0]]);
-    assert.deepEqual(firstMissing(bugs[0]!), []);
+    assert.equal(firstRun(bugs[0]!), null);
+    assert.deepEqual([bugs[0]!.related, bugs[0]!.reason], [[], '']);
   });
   it('a file without the table yet is no bugs; one that is not a database is an error, not an empty state', () => {
     const dir = emptyState().dir;

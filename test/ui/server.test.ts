@@ -31,7 +31,7 @@ describe('server', () => {
     assert.equal(home.type, 'text/html; charset=utf-8');
     assert.match(home.body, /<title>Bug validator<\/title>/);
     assert.match(home.body, /running/);
-    const bugs = await get('/bugs?result=comment');
+    const bugs = await get('/bugs?result=not_understood');
     assert.equal(bugs.status, 200);
     assert.match(bugs.body, /KAZ-2/);
     assert.doesNotMatch(bugs.body, /RPG-4/);

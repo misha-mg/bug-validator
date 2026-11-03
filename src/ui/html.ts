@@ -1,11 +1,11 @@
 /** The pages, as pure functions of what was read: a model in, an HTML string out. */
 
 import { MAX_ATTEMPTS } from '../config.ts';
-import { REQUIREMENT_IDS, REQUIREMENTS } from '../domain/bug.ts';
+import { OUTCOMES, REQUIREMENTS, type Outcome } from '../domain/bug.ts';
 import { ISSUE_KEY } from '../domain/key.ts';
-import { type BugView, type Request, type Result, checked, result } from './read.ts';
+import { type BugView, type Request, type Result, type Run, checked, result } from './read.ts';
 import { type LogEvent, type ServiceStatus, liveness } from './service-log.ts';
-import { type Day, type Share, checksPerDay, fieldChecksPassedAfterComment, needsAttention, periodStats, problems, startOfDay } from './stats.ts';
+import { type Day, type Share, checksPerDay, fieldChecksPassedAfterComment, gaps, needsAttention, periodStats, startOfDay } from './stats.ts';
 
 export const CHART_DAYS = 30;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -79,7 +79,7 @@ export interface HomeModel {
 }
 
 export function homePage(m: HomeModel, ctx: PageContext): string {
-  const found = problems(m.bugs);
+  const found = gaps(m.bugs);
   const total = found[0]?.share.total ?? 0;
   const attention = needsAttention(m.bugs);
   const main = `
@@ -88,11 +88,11 @@ export function homePage(m: HomeModel, ctx: PageContext): string {
 <section class="frame service">${frameHead('Service')}${kv(serviceRows(m, ctx.now))}</section>
 <section class="frame statistics">${frameHead('Bugs checked per day', `${CHART_DAYS} days`)}
 <figure class="chart">${dayChart(checksPerDay(m.bugs, ctx.now, CHART_DAYS))}
-<div class="legend"><span class="sw no_comment"></span>without comment <span class="sw comment"></span>with comment <span class="sw error"></span>error</div></figure></section>
-<section class="frame problems">${frameHead('Most common gaps', total ? `of ${bugsText(total)} checked · all time` : '')}
-${total ? problemsTable(found) : '<p class="muted">No bug has been checked yet.</p>'}</section>
-<section class="frame attention">${frameHead('Needs attention', 'failed checks')}
-${attention.length ? attentionTable(attention, ctx) : '<p class="muted">No check has failed.</p>'}</section>
+<div class="legend">${OUTCOMES.map((o) => `<span class="sw ${o}"></span>${OUTCOME_TEXT[o]} `).join('')}<span class="sw error"></span>error</div></figure></section>
+<section class="frame problems">${frameHead('Field checks failed most often', total ? `first checks of ${bugsText(total)} · all time` : '')}
+${total ? gapsTable(found) : '<p class="muted">No bug has been checked yet.</p>'}</section>
+<section class="frame attention">${frameHead('Needs attention', 'failed checks, bugs not the WebUI\'s')}
+${attention.length ? attentionTable(attention, ctx) : '<p class="muted">Nothing to look at.</p>'}</section>
 <section class="frame activity">${frameHead('Activity', 'the latest events of the log')}
 ${m.recent.length ? activityTable(m.recent, ctx) : '<p class="muted">Nothing logged yet.</p>'}</section>
 </div>`;
@@ -122,7 +122,8 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
     if (s.inQuery !== null && !s.pollError) rows.push(['In Created', `${s.inQuery}${s.waiting ? ` · ${s.waiting} waiting` : ''}`]);
     if (s.started) rows.push(['Started', fmtTime(s.started)]);
     if (s.model) rows.push(['Model', esc(s.model)]);
-    if (s.claudeVersion || s.claudeAuth) rows.push(['Claude', esc([s.claudeVersion, s.claudeAuth].filter(Boolean).join(' · '))]);
+    if (s.claudeVersion) rows.push(['Claude', esc(s.claudeVersion)]);
+    if (s.webuiCommit) rows.push(['WebUI', `<code>${esc(s.webuiCommit.slice(0, 12))}</code> · master`]);
     if (s.pollIntervalMs) rows.push(['Poll every', span(s.pollIntervalMs)]);
     if (s.checking) rows.push(['Checking', `${bugLink(s.checking.key)} · ${span(now.getTime() - s.checking.since.getTime())}`]);
   }
@@ -139,7 +140,7 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
   return rows;
 }
 
-/** Bugs checked today, in 7 days and all time, with the share that got a comment; and what arrived after a comment. */
+/** Bugs checked today, in 7 days and all time, by outcome and with the agent's cost; and what arrived after a comment. */
 function tiles(bugs: BugView[], now: Date): string {
   const periods = [
     ['Checked today', periodStats(bugs, startOfDay(now))],
@@ -152,13 +153,15 @@ function tiles(bugs: BugView[], now: Date): string {
     periods
       .map(([label, s]) => {
         const failed = s.errors ? ` · <span class="err">${s.errors} failed</span>` : '';
-        return tile(label, String(s.checked), s.checked ? `${shareText(s.withComment)} with comment${failed}` : `no checks${failed}`);
+        const cost = s.costUsd ? ` · $${s.costUsd.toFixed(2)}` : '';
+        const outcomes = OUTCOMES.filter((o) => s.byOutcome[o].count).map((o) => `${shareText(s.byOutcome[o])} ${OUTCOME_TEXT[o]}`).join(' · ');
+        return tile(label, String(s.checked), s.checked ? `${outcomes}${failed}${cost}` : `no checks${failed}`);
       })
       .join('') + tile('Field checks passed after the comment', added.total ? `${added.count} <small>of ${added.total}</small>` : '–', 're-checked bugs, all time')
   );
 }
 
-function problemsTable(found: ReturnType<typeof problems>): string {
+function gapsTable(found: ReturnType<typeof gaps>): string {
   const top = Math.max(...found.map((p) => p.share.count));
   return `<table class="problems"><tbody>${found
     .map((p) => {
@@ -170,10 +173,12 @@ function problemsTable(found: ReturnType<typeof problems>): string {
 }
 
 function attentionTable(bugs: BugView[], ctx: PageContext): string {
-  return `<table class="list"><thead><tr><th>Bug</th><th>Last try</th><th>Attempts</th><th>Error</th></tr></thead><tbody>${bugs
+  return `<table class="list"><thead><tr><th>Bug</th><th>Last check</th><th>What</th><th>Why</th></tr></thead><tbody>${bugs
     .map((b) => {
+      // A bug not the WebUI's waits for a person's decision; its reason is the agent's.
+      if (result(b) === 'not_webui' && b.error === null) return `<tr><td>${bugLink(b.key)}</td><td class="time">${fmtTime(b.checkedAt)}</td><td>not a WebUI bug</td><td>${esc(b.reason)}</td></tr>`;
       // A failed re-check leaves the bug's result as it was: its comment stands, only the error is new.
-      const attempts = result(b) !== 'error' ? 're-check' : b.status === 'posting' ? '' : `${b.attempts} of ${MAX_ATTEMPTS}${b.status === 'failed' ? ', gave up' : ''}`;
+      const attempts = result(b) !== 'error' ? 're-check failed' : b.status === 'posting' ? 'post' : `${b.attempts} of ${MAX_ATTEMPTS} failed${b.status === 'failed' ? ', gave up' : ''}`;
       const error = b.status === 'posting' ? `interrupted while posting · the next check looks in Jira${b.error ? ` · ${b.error}` : ''}` : (b.error ?? '');
       return `<tr><td>${bugLink(b.key)}</td><td class="time">${fmtTime(b.checkedAt)}</td><td>${attempts}</td><td class="err">${esc(error)}</td></tr>`;
     })
@@ -194,7 +199,6 @@ function activityTable(recent: LogEvent[], ctx: PageContext): string {
 /** One line per event, escaped. */
 export function eventText(e: LogEvent): string {
   const f = e.fields;
-  const missing = Array.isArray(f.missing) ? (f.missing.length ? ` · missing ${f.missing.join(' ')}` : ' · nothing missing') : '';
   const re = f.recheck === true;
   const by = f.requested === true ? 'requested · ' : '';
   switch (e.event) {
@@ -218,16 +222,20 @@ export function eventText(e: LogEvent): string {
       return esc(`found the service's comment in Jira (${f.commentId}); keeps it, posts none`);
     case 'key_changed':
       return esc(`moved: ${f.from} → ${f.to}`);
-    case 'bug_complete':
-      return esc(`${by}${re ? 're-check: ' : ''}complete, no comment${missing}`);
+    case 'webui_fetched':
+      return esc(`WebUI master moved: ${f.from} → ${f.to}`);
+    case 'bug_understood':
+      return esc(`${by}${re ? 're-check: ' : ''}understood, no comment${f.kept === true ? ', the posted one kept' : ''}`);
+    case 'bug_not_webui':
+      return esc(`${by}${re ? 're-check: ' : ''}not a WebUI bug${typeof f.reason === 'string' && f.reason ? ` · ${f.reason}` : ''}`);
     case 'comment_dry_run':
-      return esc(`${by}${re ? 're-check: ' : ''}comment · dry run${f.kept === true ? ', the posted one kept' : ''}${missing}`);
+      return esc(`${by}${re ? 're-check: ' : ''}not understood · comment · dry run${f.kept === true ? ', the posted one kept' : ''}`);
     case 'comment_posted':
-      return esc(f.byHand === true ? 'comment posted by hand' : `${by}comment posted${missing}`);
+      return esc(f.byHand === true ? 'comment posted by hand' : `${by}not understood · comment posted`);
     case 'post_failed':
       return `post failed${f.gaveUp === true ? ', gave up' : ''} · ${errorText(f.error)}`;
     case 'comment_edited':
-      return esc(`${by}${f.changed === false ? 're-check: comment unchanged' : 'comment edited'}${missing}`);
+      return esc(`${by}${f.changed === false ? 're-check: comment unchanged' : 'not understood · comment edited'}`);
     case 'check_failed':
       return `${by}${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${esc(f.attempts)}` : ''} · ${errorText(f.error)}`;
     case 'mentions_stripped':
@@ -241,8 +249,11 @@ export function eventText(e: LogEvent): string {
 
 // ---- Bugs
 
+/** An outcome in words, as the pages name it. */
+export const OUTCOME_TEXT: Record<Outcome, string> = { understood: 'understood', not_understood: 'not understood', not_webui: 'not a WebUI bug' };
+
 export type Filter = 'all' | Result;
-export const FILTERS: Record<Filter, string> = { all: 'all', comment: 'with comment', no_comment: 'without comment', error: 'error', skipped: 'skipped' };
+export const FILTERS: Record<Filter, string> = { all: 'all', ...OUTCOME_TEXT, error: 'error', skipped: 'skipped' };
 
 export interface BugsQuery {
   result: Filter;
@@ -274,7 +285,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
       day = d;
       rows += `<tr class="day"><th class="label" colspan="7">${d}</th></tr>`;
     }
-    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${chips_(b.missing)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`;
+    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${absentChips(b)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`;
   }
   const main = `
 <div class="page-head"><h1>All bugs${narrowed.map((n) => ` · ${esc(n)}`).join('')}</h1><span class="stats">${bugsText(bugs.length)}</span></div>
@@ -283,11 +294,16 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
 <input type="hidden" name="result" value="${query.result}">
 <input class="field" type="search" name="q" value="${esc(query.q)}" placeholder="Search a bug, its summary or reporter">
 </form>
-${bugs.length ? `<table class="list bugs"><thead><tr><th>Bug</th><th>Summary</th><th>Checked</th><th>Result</th><th>Missing</th><th class="num">Related</th><th class="num">Checks</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No bug matches.</p>'}`;
+${bugs.length ? `<table class="list bugs"><thead><tr><th>Bug</th><th>Summary</th><th>Checked</th><th>Result</th><th>Absent</th><th class="num">Related</th><th class="num">Checks</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No bug matches.</p>'}`;
   return layout(`Bugs · Bug validator`, main, ctx, 'bugs');
 }
 
-const chips_ = (missing: string[]): string => missing.map((id) => `<span class="req" title="${esc(REQUIREMENTS[id as keyof typeof REQUIREMENTS] ?? '')}">${esc(id)}</span>`).join(' ');
+/** The field checks the first check found failed: what the report lacked as it arrived. */
+const absentChips = (b: BugView): string =>
+  (b.history.find((run) => run.error === null)?.fieldChecks ?? b.fieldChecks)
+    .filter((c) => !c.passed)
+    .map((c) => `<span class="req" title="${esc(REQUIREMENTS[c.id])}">${esc(c.id)}</span>`)
+    .join(' ');
 
 // ---- One bug
 
@@ -313,6 +329,7 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
   if (b?.reporter) rows.push(['Reporter', esc(b.reporter)]);
   if (b) {
     rows.push(['Result', resultPill(b)]);
+    if (result(b) === 'not_webui') rows.push(['Why', esc(b.reason)]);
     rows.push(['Checked', fmtTime(b.checkedAt)]);
     if (b.history.length > 1) rows.push(['Checks', `${b.history.length} · first ${fmtTime(b.history[0]!.at)}`]);
     if (b.error) rows.push(['Error', `<span class="err">${esc(b.error)}</span>`]);
@@ -331,7 +348,7 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
   const main = `
 ${head}
 <div class="columns">
-<section class="frame">${frameHead('Requirements')}${requirements(b, ctx)}</section>
+<section class="frame">${frameHead('Checks')}${checks(b, ctx)}</section>
 <section class="frame comment">${frameHead('Comment', subtitle)}${commentBlock(b)}</section>
 </div>`;
   return layout(`${key} · Bug validator`, main, ctx, 'bugs');
@@ -352,44 +369,47 @@ ${frameHead(`<span id="confirm-post-title">Post this comment to ${esc(b.key)}?</
 </dialog>`;
 }
 
-function requirements(b: BugView, ctx: PageContext): string {
+/** The field checks, the related bugs, and every check of the bug with what it read and found. */
+function checks(b: BugView, ctx: PageContext): string {
   if (!checked(b) && b.status !== 'posting') return `<p class="muted">${result(b) === 'error' ? 'The check did not finish.' : 'Never checked.'}</p>`;
-  const base = new Map(b.fieldChecks.map((c) => [c.id, c]));
-  // The agent's verdict decides what the comment asks for; the base checks are the facts it was
-  // given, and it may overrule them (steps written without a "Steps" heading are still steps).
-  let html = `<table class="requirements"><thead><tr><th></th><th></th><th>Agent</th><th>Base check</th></tr></thead><tbody>${REQUIREMENT_IDS.map((id) => {
-    const verdict = b.missing.includes(id) ? '<span class="missing">missing</span>' : '<span class="ok">ok</span>';
-    const fact = base.get(id);
-    const detail = fact ? `<span class="${fact.passed ? 'ok' : 'err'}">${fact.passed ? '✓' : '✗'}</span> <span class="muted">${esc(fact.detail)}</span>` : '';
-    return `<tr><th>${id}</th><td>${esc(REQUIREMENTS[id])}</td><td>${verdict}</td><td>${detail}</td></tr>`;
-  }).join('')}</tbody></table>`;
-  if (b.related.length) {
-    html += `<h3>Related bugs</h3><table class="related"><tbody>${b.related.map((r) => `<tr><th>${jiraLink(r.key, ctx, esc(r.key))}</th><td class="muted">${esc(r.reason)}</td></tr>`).join('')}</tbody></table>`;
-  }
-  if (b.history.length > 1) {
-    // Every check of the bug, oldest first: what each found missing, so what the reporter added shows.
-    html += `<h3>Checks</h3><table class="history"><tbody>${b.history
-      .map((run, i) => {
-        const found = run.error ? `<span class="err">${esc(run.error)}</span>` : `<span class="muted">${run.missing.length ? `missing ${esc(run.missing.join(' '))}` : 'nothing missing'}</span>`;
-        const comment = run.comment ? `<details><summary>comment</summary><div class="jira-comment">${commentHtml(run.comment, b.reporter)}</div></details>` : '';
-        return `<tr><td class="time">${fmtTime(run.at)}</td><td class="muted">${i === 0 ? 'first check' : 're-check'}</td><td>${found}${comment}</td></tr>`;
-      })
-      .join('')}</tbody></table>`;
+  // The field checks are hints the agent got, not the verdict: steps without a heading are still steps.
+  let html = `<h3>Field checks</h3><table class="requirements"><tbody>${b.fieldChecks
+    .map((c) => `<tr><th>${c.id}</th><td>${esc(REQUIREMENTS[c.id])}</td><td><span class="${c.passed ? 'ok' : 'err'}">${c.passed ? '✓' : '✗'}</span> <span class="muted">${esc(c.detail)}</span></td></tr>`)
+    .join('')}</tbody></table>`;
+  if (b.related.length) html += `<h3>Related bugs</h3><p>${b.related.map((k) => jiraLink(k, ctx, esc(k))).join(', ')}</p>`;
+  if (b.history.length) {
+    // Every check of the bug, oldest first: its outcome, what the agent read, and the comment it wrote.
+    html += `<h3>History</h3><table class="history"><tbody>${b.history.map((run, i) => `<tr><td class="time">${fmtTime(run.at)}</td><td class="muted">${i === 0 ? 'first check' : 're-check'}</td><td>${runText(run, b.reporter)}</td></tr>`).join('')}</tbody></table>`;
   }
   return html;
+}
+
+/** One check of the history: its outcome or error, the commit and the files it read, its comment. */
+function runText(run: Run, reporter: string | null): string {
+  if (run.error) return `<span class="err">${esc(run.error)}</span>`;
+  const parts = [run.outcome ? OUTCOME_TEXT[run.outcome] : 'no outcome'];
+  if (run.version < 2) parts.push('list check');
+  if (run.reason) parts.push(esc(run.reason));
+  if (run.webuiCommit) parts.push(`<code>${esc(run.webuiCommit.slice(0, 12))}</code>`);
+  if (run.files.length) parts.push(run.files.map((f) => `${esc(f.filename)} (${f.kind === 'unread' ? `not read: ${esc(f.note)}` : esc(f.kind)})`).join(', '));
+  if (run.costUsd) parts.push(`$${run.costUsd.toFixed(2)}`);
+  const comment = run.comment ? `<details><summary>comment</summary><div class="jira-comment">${commentHtml(run.comment, reporter)}</div></details>` : '';
+  return `<span class="muted">${parts.join(' · ')}</span>${comment}`;
 }
 
 function commentBlock(b: BugView): string {
   if (result(b) === 'skipped') return `<p class="muted">${SKIPPED}</p>`;
   if (b.status === 'posting') return `<p class="warn">The post of this comment got no answer. Its next check of the bug (live, at the next poll) or a post asked again looks in Jira first: a comment found there is kept, never posted twice.</p><div class="jira-comment">${commentHtml(b.comment ?? '', b.reporter)}</div>`;
   if (result(b) === 'error') return '<p class="muted">No comment: the check did not finish.</p>';
-  if (!b.comment) return '<p class="muted">Nothing is missing, so the bug got no comment.</p>';
+  if (result(b) === 'understood') return `<p class="muted">The agent found the cause and understood the report: no comment.</p>${b.comment ? `<div class="jira-comment">${commentHtml(b.comment, b.reporter)}</div>` : ''}`;
+  if (result(b) === 'not_webui') return `<p class="muted">Not a WebUI bug, so no comment; a person decides where it goes.</p>${b.comment ? `<div class="jira-comment">${commentHtml(b.comment, b.reporter)}</div>` : ''}`;
+  if (!b.comment) return '<p class="muted">No comment recorded.</p>';
   return `<div class="jira-comment">${commentHtml(b.comment, b.reporter)}</div>`;
 }
 
 /**
- * The comment as Jira shows it: the mention by name, `- item` lines as a list, `- -item-` struck
- * through. Only what the service produces (verdict.ts), nothing more of Jira's markup.
+ * The comment as Jira shows it: the mention by name, `- item` lines as a list, a line or an item
+ * `-struck-` struck through. Nothing more of Jira's markup: the comments are short questions.
  */
 export function commentHtml(comment: string, reporter: string | null): string {
   const mention = `@${reporter ?? 'reporter'}`;
@@ -408,7 +428,9 @@ export function commentHtml(comment: string, reporter: string | null): string {
       continue;
     }
     flush();
-    if (line.trim()) out.push(`<p>${esc(line)}</p>`);
+    const struck = /^-(.+)-$/.exec(line.trim());
+    if (struck) out.push(`<p><s>${esc(struck[1]!.trim())}</s></p>`);
+    else if (line.trim()) out.push(`<p>${esc(line)}</p>`);
   }
   flush();
   return out.join('');
@@ -429,8 +451,9 @@ export function resultLabel(b: BugView): string {
     case 'posting':
       return 'interrupted while posting';
     case 'understood':
+      return 'understood';
     case 'not_webui':
-      return 'no comment';
+      return 'not a WebUI bug';
     case 'skipped':
       return 'skipped';
     default:
@@ -443,8 +466,8 @@ const frameHead = (title: string, note = ''): string => `<div class="frame-head"
 
 const modePill = (dryRun: boolean | null): string => (dryRun === null ? '' : dryRun ? '<span class="pill">dry run</span>' : '<span class="pill ok">live</span>');
 
-/** A bug's result as a pill: slate for a comment, moss for none needed, rust for an error. */
-const TONE: Record<Result, string> = { comment: ' slate', no_comment: ' ok', error: ' bad', skipped: '' };
+/** A bug's result as a pill: moss for understood, slate for a comment, plain for not the WebUI's, rust for an error. */
+const TONE: Record<Result, string> = { understood: ' ok', not_understood: ' slate', not_webui: ' strong', error: ' bad', skipped: '' };
 const resultPill = (b: BugView): string => `<span class="pill${TONE[result(b)]}">${esc(resultLabel(b))}</span>`;
 
 const kv = (rows: [string, string][]): string => `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
@@ -461,19 +484,21 @@ export function dayChart(days: Day[]): string {
   const col = 24;
   const bar = 16;
   const area = 100;
-  const top = Math.max(0, ...days.map((d) => d.counts.no_comment + d.counts.comment + d.counts.error));
+  const stacked = ['understood', 'not_understood', 'not_webui', 'error'] as const;
+  const sum = (d: Day): number => stacked.reduce((n, kind) => n + d.counts[kind], 0);
+  const top = Math.max(0, ...days.map(sum));
   const parts: string[] = [];
   days.forEach((d, i) => {
     const x = i * col + (col - bar) / 2;
     let y = 14 + area;
-    for (const kind of ['no_comment', 'comment', 'error'] as const) {
+    for (const kind of stacked) {
       const h = top ? (d.counts[kind] * area) / top : 0;
       if (h > 0) {
         y -= h;
         parts.push(`<rect class="${kind}" x="${x}" y="${y.toFixed(1)}" width="${bar}" height="${h.toFixed(1)}"/>`);
       }
     }
-    const total = d.counts.no_comment + d.counts.comment + d.counts.error;
+    const total = sum(d);
     if (total) parts.push(`<text class="count" x="${x + bar / 2}" y="${(y - 3).toFixed(1)}">${total}</text>`);
     parts.push(`<text class="day${i === days.length - 1 ? ' today' : ''}" x="${x + bar / 2}" y="${14 + area + 13}">${d.day.getDate()}</text>`);
   });

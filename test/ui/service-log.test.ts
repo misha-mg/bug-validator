@@ -12,7 +12,7 @@ describe('ServiceLog', () => {
     const state = sampleState();
     const status = new ServiceLog(state.logFile).read();
     assert.ok(status);
-    assert.deepEqual([status.dryRun, status.model, status.pollIntervalMs, status.claudeVersion, status.claudeAuth], [true, 'haiku', 180_000, '2.0.30', 'oauth_token']);
+    assert.deepEqual([status.dryRun, status.model, status.pollIntervalMs, status.claudeVersion, status.webuiCommit], [true, 'haiku', 180_000, '2.0.30', 'b37045e50d974a58f2228325237e49010a887e97']);
     assert.deepEqual([status.inQuery, status.waiting, status.pollError], [7, 2, null]);
     assert.equal(liveness(status, state.now), 'running');
   });
@@ -60,7 +60,7 @@ describe('ServiceLog', () => {
     let text = '';
     for (let i = 0; i < RECENT + 5; i++) {
       text += logLine('check_start', ago((RECENT + 5 - i) * MINUTE, state.now), { key: `KAZ-${i}` });
-      text += logLine('comment_dry_run', ago((RECENT + 5 - i) * MINUTE, state.now), { key: `KAZ-${i}`, missing: ['R1'] }) + logLine('poll', state.now, { inQuery: 1 });
+      text += logLine('comment_dry_run', ago((RECENT + 5 - i) * MINUTE, state.now), { key: `KAZ-${i}`, outcome: 'not_understood' }) + logLine('poll', state.now, { inQuery: 1 });
     }
     writeFileSync(state.logFile, text);
     const log = new ServiceLog(state.logFile);

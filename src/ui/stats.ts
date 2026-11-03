@@ -1,5 +1,5 @@
-import { REQUIREMENT_IDS, REQUIREMENTS, type RequirementId } from '../domain/bug.ts';
-import { type BugView, type Result, checked, firstMissing, result } from './read.ts';
+import { OUTCOMES, REQUIREMENT_IDS, REQUIREMENTS, type Outcome, type RequirementId } from '../domain/bug.ts';
+import { type BugView, type Result, checked, firstRun, result } from './read.ts';
 
 /** count of total; with a handful of bugs a percentage alone says little, so both are kept. */
 export interface Share {
@@ -8,12 +8,13 @@ export interface Share {
 }
 
 export interface Stats {
-  /** Bugs checked to the end, by the time of the check. */
+  /** Bugs checked to the end, by the time of their first check. */
   checked: number;
-  withoutComment: Share;
-  withComment: Share;
+  byOutcome: Record<Outcome, Share>;
   /** Bugs whose last attempt failed: to be tried again, or left after the last attempt. */
   errors: number;
+  /** What the agent spent on every check of these bugs, the failed ones included. */
+  costUsd: number;
 }
 
 /**
@@ -23,30 +24,31 @@ export interface Stats {
 export function periodStats(bugs: BugView[], since?: Date): Stats {
   const inside = bugs.filter((b) => !since || b.firstCheckedAt >= since);
   const done = inside.filter(checked);
-  const commented = done.filter((b) => result(b) === 'comment');
+  const byOutcome = Object.fromEntries(OUTCOMES.map((o) => [o, { count: done.filter((b) => result(b) === o).length, total: done.length }])) as Record<Outcome, Share>;
   return {
     checked: done.length,
-    withoutComment: { count: done.length - commented.length, total: done.length },
-    withComment: { count: commented.length, total: done.length },
+    byOutcome,
     errors: inside.filter((b) => result(b) === 'error').length,
+    costUsd: inside.reduce((sum, b) => sum + b.history.reduce((s, run) => s + (run.costUsd ?? 0), 0), 0),
   };
 }
 
-export interface Problem {
+export interface Gap {
   id: RequirementId;
   name: string;
-  /** Bugs whose first check found this requirement failed, of every bug checked to the end. */
+  /** Bugs whose first check found this field check failed, of every bug checked to the end. */
   share: Share;
 }
 
 /**
- * Every requirement with how often the first checks found it failed, the most common first: the
- * reports as they arrived, which is what the PRD's success metric is about.
+ * Every item of the list with how often the first checks found it absent, the most common first:
+ * the reports as they arrived, which is what the PRD's success metric is about. R7 has no field
+ * check and shows as never found.
  */
-export function problems(bugs: BugView[]): Problem[] {
+export function gaps(bugs: BugView[]): Gap[] {
   const done = bugs.filter(checked);
   const failed = new Map<RequirementId, number>();
-  for (const bug of done) for (const id of firstMissing(bug)) failed.set(id, (failed.get(id) ?? 0) + 1);
+  for (const bug of done) for (const c of (firstRun(bug)?.fieldChecks ?? bug.fieldChecks).filter((c) => !c.passed)) failed.set(c.id, (failed.get(c.id) ?? 0) + 1);
   const found = REQUIREMENT_IDS.map((id) => ({ id, name: REQUIREMENTS[id], share: { count: failed.get(id) ?? 0, total: done.length } }));
   // A stable sort keeps R1–R7 order among equal counts.
   return found.sort((a, b) => b.share.count - a.share.count);
@@ -63,7 +65,7 @@ export function checksPerDay(bugs: BugView[], lastDay: Date, days: number): Day[
   const perDay = new Map<string, Day>();
   for (let i = days - 1; i >= 0; i--) {
     const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() - i);
-    perDay.set(dayKey(day), { day, counts: { comment: 0, no_comment: 0, error: 0, skipped: 0 } });
+    perDay.set(dayKey(day), { day, counts: { understood: 0, not_understood: 0, not_webui: 0, error: 0, skipped: 0 } });
   }
   for (const bug of bugs) {
     const kind = result(bug);
@@ -73,9 +75,9 @@ export function checksPerDay(bugs: BugView[], lastDay: Date, days: number): Day[
   return [...perDay.values()];
 }
 
-/** Bugs whose last check failed, a re-check of a commented bug included; the latest first. */
+/** Bugs a person must look at: a failed check (a re-check of a commented bug included) or one not a WebUI bug; the latest first. */
 export function needsAttention(bugs: BugView[]): BugView[] {
-  return bugs.filter((b) => result(b) === 'error' || b.error !== null);
+  return bugs.filter((b) => result(b) === 'error' || result(b) === 'not_webui' || b.error !== null);
 }
 
 /**
