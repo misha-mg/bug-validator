@@ -32,17 +32,20 @@
       {
         "filename": "f4_pcaps.tar.gz",
         "mimeType": "application/gzip",
-        "size": 1897
+        "size": 1897,
+        "id": "10004"
       },
       {
         "filename": "f4_udp_double_count_results.json",
         "mimeType": "application/json",
-        "size": 2266
+        "size": 2266,
+        "id": "10005"
       },
       {
         "filename": "f4_udp_double_count_transcript.jsonl",
         "mimeType": "application/x-ndjson",
-        "size": 38456
+        "size": 38456,
+        "id": "10006"
       }
     ],
     "reporter": {

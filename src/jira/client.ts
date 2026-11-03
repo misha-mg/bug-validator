@@ -48,6 +48,8 @@ export interface ChangelogEntry {
 export interface Jira {
   search(jql: string, fields: string[], maxResults: number): Promise<RawIssue[]>;
   getIssue(key: string): Promise<RawIssue>;
+  /** An attachment's bytes, by its id. */
+  attachment(id: string): Promise<ReadableStream<Uint8Array>>;
   /** The account the service writes as: its comments are found among a bug's by this id. */
   myself(): Promise<{ accountId: string }>;
   addComment(key: string, body: string): Promise<{ id: string }>;
@@ -63,6 +65,8 @@ export const ISSUE_FIELDS = [
 export const REPORT_FIELDS = ['summary', 'description', 'status', 'project', 'versions', 'customfield_10033', 'attachment', 'reporter', 'comment', 'created', 'updated'];
 
 const REQUEST_TIMEOUT_MS = 30_000;
+/** A download of up to 50 MB (pipeline/attachments.ts) over an office line. */
+const DOWNLOAD_TIMEOUT_MS = 180_000;
 
 /** Jira REST v2 through the api.atlassian.com gateway (scoped API tokens work only there). */
 export class JiraClient implements Jira {
@@ -90,6 +94,23 @@ export class JiraClient implements Jira {
 
   getIssue(key: string): Promise<RawIssue> {
     return this.request<RawIssue>(`/issue/${encodeURIComponent(key)}?fields=${ISSUE_FIELDS.join(',')}`);
+  }
+
+  /**
+   * Jira answers with a redirect to a signed media URL, which fetch follows; the Authorization
+   * header does not go along to the other origin, and the signed URL needs none. Read as a stream:
+   * the caller stops at its size limit.
+   */
+  async attachment(id: string): Promise<ReadableStream<Uint8Array>> {
+    const path = `/attachment/content/${encodeURIComponent(id)}`;
+    let res: Response;
+    try {
+      res = await fetch(this.api + path, { headers: { Authorization: this.auth }, signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    } catch (err) {
+      throw new JiraError(`request failed: ${describe(err)}`);
+    }
+    if (!res.ok) throw new JiraError(`HTTP ${res.status} on GET ${path}: ${(await res.text().catch(() => '')).slice(0, 300)}`, res.status);
+    return res.body ?? new ReadableStream({ start: (c) => c.close() });
   }
 
   /** Asked once; a failed ask is asked again next time. */
@@ -142,9 +163,7 @@ export class JiraClient implements Jira {
       });
       body = await res.text();
     } catch (err) {
-      // fetch says only "fetch failed"; the reason (ENOTFOUND, ECONNREFUSED, timeout) is the cause.
-      const cause = err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : '';
-      throw new JiraError(`request failed: ${err instanceof Error ? err.message : String(err)}${cause}`);
+      throw new JiraError(`request failed: ${describe(err)}`);
     }
     if (!res.ok) throw new JiraError(`HTTP ${res.status} on ${init.method ?? 'GET'} ${path}: ${body.slice(0, 300)}`, res.status);
     try {
@@ -153,4 +172,10 @@ export class JiraClient implements Jira {
       throw new JiraError(`HTTP ${res.status} on ${init.method ?? 'GET'} ${path}: not JSON: ${body.slice(0, 200)}`);
     }
   }
+}
+
+/** fetch says only "fetch failed"; the reason (ENOTFOUND, ECONNREFUSED, timeout) is the cause. */
+function describe(err: unknown): string {
+  const cause = err instanceof Error && err.cause instanceof Error ? ` (${err.cause.message})` : '';
+  return `${err instanceof Error ? err.message : String(err)}${cause}`;
 }

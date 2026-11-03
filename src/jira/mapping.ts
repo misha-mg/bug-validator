@@ -13,7 +13,7 @@ const IssueFields = z.object({
   labels: z.array(z.string()).default([]),
   versions: z.array(Named).default([]),
   customfield_10033: z.array(Valued).nullable().default(null),
-  attachment: z.array(z.object({ filename: z.string() })).default([]),
+  attachment: z.array(z.object({ id: z.string(), filename: z.string(), size: z.number().int().nonnegative(), mimeType: z.string().default('') })).default([]),
   reporter: z.object({ accountId: z.string(), displayName: z.string() }).nullable().default(null),
   comment: z
     .object({
@@ -63,7 +63,7 @@ export function toBug(raw: RawIssue): Bug {
     labels: f.labels,
     versions: f.versions.map((v) => v.name),
     devices: (f.customfield_10033 ?? []).map((v) => v.value),
-    attachments: f.attachment.map((a) => ({ filename: a.filename })),
+    attachments: f.attachment.map((a) => ({ id: a.id, filename: a.filename, size: a.size, mimeType: a.mimeType })),
     comments: (f.comment?.comments ?? []).map((c) => ({
       id: c.id,
       author: c.author?.displayName ?? '(unknown)',

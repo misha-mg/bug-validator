@@ -41,6 +41,9 @@ class FakeJira implements Jira {
     if (!this.inQuery.includes(key) && !this.ids[key]) throw new JiraError(`HTTP 404 on GET /issue/${key}`, 404);
     return this.issue(key);
   }
+  async attachment(): Promise<ReadableStream<Uint8Array>> {
+    return new ReadableStream({ start: (c) => c.close() });
+  }
   async myself(): Promise<{ accountId: string }> {
     return { accountId: SERVICE };
   }
@@ -58,7 +61,7 @@ class FakeJira implements Jira {
   /** The reporter attaches a HAR. */
   attachHar(key: string): void {
     const fields = rawIssue(key).fields as { attachment: object[] };
-    this.changes[key] = { ...this.changes[key], attachment: [...fields.attachment, { filename: 'session.har' }] };
+    this.changes[key] = { ...this.changes[key], attachment: [...fields.attachment, { id: '99', filename: 'session.har', size: 1, mimeType: 'application/json' }] };
   }
   private issue(key: string): RawIssue {
     const fixture = rawIssue(this.ids[key] ? KEY : key);

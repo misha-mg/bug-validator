@@ -29,6 +29,13 @@ describe('JiraClient', () => {
     globalThis.fetch = async () => new Response(null, { status: 204 });
     await client().editComment('KAZ-1', '1', 'hi');
   });
+  it('an attachment is read as a stream; a refusal keeps its status', async () => {
+    globalThis.fetch = async () => new Response('bytes', { status: 200 });
+    const stream = await client().attachment('10001');
+    assert.equal(await new Response(stream).text(), 'bytes');
+    globalThis.fetch = async () => new Response('gone', { status: 404 });
+    await assert.rejects(client().attachment('10001'), (err: JiraError) => err.status === 404 && /attachment\/content\/10001/.test(err.message));
+  });
   it('asks who it is once', async () => {
     let asked = 0;
     globalThis.fetch = async () => {

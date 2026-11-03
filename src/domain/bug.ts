@@ -1,7 +1,12 @@
 export type Project = 'KAZ' | 'RPG';
 
 export interface Attachment {
+  /** Jira's id: what the content is read by. */
+  id: string;
   filename: string;
+  /** Bytes. */
+  size: number;
+  mimeType: string;
 }
 
 export interface Comment {
@@ -31,7 +36,11 @@ export interface Bug {
   updated: string;
 }
 
-/** What a bug report must contain (prd.md, Bug requirements). Related bugs are not one of them. */
+/** What a check ends in (prd.md, The check). Only `not_understood` gets a comment. */
+export const OUTCOMES = ['understood', 'not_understood', 'not_webui'] as const;
+export type Outcome = (typeof OUTCOMES)[number];
+
+/** The list (prd.md, The check): a guide for the agent and the web UI's statistics, not a rule. */
 export const REQUIREMENT_IDS = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7'] as const;
 export type RequirementId = (typeof REQUIREMENT_IDS)[number];
 

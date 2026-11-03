@@ -18,6 +18,10 @@ describe('config', () => {
     assert.throws(() => loadConfig(env({ AGENT_MAX_BUDGET_USD: '-1' })), /AGENT_MAX_BUDGET_USD/);
     assert.equal(loadConfig(env()).agent.maxBudgetUsd, 0.5);
   });
+  it('the WebUI clone has a place and a source', () => {
+    assert.deepEqual(loadConfig(env()).webui, { repoUrl: 'git@bitbucket.org:CGS/webui.git', dir: 'state/webui' });
+    assert.equal(loadConfig(env({ WEBUI_DIR: '/srv/webui' })).webui.dir, '/srv/webui');
+  });
   it('the UI listens on this machine only unless told otherwise; a login is a user and a password', () => {
     const ui = loadUiConfig({});
     assert.equal(ui.host, '127.0.0.1');

@@ -9,7 +9,7 @@ describe('fingerprint', () => {
   const reporter = base.reporter!.accountId;
   const comment = (authorId: string, body: string): Comment => ({ id: '1', author: 'Someone', authorId, created: '2026-10-26', body });
   it('changes with the report', () => {
-    assert.notEqual(fingerprint({ ...base, attachments: [...base.attachments, { filename: 'session.har' }] }), fingerprint(base));
+    assert.notEqual(fingerprint({ ...base, attachments: [...base.attachments, { id: '1', filename: 'session.har', size: 1, mimeType: 'application/json' }] }), fingerprint(base));
     assert.notEqual(fingerprint({ ...base, description: base.description + '\n1. open the page' }), fingerprint(base));
     assert.notEqual(fingerprint({ ...base, project: 'RPG' }), fingerprint(base));
   });
