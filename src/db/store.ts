@@ -29,7 +29,7 @@ export interface CheckResultRow {
   summary: string;
   reporter: string | null;
   fingerprint: string;
-  baseChecks: unknown;
+  fieldChecks: unknown;
   verdict: unknown;
   comment: string | null;
   /** The comment in Jira, kept when a re-check edits it; null until a comment is posted. */
@@ -357,7 +357,7 @@ export class Store {
   recordResult(issue: IssueRef, r: CheckResultRow): void {
     this.transaction(() => {
       const at = now();
-      this.addRun(issue.key, at, { fingerprint: r.fingerprint, baseChecks: r.baseChecks, verdict: r.verdict, comment: r.comment, agent: r.agent });
+      this.addRun(issue.key, at, { fingerprint: r.fingerprint, fieldChecks: r.fieldChecks, verdict: r.verdict, comment: r.comment, agent: r.agent });
       this.db
         .prepare(
           `INSERT INTO checks (key, issue_id, status, attempts, checked_at, summary, reporter, fingerprint, base_checks, verdict, comment, comment_id, error)
@@ -366,7 +366,7 @@ export class Store {
              summary = excluded.summary, reporter = excluded.reporter, fingerprint = excluded.fingerprint, base_checks = excluded.base_checks,
              verdict = excluded.verdict, comment = excluded.comment, comment_id = COALESCE(excluded.comment_id, comment_id), error = NULL`,
         )
-        .run(issue.key, issue.id, r.status, at, r.summary, r.reporter, r.fingerprint, JSON.stringify(r.baseChecks), JSON.stringify(r.verdict), r.comment, r.commentId);
+        .run(issue.key, issue.id, r.status, at, r.summary, r.reporter, r.fingerprint, JSON.stringify(r.fieldChecks), JSON.stringify(r.verdict), r.comment, r.commentId);
     });
   }
 
@@ -374,7 +374,7 @@ export class Store {
    * A check recorded in the history only, the bug's row left as it is: a dry run's check of a bug
    * whose comment is (or may be) in Jira, so the record of that comment stays true to Jira.
    */
-  recordRun(key: string, r: Pick<CheckResultRow, 'fingerprint' | 'baseChecks' | 'verdict' | 'comment' | 'agent'>): void {
+  recordRun(key: string, r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'agent'>): void {
     this.addRun(key, now(), r);
   }
 
@@ -480,13 +480,13 @@ export class Store {
   private addRun(
     key: string,
     at: string,
-    run: { fingerprint?: string; baseChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string; agent?: RunFigures | undefined },
+    run: { fingerprint?: string; fieldChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string; agent?: RunFigures | undefined },
   ): void {
     const json = (value: unknown): string | null => (value === undefined ? null : JSON.stringify(value));
     const a = run.agent;
     this.db
       .prepare('INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(key, at, run.fingerprint ?? null, json(run.baseChecks), json(run.verdict), run.comment ?? null, run.error ?? null, a?.model ?? null, a?.instructions ?? null, a?.costUsd ?? null, a?.turns ?? null, a?.durationMs ?? null);
+      .run(key, at, run.fingerprint ?? null, json(run.fieldChecks), json(run.verdict), run.comment ?? null, run.error ?? null, a?.model ?? null, a?.instructions ?? null, a?.costUsd ?? null, a?.turns ?? null, a?.durationMs ?? null);
   }
 
   private transaction<T>(fn: () => T): T {

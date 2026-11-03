@@ -5,7 +5,7 @@ import { REQUIREMENT_IDS, REQUIREMENTS } from '../domain/bug.ts';
 import { ISSUE_KEY } from '../domain/key.ts';
 import { type BugView, type Request, type Result, checked, result } from './read.ts';
 import { type LogEvent, type ServiceStatus, liveness } from './service-log.ts';
-import { type Day, type Share, checksPerDay, itemsAddedAfterComment, needsAttention, periodStats, problems, startOfDay } from './stats.ts';
+import { type Day, type Share, checksPerDay, fieldChecksPassedAfterComment, needsAttention, periodStats, problems, startOfDay } from './stats.ts';
 
 export const CHART_DAYS = 30;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -147,14 +147,14 @@ function tiles(bugs: BugView[], now: Date): string {
     ['Checked all time', periodStats(bugs)],
   ] as const;
   const tile = (label: string, value: string, note: string): string => `<div class="frame card"><div class="label">${label}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
-  const added = itemsAddedAfterComment(bugs);
+  const added = fieldChecksPassedAfterComment(bugs);
   return (
     periods
       .map(([label, s]) => {
         const failed = s.errors ? ` · <span class="err">${s.errors} failed</span>` : '';
         return tile(label, String(s.checked), s.checked ? `${shareText(s.withComment)} with comment${failed}` : `no checks${failed}`);
       })
-      .join('') + tile('Items added after the comment', added.total ? `${added.count} <small>of ${added.total}</small>` : '–', 're-checked bugs, all time')
+      .join('') + tile('Field checks passed after the comment', added.total ? `${added.count} <small>of ${added.total}</small>` : '–', 're-checked bugs, all time')
   );
 }
 
@@ -354,7 +354,7 @@ ${frameHead(`<span id="confirm-post-title">Post this comment to ${esc(b.key)}?</
 
 function requirements(b: BugView, ctx: PageContext): string {
   if (!checked(b) && b.status !== 'posting') return `<p class="muted">${result(b) === 'error' ? 'The check did not finish.' : 'Never checked.'}</p>`;
-  const base = new Map(b.baseChecks.map((c) => [c.id, c]));
+  const base = new Map(b.fieldChecks.map((c) => [c.id, c]));
   // The agent's verdict decides what the comment asks for; the base checks are the facts it was
   // given, and it may overrule them (steps written without a "Steps" heading are still steps).
   let html = `<table class="requirements"><thead><tr><th></th><th></th><th>Agent</th><th>Base check</th></tr></thead><tbody>${REQUIREMENT_IDS.map((id) => {

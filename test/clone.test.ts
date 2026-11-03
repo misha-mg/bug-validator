@@ -34,8 +34,9 @@ describe('Clone', () => {
     writeFileSync(join(upstream, 'README.md'), 'two');
     git(upstream, 'commit', '--quiet', '-am', 'two');
     git(upstream, 'push', '--quiet', origin, 'master');
-    assert.equal(await clone.update(Infinity), first, 'fresh enough: not fetched');
     writeFileSync(join(clone.dir, 'README.md'), 'a stray change');
+    assert.equal(await clone.update(Infinity), first, 'fresh enough: not fetched');
+    assert.equal(git(clone.dir, 'status', '--porcelain'), 'M README.md', 'and nothing written to the clone');
     const second = await clone.update(0);
     assert.equal(second, git(upstream, 'rev-parse', 'HEAD'));
     assert.equal(git(clone.dir, 'show', 'HEAD:README.md'), 'two');

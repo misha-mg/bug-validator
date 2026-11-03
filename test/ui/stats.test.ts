@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readBugs } from '../../src/ui/read.ts';
-import { checksPerDay, itemsAddedAfterComment, needsAttention, periodStats, problems, startOfDay } from '../../src/ui/stats.ts';
+import { checksPerDay, fieldChecksPassedAfterComment, needsAttention, periodStats, problems, startOfDay } from '../../src/ui/stats.ts';
 import { DAY, ago, daysAgo, emptyState, insert, run, sampleState, stamp } from './state.ts';
 
 const state = sampleState();
@@ -50,6 +50,6 @@ describe('stats', () => {
   });
   it('items added after the comment are the struck-through ones of re-checked bugs', () => {
     // KAZ-2 was re-checked and its comment strikes one of three items; KAZ-5 was checked once.
-    assert.deepEqual(itemsAddedAfterComment(bugs), { count: 1, total: 3 });
+    assert.deepEqual(fieldChecksPassedAfterComment(bugs), { count: 1, total: 3 });
   });
 });

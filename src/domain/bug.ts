@@ -36,6 +36,18 @@ export interface Bug {
   updated: string;
 }
 
+/** What the agent gets of an attachment: the kind says how it was made, `unread` why it was not. */
+export type FileKind = 'image' | 'har' | 'frames' | 'text' | 'unread';
+
+export interface RunFile {
+  /** The attachment's name as the reporter gave it. */
+  filename: string;
+  /** The path under the run's directory: a file, or a directory of frames. Empty when unread. */
+  path: string;
+  kind: FileKind;
+  note: string;
+}
+
 /** What a check ends in (prd.md, The check). Only `not_understood` gets a comment. */
 export const OUTCOMES = ['understood', 'not_understood', 'not_webui'] as const;
 export type Outcome = (typeof OUTCOMES)[number];

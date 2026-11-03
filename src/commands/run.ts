@@ -11,6 +11,7 @@ import { describeError, log } from '../log.ts';
 import type { Deps } from '../pipeline/deps.ts';
 import { poll } from '../pipeline/poll.ts';
 import { serveRequests } from '../pipeline/requests.ts';
+import { Clone } from '../webui/clone.ts';
 
 /** How often the service looks for a check asked for by hand while it waits for the next poll. */
 const REQUEST_TICK_MS = 2000;
@@ -28,8 +29,10 @@ export async function run(): Promise<void> {
   await tool.listen();
   const agent = new ClaudeAgent(config.agent, config.webui.dir, tool);
   const claudeVersion = await agent.version();
+  const clone = new Clone(config.webui.dir, config.webui.repoUrl);
+  const webuiCommit = await clone.update(0);
   lock(`${config.dbFile}.lock`);
-  const deps: Deps = { config, jira, agent, store: new Store(config.dbFile) };
+  const deps: Deps = { config, jira, agent, clone, store: new Store(config.dbFile) };
   log.info('service_start', {
     dryRun: config.dryRun,
     pollIntervalS: config.pollIntervalMs / 1000,
@@ -37,6 +40,7 @@ export async function run(): Promise<void> {
     model: config.agent.model,
     agentTimeoutS: config.agent.timeoutMs / 1000,
     claudeVersion,
+    webuiCommit,
     host: hostname(),
     // The absolute path and the rows in it: a database that is not the expected one shows here.
     dbFile: resolve(config.dbFile),

@@ -13,8 +13,9 @@ import { rawIssue } from './fixtures.ts';
 const KEY = 'KAZ-9021';
 const REPORTER = '712020:a91caa38-10e5-460c-86d2-5e9d9719237d';
 const SERVICE = 'service-account';
-const needsHar = { comment_needed: true, comment: `[~accountid:${REPORTER}]\nPlease add:\n- HAR file`, missing: ['R6'], related: [] };
-const harArrived = { ...needsHar, comment: `[~accountid:${REPORTER}]\nPlease add:\n- -HAR file-`, missing: [] };
+const needsHar = { outcome: 'not_understood', reasoning: 'the request that fails is not in the report', reason: '', comment: `[~accountid:${REPORTER}]\nPlease attach a HAR file of the page load.` };
+const harArrived = { ...needsHar, comment: `[~accountid:${REPORTER}]\n-Please attach a HAR file of the page load.-` };
+const understood = { outcome: 'understood', reasoning: 'found it', reason: '', comment: '' };
 const minutesAgo = (m: number): string => new Date(Date.now() - m * 60_000).toISOString();
 
 interface JiraComment {
@@ -90,7 +91,7 @@ class FakeAgent implements Agent {
 }
 
 function deps(agent: FakeAgent, dryRun = true): Deps & { jira: FakeJira; agent: FakeAgent } {
-  const d = { config: { dryRun, maxAttempts: 3 }, jira: new FakeJira(), agent, store: new Store(':memory:') };
+  const d = { config: { dryRun, maxAttempts: 3, pollIntervalMs: 180_000 }, jira: new FakeJira(), agent, clone: { update: async () => 'abc123def456' }, store: new Store(':memory:') };
   d.store.bootstrap([]);
   return d;
 }
@@ -115,7 +116,7 @@ describe('poll', () => {
     assert.deepEqual(await poll(d), summary({ pending: 1, checked: 1 }));
   });
   it('a complete bug is recorded without a comment', async () => {
-    const d = deps(new FakeAgent({ comment_needed: false, comment: '', missing: [], related: [] }));
+    const d = deps(new FakeAgent(understood));
     d.jira.inQuery = ['RPG-6192']; // HAR attached, every field fact passes
     assert.deepEqual(await poll(d), summary({ pending: 1, checked: 1 }));
     assert.equal(d.store.status('RPG-6192'), 'complete');
@@ -136,7 +137,7 @@ describe('poll', () => {
     assert.equal(d.store.status('RPG-9999'), 'dry_run');
   });
   it('a bad verdict costs an attempt; three of them mark the bug failed', async () => {
-    const d = deps(new FakeAgent({ ...needsHar, missing: [] })); // R6 fails but is not named
+    const d = deps(new FakeAgent({ ...needsHar, comment: '' })); // not understood, yet no comment
     for (const n of [1, 2]) {
       assert.deepEqual(await poll(d), summary({ pending: 1, failed: 1 }), `attempt ${n}`);
       assert.equal(d.store.status(KEY), 'retry');
@@ -222,7 +223,7 @@ describe('live', () => {
     assert.deepEqual(await poll(d), summary({ pending: 1, checked: 1 }));
     assert.equal(d.jira.posted.length, 1, 'never a second comment');
     assert.deepEqual(d.jira.edited, [{ key: KEY, commentId: '1', body: harArrived.comment }]);
-    assert.match(d.agent.prompts[1] ?? '', /previous comment[\s\S]*- HAR file/, 're-checked against the comment found');
+    assert.match(d.agent.prompts[1] ?? '', /previous comment[\s\S]*Please attach a HAR/, 're-checked against the comment found');
     assert.deepEqual({ ...row(d), fingerprint: undefined }, { status: 'commented', fingerprint: undefined, comment: harArrived.comment, commentId: '1', runs: 2 });
   });
   it('a lost database: the comment already in Jira is adopted, not posted again', async () => {
@@ -271,7 +272,7 @@ describe('a re-check', () => {
     await poll(d);
     d.jira.attachHar(KEY);
     assert.deepEqual(await poll(d), summary({ pending: 1, checked: 1 }));
-    assert.match(d.agent.prompts[1] ?? '', /previous comment[\s\S]*- HAR file/);
+    assert.match(d.agent.prompts[1] ?? '', /previous comment[\s\S]*Please attach a HAR/);
     assert.equal(d.jira.posted.length, 1);
     assert.deepEqual(d.jira.edited, [{ key: KEY, commentId: '1', body: harArrived.comment }]);
     assert.deepEqual(row(d)?.comment, harArrived.comment);
@@ -313,7 +314,7 @@ describe('a re-check', () => {
     assert.equal(row(d)?.comment, harArrived.comment);
   });
   it('a failed re-check leaves the comment and its fingerprint as they were and is tried again, up to 5 checks', async () => {
-    const d = deps(new FakeAgent(needsHar, { ...needsHar, comment_needed: false, comment: '' }));
+    const d = deps(new FakeAgent(needsHar, { ...needsHar, comment: '' }));
     await poll(d);
     const first = row(d)?.fingerprint;
     d.jira.attachHar(KEY);
@@ -356,7 +357,7 @@ describe('a request', () => {
     assert.match(d.agent.prompts[1] ?? '', /previous comment/);
     assert.equal(row(d)?.comment, harArrived.comment);
 
-    const bad = { ...needsHar, missing: [] }; // R6 fails but is not named
+    const bad = { ...needsHar, comment: '' }; // not understood, yet no comment
     const failed = deps(new FakeAgent(bad, bad, bad, needsHar));
     for (const _ of [1, 2, 3]) await poll(failed);
     assert.equal(failed.store.status(KEY), 'failed');

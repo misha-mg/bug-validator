@@ -17,7 +17,7 @@ after(() => {
 });
 
 const ref = (key: string): IssueRef => ({ id: `id-${key}`, key });
-const result = { status: 'complete' as const, summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1', baseChecks: [], verdict: {}, comment: null, commentId: null };
+const result = { status: 'complete' as const, summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1', fieldChecks: [], verdict: {}, comment: null, commentId: null };
 const statusOf = (s: Store, key: string) => s.rows([key]).get(key)?.status;
 
 describe('Store', () => {

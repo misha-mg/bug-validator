@@ -1,5 +1,4 @@
 import { REQUIREMENT_IDS, REQUIREMENTS, type RequirementId } from '../domain/bug.ts';
-import { listedItems } from '../domain/verdict.ts';
 import { type BugView, type Result, checked, firstMissing, result } from './read.ts';
 
 /** count of total; with a handful of bugs a percentage alone says little, so both are kept. */
@@ -80,16 +79,18 @@ export function needsAttention(bugs: BugView[]): BugView[] {
 }
 
 /**
- * Over bugs that were re-checked after their comment: the items the comment asked for, and how
- * many of them arrived (struck through) while the bug was still in Created.
+ * Over bugs re-checked after their comment: the field checks the first check found failed, and
+ * how many of them the last check found passed — what arrived while the bug was still in Created.
  */
-export function itemsAddedAfterComment(bugs: BugView[]): Share {
+export function fieldChecksPassedAfterComment(bugs: BugView[]): Share {
   const share = { count: 0, total: 0 };
   for (const bug of bugs) {
-    if (!bug.comment || bug.history.filter((run) => run.error === null).length < 2) continue;
-    for (const item of listedItems(bug.comment)) {
+    const finished = bug.history.filter((run) => run.error === null);
+    if (!bug.comment || finished.length < 2) continue;
+    const last = finished.at(-1)!;
+    for (const check of finished[0]!.fieldChecks.filter((c) => !c.passed)) {
       share.total += 1;
-      if (item.struck) share.count += 1;
+      if (last.fieldChecks.some((c) => c.id === check.id && c.passed)) share.count += 1;
     }
   }
   return share;

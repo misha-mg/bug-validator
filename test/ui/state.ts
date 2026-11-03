@@ -2,6 +2,7 @@ import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { REQUIREMENT_IDS } from '../../src/domain/bug.ts';
 import { Store } from '../../src/db/store.ts';
 
 export const MENTION = '[~accountid:712020:abc]';
@@ -21,7 +22,7 @@ export const daysAgo = (days: number, now: Date): Date => {
 /** A time as the service writes it: ISO, UTC, "Z". */
 export const stamp = (at: Date): string => at.toISOString();
 
-export function baseChecks(failed: string[]): string {
+export function fieldChecks(failed: string[]): string {
   return JSON.stringify([1, 2, 3, 4, 5, 6].map((n) => ({ id: `R${n}`, passed: !failed.includes(`R${n}`), detail: `detail of R${n}` })));
 }
 
@@ -58,10 +59,11 @@ export function insert(dbFile: string, row: Record<string, unknown>): void {
   db.close();
 }
 
-/** One check in the history: what it found missing, or the error it ended with. */
+/** One check in the history: what it found missing (the field checks among them failed), or the error it ended with. */
 export function run(dbFile: string, key: string, at: Date, missing: string[] | null, error: string | null = null, comment: string | null = null): void {
   const db = new DatabaseSync(dbFile);
-  db.prepare('INSERT INTO runs (key, at, verdict, comment, error) VALUES (?, ?, ?, ?, ?)').run(key, stamp(at), missing ? JSON.stringify({ missing }) : null, comment, error);
+  const fieldChecks = missing && REQUIREMENT_IDS.filter((id) => id !== 'R7').map((id) => ({ id, passed: !missing.includes(id), detail: '' }));
+  db.prepare('INSERT INTO runs (key, at, base_checks, verdict, comment, error) VALUES (?, ?, ?, ?, ?, ?)').run(key, stamp(at), fieldChecks ? JSON.stringify(fieldChecks) : null, missing ? JSON.stringify({ missing }) : null, comment, error);
   db.close();
 }
 
@@ -89,7 +91,7 @@ export function sampleState(): State {
     checked_at: stamp(now),
     summary: 'Ports table is empty after clearing the filter',
     reporter: 'A Tester',
-    base_checks: baseChecks(['R4', 'R6']),
+    base_checks: fieldChecks(['R4', 'R6']),
     verdict: JSON.stringify({ comment_needed: true, comment: '…', missing: ['R4', 'R6'], related: [{ key: 'KAZ-1', reason: 'the same empty table' }] }),
     comment: `${MENTION}\nPlease add:\n- -Steps to reproduce-\n- Affects versions\n- HAR file`,
   });
@@ -104,7 +106,7 @@ export function sampleState(): State {
     checked_at: stamp(daysAgo(3, now)),
     summary: 'Login page freezes',
     reporter: 'B Tester',
-    base_checks: baseChecks([]),
+    base_checks: fieldChecks([]),
     verdict: JSON.stringify({ comment_needed: false, comment: '', missing: [], related: [] }),
   });
   insert(dbFile, { key: 'RPG-4', status: 'failed', attempts: 3, checked_at: stamp(daysAgo(1, now)), error: 'Error: agent run timed out' });
@@ -114,7 +116,7 @@ export function sampleState(): State {
     attempts: 1,
     checked_at: stamp(daysAgo(10, now)),
     summary: 'Device list is cut <b>',
-    base_checks: baseChecks(['R6']),
+    base_checks: fieldChecks(['R6']),
     verdict: JSON.stringify({ comment_needed: true, comment: '…', missing: ['R6'], related: [] }),
     comment: `${MENTION}\nPlease add:\n- HAR file`,
   });

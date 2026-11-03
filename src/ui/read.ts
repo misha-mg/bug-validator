@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { CheckRequest, CheckStatus } from '../db/store.ts';
 import type { RequirementId } from '../domain/bug.ts';
-import type { BaseCheck } from '../domain/checks.ts';
+import type { FieldCheck } from '../domain/checks.ts';
 
 /**
  * What a row's status means to a reader. A dry-run comment counts as a comment: it was written,
@@ -24,6 +24,7 @@ const RESULT_OF: Record<CheckStatus, Result> = {
 /** One check of a bug: what it found missing, or why it failed. */
 export interface Run {
   at: Date;
+  fieldChecks: FieldCheck[];
   missing: RequirementId[];
   comment: string | null;
   error: string | null;
@@ -46,7 +47,7 @@ export interface BugView {
   /** Rows written before the service kept them have neither, and a skipped bug was never read. */
   summary: string | null;
   reporter: string | null;
-  baseChecks: BaseCheck[];
+  fieldChecks: FieldCheck[];
   /** The agent's list of failed requirements, R1–R7. */
   missing: RequirementId[];
   related: Related[];
@@ -137,7 +138,7 @@ function readRuns(db: DatabaseSync, key?: string): Map<string, Run[]> {
     : db.prepare('SELECT * FROM runs ORDER BY at, rowid').all();
   for (const row of rows as Record<string, unknown>[]) {
     const verdict = json(row.verdict) as { missing?: RequirementId[] } | null;
-    const run: Run = { at: time(row.at), missing: verdict?.missing ?? [], comment: text(row.comment), error: text(row.error) };
+    const run: Run = { at: time(row.at), fieldChecks: (json(row.base_checks) as FieldCheck[] | null) ?? [], missing: verdict?.missing ?? [], comment: text(row.comment), error: text(row.error) };
     const list = runs.get(row.key as string);
     if (list) list.push(run);
     else runs.set(row.key as string, [run]);
@@ -156,7 +157,7 @@ function toBug(row: Record<string, unknown>, history: Run[]): BugView {
     firstCheckedAt: history.find((run) => run.error === null)?.at ?? checkedAt,
     summary: text(row.summary),
     reporter: text(row.reporter),
-    baseChecks: (json(row.base_checks) as BaseCheck[] | null) ?? [],
+    fieldChecks: (json(row.base_checks) as FieldCheck[] | null) ?? [],
     missing: verdict.missing ?? [],
     related: verdict.related ?? [],
     comment: text(row.comment),

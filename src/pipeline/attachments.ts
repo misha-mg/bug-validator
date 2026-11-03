@@ -4,21 +4,9 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import type { Attachment, Bug } from '../domain/bug.ts';
+import type { Attachment, Bug, RunFile } from '../domain/bug.ts';
 import { cleanHar } from '../domain/har.ts';
 import type { Jira } from '../jira/client.ts';
-
-/** What the agent gets of an attachment: the kind says how it was made, `unread` why it was not. */
-export type FileKind = 'image' | 'har' | 'frames' | 'text' | 'unread';
-
-export interface RunFile {
-  /** The attachment's name as the reporter gave it. */
-  filename: string;
-  /** The path under the run directory: a file, or a directory of frames. Empty when unread. */
-  path: string;
-  kind: FileKind;
-  note: string;
-}
 
 /** Over this nothing is downloaded: a dump or a recording the agent would not get through. */
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;

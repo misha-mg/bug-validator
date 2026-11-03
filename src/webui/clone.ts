@@ -30,18 +30,23 @@ export class Clone {
 
   /**
    * The clone at master, as of a fetch no older than `maxAgeMs` (0: fetch now; Infinity: as it
-   * is), made when missing. Returns the commit. The working tree is forced to the commit, so a
-   * stray change cannot stop a checkout.
+   * is), made when missing. Returns the commit. Only a fetch is followed by a checkout, forced,
+   * so a stray change cannot stop it; without one the clone is only read, so two `check`s at
+   * once do not trip over each other's git lock.
    */
   async update(maxAgeMs: number): Promise<string> {
+    let fetched = false;
     if (!existsSync(this.dir)) {
       await this.run(['clone', '--quiet', '--no-checkout', '--branch', 'master', '--single-branch', this.url, this.dir], 'clone');
-      this.fetchedAt = Date.now();
+      fetched = true;
     } else if (Date.now() - this.fetchedAt > maxAgeMs) {
       await this.run(['-C', this.dir, 'fetch', '--quiet', 'origin', 'master'], 'fetch');
-      this.fetchedAt = Date.now();
+      fetched = true;
     }
-    await this.run(['-C', this.dir, 'checkout', '--quiet', '--force', '--detach', 'origin/master'], 'checkout');
+    if (fetched) {
+      this.fetchedAt = Date.now();
+      await this.run(['-C', this.dir, 'checkout', '--quiet', '--force', '--detach', 'origin/master'], 'checkout');
+    }
     return (await this.run(['-C', this.dir, 'rev-parse', 'HEAD'], 'rev-parse')).trim();
   }
 

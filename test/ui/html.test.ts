@@ -42,7 +42,7 @@ describe('home', () => {
     assert.match(section(html, 'service'), /<a class="key" href="\/bugs\/KAZ-1">KAZ-1<\/a> · 2m ago/);
 
     const tiles = text(html.slice(html.indexOf('<section class="cards">'), html.indexOf('<section class="frame service">')));
-    assert.match(tiles, /^Checked today 1 100% \(1\) with comment Checked in 7 days 2 50% \(1\) with comment · 1 failed Checked all time 3 67% \(2\) with comment · 1 failed Items added after the comment 1 of 3 re-checked bugs, all time$/);
+    assert.match(tiles, /^Checked today 1 100% \(1\) with comment Checked in 7 days 2 50% \(1\) with comment · 1 failed Checked all time 3 67% \(2\) with comment · 1 failed Field checks passed after the comment 1 of 3 re-checked bugs, all time$/);
     assert.match(html, /<button class="btn theme" type="button"/);
 
     const problems = text(section(html, 'problems'));

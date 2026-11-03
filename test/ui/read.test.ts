@@ -15,7 +15,7 @@ describe('readBugs', () => {
     assert.equal(kaz2?.reporter, 'A Tester');
     assert.deepEqual(kaz2?.missing, ['R4', 'R6']);
     assert.deepEqual(kaz2?.related, [{ key: 'KAZ-1', reason: 'the same empty table' }]);
-    assert.equal(kaz2?.baseChecks.find((c) => c.id === 'R6')?.passed, false);
+    assert.equal(kaz2?.fieldChecks.find((c) => c.id === 'R6')?.passed, false);
     assert.deepEqual(bugs.map(result), ['comment', 'error', 'no_comment', 'comment', 'skipped']);
     assert.deepEqual(bugs.map(checked), [true, false, true, true, false]);
   });
