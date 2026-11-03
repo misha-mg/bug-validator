@@ -1,8 +1,12 @@
 # Architecture
 
-A small long-running program plus an agent with one read-only tool. The program does the plumbing
-(query, field facts, state, posting) and keeps the guardrails; the agent reads, researches and
-writes the comment. Why things are as they are: `prd.md`.
+Status: describes the check redesigned on 2026-11-03 (`prd.md`, Decisions), which is not built
+yet; the running code is as this document describes it at commit 8348001.
+
+A small long-running program plus an agent in a sandbox. The program does the plumbing (query,
+field checks, attachments, the WebUI clone, state, posting) and keeps the guardrails; the agent
+reads the report, the attachments and the WebUI code, decides whether the bug is understood and,
+when it is not, writes the comment. Why things are as they are: `prd.md`.
 
 ## Layers
 
@@ -12,23 +16,28 @@ src/
   config.ts          env → typed Config; fails fast on a bad value
   log.ts             one JSON line per event on stdout
   domain/            pure functions, no I/O
-    bug.ts           Bug model, requirement ids R1–R7, which of them are field facts
-    checks.ts        base checks: section headings, Affects versions, Devices, HAR
+    bug.ts           Bug model, the outcomes, requirement ids R1–R7, which of them are field facts
+    checks.ts        field checks: section headings, Affects versions, Devices, HAR
     fingerprint.ts   a hash of the report: what a re-check watches
-    prompt.ts        Bug + field facts (+ the previous comment on a re-check) → the agent's prompt
-    verdict.ts       the agent's JSON: schema and the guardrails, the comment's lines included
+    har.ts           a HAR file → the same HAR without cookies, authorization headers, tokens and binary bodies
+    prompt.ts        Bug + field checks + the run's files (+ the previous comment on a re-check) → the agent's prompt
+    verdict.ts       the agent's JSON: schema and the guardrails
   jira/
-    client.ts        REST v2 through api.atlassian.com: search, get issue, myself, changelog; add and edit comment (the only writes)
+    client.ts        REST v2 through api.atlassian.com: search, get issue, attachment content, myself, changelog; add and edit comment (the only writes)
     mapping.ts       raw issue JSON → Bug; Jira times
     queries.ts       the trigger JQL; the agent's JQL narrowed to KAZ and RPG
+  webui/
+    clone.ts         the service's clone of WebUI: clone if missing, fetch master, check it out detached; the commit
   claude/
-    agent.ts         spawns `claude -p` with the Jira MCP server as its only tool
-    jira-mcp.ts      that server: search_issues, get_issue — read-only, KAZ and RPG only
+    agent.ts         runs `claude -p` in the sandbox, with the Jira tool and the run's files
+    sandbox.ts       the bwrap arguments: what the agent sees (pure, tested)
+    jira-mcp.ts      the agent's Jira tool: search_issues, get_issue — read-only, KAZ and RPG only, served over HTTP by the service itself
   db/
     store.ts         SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta`, `requests` (checks asked for by hand) and `posts` (comments a person posts from the UI); the schema's migrations; a request written by the UI or the CLI, a post by the UI; a backup
   pipeline/
-    deps.ts          what the pipeline needs: config, Jira, agent, store (Jira and agent are interfaces)
-    checkBug.ts      one bug: fetch → base checks → agent → verdict → guardrails
+    deps.ts          what the pipeline needs: config, Jira, agent, clone, store (Jira, agent and clone are interfaces)
+    attachments.ts   the bug's attachments → the run's files: downloaded, HAR cleaned, video cut to frames (ffmpeg)
+    checkBug.ts      one bug: fetch → field checks → clone → files → agent → verdict → guardrails
     plan.ts          which bugs of a poll are due: first checks, re-checks, the waiting ones
     handle.ts        one check and its record / post / edit; the service's comment found in Jira; which failures are the surroundings'
     requests.ts      the posts and the checks asked for by hand, served before each check of a poll and while the service waits
@@ -38,7 +47,7 @@ src/
     config.ts        UI_HOST, UI_PORT, UI_HOSTNAMES, UI_USER, UI_PASSWORD, plus the service's DB_FILE, LOG_FILE and JIRA_BASE_URL
     read.ts          the database, read-only → one view per bug with its runs, the requests; never creates the file
     service-log.ts   service.log → the service's state and its latest events, read as it grows; /healthz's answer
-    stats.ts         counts by period, the most common gaps, bugs per day, items added after the comment
+    stats.ts         counts by period and outcome, the field checks failed most often, bugs per day, field checks passed after a comment
     html.ts          the three pages as pure functions: HTML strings from what was read
     server.ts        node:http: the pages, the static files, /healthz; known hosts, same-origin requests, the optional login
     static/          sheet.css (the design system, shared with pipeline-ui), app.css (the faces and the pages' layout),
@@ -46,12 +55,14 @@ src/
 agent/instructions.md   the agent's system prompt
 deploy/              systemd user units: the service, the UI, and maintain with its daily timer
 scripts/late-changes.ts   how reports change after creation (read-only measurement): `node scripts/late-changes.ts [days]`
+scripts/agreement.ts      the agent against a developer's marks (rollout step 3): `node scripts/agreement.ts <marks.tsv>`
 test/                node:test; fixtures/ are real bugs saved from Jira (REST v2 JSON); ui/ builds its databases with the real Store
 ```
 
 Dependencies: `zod` only. Node 24 runs the TypeScript directly and ships SQLite; there is no
-build step. `claude` must be on PATH. The UI imports the service's tables, statuses and
-requirement ids, and nothing of the pipeline: it never loads the agent or the Jira client.
+build step. `claude`, `bwrap` (bubblewrap), `ffmpeg` and `git` must be on PATH. The UI imports the
+service's tables, statuses, outcomes and requirement ids, and nothing of the pipeline: it never
+loads the agent, the clone or the Jira client.
 
 ## One bug
 
@@ -60,39 +71,43 @@ requirement ids, and nothing of the pipeline: it never loads the agent or the Ji
    KAZ and RPG) takes the new key.
 2. `plan` picks the bugs due (constants in `plan.ts`):
    - a first check for a bug with no row once it is 30 minutes old, and for a `retry` row;
-   - live, a first check for a `posting` row at once (step 5 finds its comment in Jira);
-   - a re-check for a `complete` row, or a `dry_run` row in a dry run (`commented` live), whose
-     stored fingerprint differs from the report's now, once `updated` is 15 minutes old;
-   - nothing for a bug with 5 runs.
+   - live, a first check for a `posting` row at once (step 6 finds its comment in Jira);
+   - a re-check for a `dry_run` row in a dry run (`commented` live) whose stored fingerprint
+     differs from the report's now, once `updated` is 15 minutes old;
+   - nothing for an `understood` or `not_webui` row, or a bug with 5 runs.
 
    The rest are counted as waiting when they are not settled yet.
-3. `checkBug` fetches the issue, computes the field facts, builds the prompt and runs the agent.
-   On a re-check the prompt ends with the comment the service made last time, and the agent
-   edits it. The agent searches Jira for related bugs itself and writes the whole comment. The
+3. `checkBug` fetches the issue and computes the field checks. It brings the WebUI clone to
+   master (a fetch at most once a poll; the commit is recorded with the check) and makes the run's
+   files (Attachments). It builds the prompt: the report, the field checks as hints, the run's
+   files with what each is, and on a re-check the comment the service made last time. The
    reporter's text is fenced by a tag made from that text, so it cannot close its own fence; a
-   description past 20 000 characters is cut.
+   description past 20 000 characters is cut. Then the agent runs (The agent run): it reads the
+   code and the files, searches Jira for related bugs itself, and returns its outcome.
 4. Guardrails (`verdict.ts`, `checkBug.ts`), each a failed check when broken:
    - the JSON matches the schema;
-   - "comment needed" and the comment agree; a first comment asks for something or names a
-     related bug;
-   - every failed field fact (R4–R6) is in `missing`;
-   - every line of the comment is one of its kinds (the reporter's mention first, `Please add:`,
-     `- <item>` or `- -<item>-`, R7's question plain or struck, `Possibly related: KEY (reason)`,
-     blank): free text, links and images are refused, whatever the report asked for;
-   - the list (R1–R6 by name) is exactly `missing`, and a first comment strikes nothing through;
-     R7's question is there exactly when R7 is missing;
-   - a re-check keeps the comment, every item of it, its project question and its related lines,
-     and strikes through only what it had asked for;
-   - the reporter is mentioned and nobody else (other mentions are stripped and logged);
-   - every issue key named is a KAZ or RPG issue Jira can read (a read follows a moved bug).
+   - the outcome and the rest agree: `not_understood` has a comment, `understood` and `not_webui`
+     have none, `not_webui` has a reason;
+   - the comment mentions the reporter and nobody else (other mentions are stripped and logged);
+   - every issue key the comment names is a KAZ or RPG issue Jira can read (a read follows a
+     moved bug);
+   - neither the comment nor the reason holds a secret the agent could read in its sandbox: the
+     run's Jira tool secret, the Claude token, nor the Jira token.
 
-   The related bugs recorded are the ones the comment names.
-5. Every check adds a row to `runs` (with the agent's model, cost, turns, time and a hash of its
-   instructions), and the bug's row takes the new state and fingerprint:
-   - no comment → `complete`;
-   - `DRY_RUN=true` → `dry_run` with the comment; a `commented` or `posting` row is left as it
-     is and the check goes to `runs` only, so the record of the comment in Jira stays true;
-   - live, with a comment id → the edit (skipped when the text is the same), then `commented`;
+   The wording is the agent's: no line format, until the PRD's wording rules. The related bugs
+   recorded are the ones the comment names. The agent's reasoning, part of its JSON, is dropped
+   here: `check` prints it, the service keeps nothing of it.
+5. Every check adds a row to `runs`: the outcome, the comment or the reason, the field checks,
+   the related bugs, the WebUI commit, the run's files (name, kind, read or why not), the agent's
+   model, cost, turns, time and a hash of its instructions, and the check's version (1 the list,
+   2 the code). The bug's row takes the new state and fingerprint:
+   - `understood` → `understood`; `not_webui` → `not_webui` with the reason. A row with a comment
+     id keeps it, and the comment in Jira is left as it is (PRD, Open questions);
+   - `not_understood` with `DRY_RUN=true` → `dry_run` with the comment; a `commented` or
+     `posting` row is left as it is and the check goes to `runs` only, so the record of the
+     comment in Jira stays true;
+   - live, with a comment id → the edit to the agent's new text (skipped when the text is the
+     same), then `commented`;
    - live otherwise: Jira is read for a comment of the service's (by the account `myself`
      returns, opening with the reporter's mention). Found → adopted: the check is a re-check of
      it, and step "with a comment id" follows. None → `posting` with the comment, the post, then
@@ -103,12 +118,13 @@ requirement ids, and nothing of the pipeline: it never loads the agent or the Ji
    failure of the surroundings (see Failures) leaves rows alone.
 
 A check asked for by hand (`request <KEY|URL>`, the UI's form) skips steps 1 and 2: the bug
-is read by its key, whatever its age, its status in Jira or its row — skipped, failed, at the
-cap — and goes through 3–6 as any check. The service serves requests before each check of a poll
-and every 2 s while it waits for the next poll; after a failure of the surroundings they wait for
-a poll that succeeds. A key Jira does not know fails the request, which keeps the reason until it
-is asked again; so does a third failure of the surroundings in a row on it. At most 20 requests
-wait at a time. A request asked again while its check runs is kept for another check.
+is read by its key, whatever its age, its status in Jira or its row — skipped, understood, not a
+WebUI bug, failed, at the cap — and goes through 3–6 as any check. The service serves requests
+before each check of a poll and every 2 s while it waits for the next poll; after a failure of the
+surroundings they wait for a poll that succeeds. A key Jira does not know fails the request,
+which keeps the reason until it is asked again; so does a third failure of the surroundings in a
+row on it. At most 20 requests wait at a time. A request asked again while its check runs is kept
+for another check.
 
 A comment posted by hand (the UI's Post to Jira, after a confirmation) is a row in `posts` with the
 text the person read; it is served before the checks, in a dry run as well. Only a comment Jira
@@ -126,60 +142,111 @@ requested check of it goes to the history only, so the comment posted stays as p
 | status | meaning |
 |---|---|
 | `skipped` | was already in the query at the first start, never checked |
-| `complete` | checked, nothing missing, no comment |
-| `dry_run` | comment composed and recorded, not posted; a person may post it from the UI |
+| `understood` | the agent found the cause and knows what the reporter means; no comment, not re-checked |
+| `not_webui` | the report is clear and the cause is outside the WebUI; no comment, not re-checked; the reason is shown in the UI for a person |
+| `dry_run` | not understood, comment recorded, not posted; a person may post it from the UI |
 | `posting` | written before a post whose outcome is unknown (the service stopped, or Jira did not answer); live, the next poll checks it again, finds the comment in Jira if it got there and adopts it; a post by hand tried again does the same |
-| `commented` | comment posted (`comment_id` set) |
+| `commented` | not understood, comment posted (`comment_id` set) |
 | `retry` | last attempt failed, tried again at the next poll |
 | `failed` | 3 attempts failed, left alone; a request (`request <KEY>`, the UI) checks it again |
 
-A re-check changes a row's comment, not its status. `meta.bootstrapped_at` records the first
-start, so a first poll on an empty query still counts. Rows are never deleted. A row holds the
-issue id; rows from before 2026-10-26 get it when their bug is next in the query. They have no
-fingerprint and no runs, so they are never re-checked.
+A re-check of a bug not understood changes its comment, not its status, unless the outcome
+changes. `meta.bootstrapped_at` records the first start, so a first poll on an empty query still
+counts. Rows are never deleted. A row holds the issue id; rows from before 2026-10-26 get it when
+their bug is next in the query. They have no fingerprint and no runs, so they are never
+re-checked.
 
 The schema's version is `PRAGMA user_version`; `Store` (the service, at start) runs the
 migrations it lacks, after a copy of the file (`<db>.before-v<N>-<time>`). The UI and `check`
-never migrate.
+never migrate. The migration to the new check renames `complete` to `understood` (both mean done,
+no comment) and adds the run's outcome, reason, WebUI commit, files and version; the runs before
+it are version 1 and keep the list's verdict.
+
+## Attachments
+
+`attachments.ts` makes the run's files in a fresh directory, read-only to the agent:
+
+- an image (png, jpg, gif, webp) as it is; the agent's Read shows it;
+- a HAR file through `har.ts`: `cookies`, the `Cookie`, `Set-Cookie` and `Authorization`
+  headers and any header, query parameter or JSON field whose name holds token, secret,
+  password, session or auth lose their values; binary response bodies (images, fonts) are
+  dropped and text ones cut at 64 KB;
+- a video as frames, one every 2 s, at most 30, by `ffmpeg`;
+- text (txt, log, json) as it is; anything else, or a file over 50 MB, is listed by name only.
+
+A download Jira fails is a failed read (Failures). A file that is the reporter's and cannot be
+read as its kind — a HAR that is not JSON, a video ffmpeg cannot open — is not an error: the
+prompt lists it as not readable, and the agent may ask for it.
+
+## The WebUI clone
+
+`WEBUI_DIR` holds a clone of `WEBUI_REPO_URL`, the service's own, never a developer's working
+tree. `clone.ts` clones it when missing, and before a check fetches `master` (at most once a poll)
+and checks it out detached; the commit goes with the check. Only `run` fetches; `check` and
+`scripts/agreement.ts` read the clone as it is, so a tuning session sees one commit. The machine's
+git credentials read the repository (an SSH key with read access); the agent never sees them.
 
 ## Failures
 
 These are failures of the surroundings, and cost no bug anything:
 
 - `JiraError` without an answer (network, timeout, a body that did not arrive) or with 401,
-  403, 429 or 5xx;
-- `AgentError` of kind `start` (claude cannot be started), `service` (Claude's auth, a usage or
-  rate limit, overload, a 5xx, the network; or Jira failing a search the agent made), `stopped`
-  (the service is stopping: a stop kills the agent run, and the bug is checked again later).
+  403, 429 or 5xx, an attachment download included;
+- `AgentError` of kind `start` (claude or bwrap cannot be started), `service` (Claude's auth, a
+  usage or rate limit, overload, a 5xx, the network; or Jira failing a search the agent made),
+  `stopped` (the service is stopping: a stop kills the agent run, and the bug is checked again
+  later);
+- `CloneError`: the fetch of WebUI failed (network, credentials, Bitbucket).
 
 One of them on a bug puts it off (`check_deferred`) and the poll goes on to the next, so a bug
 Jira chokes on does not hold up the rest; a second in a row, or one no later check of the poll
 gets past, ends the poll with `poll_failed`. Everything else — `VerdictError`, `MappingError`,
-an agent run that times out, exits badly or goes over its budget, a 4xx on one issue — is this
-bug's failure and costs it an attempt (on a re-check, one of its 5 checks).
+an agent run that times out, exits badly or goes over its budget, a 4xx on one issue or one
+attachment — is this bug's failure and costs it an attempt (on a re-check, one of its 5 checks).
 
 Writes: a post Jira refused (it answered with an error) made no comment: the row goes from
 `posting` back to `retry`, at the cost of an attempt only for a 4xx other than 401 and 429. A post
 without an answer may have made one: the row stays `posting`. An edit refused with such a 4xx (the
-comment was deleted) is the bug's failure. At start the service runs `claude --version` and
-refuses to start without it.
+comment was deleted) is the bug's failure. At start the service runs `claude --version` inside the
+sandbox, `ffmpeg -version` and `git`, brings the clone to master, and refuses to start when any of
+them fails.
 
 One service per database: `run` holds `<db>.lock` (host and pid) and refuses to start while a live
 process of this service holds it on this host, or while another host's lock is there.
 
 ## The agent run
 
-`claude -p` with `--tools ''` (no built-in tools), `--setting-sources ''` (no settings, no
-CLAUDE.md), `--strict-mcp-config` with one server (the project's `jira-mcp.ts`, given the
-`JIRA_*` variables), `--allowedTools` for its two tools, `--max-turns 25`,
+The agent reads files, so claude's flags alone cannot keep it from the rest of the machine (the
+service's `.env`, `~/.claude`, `state/`). Each run is `bwrap` around `claude -p`, and the sandbox
+(`sandbox.ts`) holds only:
+
+| inside | what | how |
+|---|---|---|
+| `/work/webui` | the WebUI clone | read-only; the working directory |
+| `/work/bug` | the run's files (Attachments) | read-only |
+| `/usr`, `/etc/resolv.conf`, `/etc/ssl` | the system, name resolution, certificates | read-only |
+| node's and claude's install directory | the programs | read-only |
+| `/home/agent`, `/tmp` | claude's own files for the run | empty tmpfs, gone with the run |
+
+Everything is unshared but the network, which claude needs for the API; the environment is
+cleared but `HOME`, `PATH` and `CLAUDE_CODE_OAUTH_TOKEN` (the machine's claude login is in
+`~/.claude`, which the sandbox does not have); `--die-with-parent`, so a stop of the service
+ends the run.
+
+Inside: `claude -p` with `--tools Read,Grep,Glob` (no shell, no edits, no web), `--add-dir
+/work/bug`, `--setting-sources ''` (no settings, no CLAUDE.md: the instructions point the agent
+to the WebUI's own `CLAUDE.md` and `.about/` to read), `--strict-mcp-config` with one server, the
+Jira tool, `--allowedTools` for those five tools, `--max-turns AGENT_MAX_TURNS`,
 `--max-budget-usd AGENT_MAX_BUDGET_USD`, `--no-session-persistence`, `--json-schema` for the
 verdict, `--system-prompt` from `agent/instructions.md` (read on every run: an edit reaches the
-next bug without a restart). It runs in a private temp directory (`mkdtemp`, 0700, removed at
-exit). The MCP server's config, the Jira token in it, is a 0600 file there, never an argument: a
-command line is visible to every user of the machine. The server notes Jira's own failures in
-that directory, and a run with one is a `service` failure: a search that failed is not "nothing
-found". `AGENT_TIMEOUT_SECONDS` kills a run; a stop of the service kills it too. The agent sees
-attachment names only, never their content: a HAR holds session cookies.
+next bug without a restart). `AGENT_TIMEOUT_SECONDS` kills a run.
+
+The Jira tool runs in the service, not in the sandbox, so the Jira token never enters it:
+`jira-mcp.ts` serves MCP over HTTP on `127.0.0.1` at a port of its own, and each run gets a fresh
+secret, in the sandbox's MCP config as a bearer header, refused once the run ends. A Jira failure
+while it serves a run marks that run a `service` failure: a search that failed is not "nothing
+found". The agent can read that secret and the Claude token in its sandbox; the guardrails refuse
+any output that holds either, and there is no tool that sends anything out.
 
 ## Log
 
@@ -189,15 +256,16 @@ from every event but `poll` and `check_start`, one line each.
 
 | event | fields | UI |
 |---|---|---|
-| `service_start` | dryRun, pollIntervalS, maxAttempts, model, agentTimeoutS, claudeVersion, claudeAuth, host, dbFile (absolute), bugs (rows) | mode, model, claude, interval, started; ends a check cut short |
+| `service_start` | dryRun, pollIntervalS, maxAttempts, model, agentTimeoutS, claudeVersion, bwrapVersion, webuiCommit, host, dbFile (absolute), bugs (rows) | mode, model, claude, WebUI commit, interval, started; ends a check cut short |
 | `service_stopping` | signal | stopping |
 | `service_stopped` | | stopped |
 | `poll` | inQuery, waiting, pending, checked, failed, deferred, ms | last poll, in Created, waiting |
 | `poll_failed` | error, ms, requests (when the waiting loop's requests failed) | last poll failed, error, failures in a row |
 | `first_start` | skipped (the keys) | |
 | `key_changed` | from, to | |
+| `webui_fetched` | from, to (commits) | |
 | `check_start` | key, recheck, requested | liveness, checking |
-| `bug_complete`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, requested, failedBase, missing, related, agentMs, turns, costUsd, comment, commentId; `kept` (dry run, a comment in Jira left as recorded), `changed` (edit); a post by hand: key, `byHand`, commentId, comment | |
+| `bug_understood`, `bug_not_webui`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, requested, outcome, failedBase, related, webuiCommit, files, agentMs, turns, costUsd, reason (not_webui), comment, commentId; `kept` (dry run, a comment in Jira left as recorded), `changed` (edit); a post by hand: key, `byHand`, commentId, comment | |
 | `comment_adopted` | key, commentId, status | |
 | `check_failed` | key, recheck, requested, attempts (first check only), status, error, ms | |
 | `check_deferred` | key, error | |
@@ -215,19 +283,23 @@ otherwise. The UI's own log (`ui_start`, `ui_stopping`, `ui_stopped`, `ui_error`
 ## Configuration
 
 `.env` in the working directory is loaded if present; a variable set in the environment wins.
-Only the first two have no default.
+Only the first three have no default. The agent's model, timeout, turns and budget are
+provisional until rollout step 3 measures them.
 
 | variable | default | meaning |
 |---|---|---|
 | `JIRA_EMAIL`, `JIRA_API_TOKEN` | — | basic auth; a scoped API token (`jira-reference.md`) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | — | from `claude setup-token`; the only Claude auth the sandbox has |
 | `JIRA_BASE_URL` | the company site | for links |
 | `JIRA_CLOUD_ID` | the company site's | every REST request goes through `api.atlassian.com/ex/jira/<id>` |
-| `CLAUDE_CODE_OAUTH_TOKEN` | — | from `claude setup-token`; absent: the machine's own claude login |
 | `DRY_RUN` | `true` | `false` posts comments; anything else is refused |
 | `POLL_INTERVAL_SECONDS` | `180` | |
-| `AGENT_MODEL` | `haiku` | `sonnet` to compare on the same bugs with `check` |
-| `AGENT_TIMEOUT_SECONDS` | `180` | one agent run |
-| `AGENT_MAX_BUDGET_USD` | `0.5` | one agent run; a haiku check costs about $0.002 |
+| `AGENT_MODEL` | `sonnet` | compare models on the same bugs with `scripts/agreement.ts` |
+| `AGENT_TIMEOUT_SECONDS` | `600` | one agent run |
+| `AGENT_MAX_TURNS` | `100` | one agent run |
+| `AGENT_MAX_BUDGET_USD` | `2` | one agent run |
+| `WEBUI_REPO_URL` | `git@bitbucket.org:CGS/webui.git` | read with the machine's git credentials |
+| `WEBUI_DIR` | `state/webui` | the service's clone |
 | `DB_FILE` | `state/bug-validator.sqlite` | |
 | `LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
 | `BACKUP_DIR` | `state/backups` | `maintain`'s copies of the database, the latest 14 kept |
@@ -238,15 +310,17 @@ Only the first two have no default.
 
 Attempts at the first check (3), the query cap (200 issues per poll), the wait before the first
 check (30 min), the quiet before a re-check (15 min), the checks per bug (5), the pending requests
-(20) and the log's size before `maintain` cuts it (5 MB) are constants in the code.
+(20), the attachment limits (50 MB a file, 64 KB a HAR body, a frame every 2 s and 30 a video) and
+the log's size before `maintain` cuts it (5 MB) are constants in the code.
 
 ## Running
 
 ```
 npm install
-cp .env.example .env && chmod 600 .env      # fill in JIRA_EMAIL, JIRA_API_TOKEN
-npm run check -- KAZ-9025                   # one bug: the verdict and the comment, nothing written
+cp .env.example .env && chmod 600 .env      # fill in JIRA_EMAIL, JIRA_API_TOKEN, CLAUDE_CODE_OAUTH_TOKEN
+npm run check -- KAZ-9025                   # one bug: the outcome, the reasoning, the comment; nothing written
 npm run check -- KAZ-9025 --recheck         # as a re-check of the comment recorded in the database
+node scripts/agreement.ts marks.tsv         # KEY<TAB>understood|not_understood|not_webui per line: agreement, cost, time
 npm start                                   # the loop, DRY_RUN=true by default; log on stdout
 npm run request -- KAZ-9025                 # the running service checks the bug next (a key or a link)
 npm run ui                                  # the web UI on http://127.0.0.1:8081/ (UI_HOST to open it wider)
@@ -254,13 +328,13 @@ node src/main.ts maintain                   # back up the database, cut the log 
 npm test && npm run typecheck
 ```
 
-Tuning the agent: edit `agent/instructions.md`, run `check` on bugs with known gaps (the fixtures
-in `test/fixtures/` are such bugs) and on a good one (RPG-6188); `check --recheck` on a bug whose
-reporter added something after its comment (RPG-6219, KAZ-9035). RPG-6245 (a visual bug: the way
-to the screen is the steps) and KAZ-9043 (no steps, no related bug) are checks of the R1 rule and
-of the related-bug search. Adding a requirement touches `bug.ts`, `checks.ts` (if a field fact),
-`verdict.ts` (if it has a name of its own in the comment), `prd.md`, `agent/instructions.md` and a
-fixture; the UI takes the ids and names from `bug.ts`.
+Tuning the agent: edit `agent/instructions.md`, then run `scripts/agreement.ts` on the bugs a
+developer marked (rollout step 3; AC7): it runs `check` on each, writes nothing, and prints
+where the agent and the developer differ, with the agent's reasoning, and the cost and time of
+each run. `check --recheck` on a bug whose reporter answered its comment. The field checks keep
+their fixtures in `test/fixtures/`. Adding a requirement to the list touches `bug.ts`,
+`checks.ts` (if a field fact), `prd.md`, `agent/instructions.md` and a fixture; the UI takes the
+ids and names from `bug.ts`.
 
 ### UI
 
@@ -282,22 +356,24 @@ posts; a
 body over 4 KB is refused. `UI_USER` and `UI_PASSWORD` add a login. The pages forbid framing.
 
 - `/` — the service (running, stopping, stopped, crashed or silent; last poll and how many failed
-  in a row; mode; in Created and how many of them wait; started; model; claude version and auth;
-  poll interval; the bug being checked; the checks requested and waiting; skipped at the first
-  start), bugs first checked today / 7 days / all time with the share that got a comment and the
-  failed checks, the items that arrived after a comment, bugs per day of their first check for 30
-  days, the requirements the first check found missing most often, the checks that need attention
-  (failed first checks, failed re-checks of a bug with a comment, interrupted posts), and the
-  latest 30 events of the log.
-- `/bugs` — every bug by the day of its last check, latest first: result, what is missing,
-  related bugs, how many checks. `?result=` narrows by result (chips), `?q=` searches keys,
-  summaries and reporters (the form; Enter submits).
-- `/bugs/<KEY>` — each requirement as the agent judged it beside the base check, the related
-  bugs, every check with the comment it recorded, and the comment as it is (or would be) in
-  Jira, the mention by name and arrived items struck through. A comment Jira does not have gets
+  in a row; mode; in Created and how many of them wait; started; model; claude version;
+  the WebUI commit; poll interval; the bug being checked; the checks requested and waiting;
+  skipped at the first start), bugs first checked today / 7 days / all time by outcome
+  (understood, not understood, not a WebUI bug) with the failed checks and the cost, the field
+  checks that passed after a comment, bugs per day of their first check for 30 days, the field
+  checks failed most often, the checks that need attention (bugs not a WebUI bug, failed first
+  checks, failed re-checks of a bug with a comment, interrupted posts), and the latest 30 events
+  of the log.
+- `/bugs` — every bug by the day of its last check, latest first: outcome, related bugs, how
+  many checks. `?result=` narrows by outcome or status (chips), `?q=` searches keys, summaries
+  and reporters (the form; Enter submits).
+- `/bugs/<KEY>` — the outcome, the field checks, the reason (not a WebUI bug), the related bugs,
+  every check with its outcome, WebUI commit, files read and the comment it recorded, and the
+  comment as it is (or would be) in Jira, the mention by name. A comment Jira does not have gets
   Post to Jira: a confirmation with the comment, the check it came from and the reporter it
   notifies, then a post request (`?post` opens the confirmation without JavaScript). For a bug
-  asked for and not checked yet, the request alone.
+  asked for and not checked yet, the request alone. A version 1 check shows the list's verdict
+  it made.
 - `/healthz` — JSON for a monitor: `ok`, `state`, `pollFailures`, `lastSeen`.
 
 The pages are rendered on the server (`html.ts`, pure functions tested in `test/ui/`); `app.js`
@@ -318,10 +394,12 @@ cached; the fonts are, for a year.
 ### Deploy
 
 systemd user units (`deploy/`). Machine-specific in each: `WorkingDirectory`, the node path (in
-`PATH` and `ExecStart`; `PATH` must also hold `claude`) and, for the service and the UI, the log
-path. The units set `TZ=Europe/Warsaw`, keep claude from updating itself
-(`DISABLE_AUTOUPDATER=1`: update it by hand, then `check` a bug), give up after 5 failed starts in
-10 minutes, and give a stop 30 s (it kills the agent run in progress; nothing is lost).
+`PATH` and `ExecStart`; `PATH` must also hold `claude`, `bwrap`, `ffmpeg` and `git`) and, for the
+service and the UI, the log path. The units set `TZ=Europe/Warsaw`, keep claude from updating
+itself (`DISABLE_AUTOUPDATER=1`: update it by hand, then `check` a bug), give up after 5 failed
+starts in 10 minutes, and give a stop 30 s (it kills the agent run in progress; nothing is lost).
+The machine must let an unprivileged user make namespaces, which bwrap needs (Ubuntu 24.04:
+`kernel.apparmor_restrict_unprivileged_userns=0`, or an AppArmor profile for bwrap).
 
 ```
 mkdir -p ~/.config/systemd/user && cp deploy/bug-validator*.service deploy/bug-validator-maintain.timer ~/.config/systemd/user/
@@ -336,11 +414,11 @@ The UI is then at `http://<server-ip>:8081/`; let the port through the firewall 
 Its log is `state/ui.log`. Point a monitor at `http://<server-ip>:8081/healthz`. `maintain` runs
 daily at 04:30: a copy of the database in `state/backups/` (the latest 14 kept), and the log,
 once past 5 MB, copied to `service.log.1` and emptied in place (the UI reads both). Its output:
-`journalctl --user -u bug-validator-maintain`.
+`journalctl --user -u bug-validator-maintain`. The WebUI clone is not backed up: it is cloned
+again when missing.
 
 Claude auth: `claude setup-token` once (opens the browser), paste the token into `.env`, restart.
-`service_start` logs `claudeAuth`: `oauth_token`, or `cli_login` when the machine's own login is
-used. **Going live:** `DRY_RUN=false` in `.env`, `systemctl --user restart bug-validator`.
+**Going live:** `DRY_RUN=false` in `.env`, `systemctl --user restart bug-validator`.
 
 **Moving to another machine.** The rows are what keeps a bug from being checked as new; a missing
 database is a first start that skips everything in Created.
@@ -349,14 +427,14 @@ database is a first start that skips everything in Created.
    `systemctl --user disable --now bug-validator bug-validator-ui bug-validator-maintain.timer`.
    A clean stop removes `<db>.lock`; one copied over from a machine that did not stop cleanly
    names that machine, and the new one refuses to start until the file is deleted.
-2. Copy `state/` whole (`.sqlite`, `-wal`, `-shm`), or `node src/main.ts maintain` and copy the
-   newest file in `state/backups/` as `state/bug-validator.sqlite`.
+2. Copy `state/` without `webui/` (`.sqlite`, `-wal`, `-shm`), or `node src/main.ts maintain`
+   and copy the newest file in `state/backups/` as `state/bug-validator.sqlite`.
 3. On the new machine: `.env` (chmod 600, a `claude setup-token` of its own), the units with its
-   paths, the same claude version. Start, and check that `service_start` logs the expected
-   `dbFile` and `bugs`, and that no `first_start` follows.
+   paths, the same claude version, `bwrap`, `ffmpeg`, `git` and an SSH key that reads WebUI.
+   Start, and check that `service_start` logs the expected `dbFile`, `bugs` and `webuiCommit`,
+   and that no `first_start` follows.
 4. Keep the old machine's units disabled: two services check every bug twice. Live, the second
    finds the first's comment and edits it rather than posting one, but the two keep editing it.
 
-Docker (`Dockerfile`, `compose.yaml`) builds and runs the service alone, for a server without a
-Claude login; it is not the deployment and is not tested in use. Its UI would have no
-`service.log` to read.
+There is no Docker image: the sandbox makes namespaces, which a container does not allow without
+privileges.
