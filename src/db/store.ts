@@ -13,7 +13,7 @@ export interface IssueRef {
 export type CheckStatus = 'skipped' | 'understood' | 'not_webui' | 'dry_run' | 'posting' | 'commented' | 'retry' | 'failed';
 
 /** The check as it is now: 1 judged the report against the list, 2 reads the code (prd.md, 2026-11-03). */
-export const CHECK_VERSION = 2;
+const CHECK_VERSION = 2;
 
 /** A bug's row as the poll needs it to decide on a check. */
 export interface BugRow {
@@ -167,7 +167,7 @@ export interface PostRequest {
 /** Pending requests at most: a form is for a person asking for a few bugs, not for a script. */
 export const MAX_PENDING_REQUESTS = 20;
 /** A request the surroundings failed this many times in a row fails, so it stops holding up the rest. */
-export const MAX_REQUEST_TRIES = 3;
+const MAX_REQUEST_TRIES = 3;
 
 /**
  * Asks the service to check a bug: by key or by a link to it. Written to the service's database,

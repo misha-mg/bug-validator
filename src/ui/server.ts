@@ -123,7 +123,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
 }
 
 /** The Host header names this server: an IP address, localhost, this machine's name or one of UI_HOSTNAMES. */
-export function knownHost(header: string | undefined, config: Pick<UiConfig, 'hostnames'>): boolean {
+function knownHost(header: string | undefined, config: Pick<UiConfig, 'hostnames'>): boolean {
   if (!header) return false;
   const name = (/^\[([^\]]+)\](?::\d+)?$/.exec(header)?.[1] ?? header.replace(/:\d+$/, '')).toLowerCase();
   return isIP(name) !== 0 || name === 'localhost' || name === hostname().toLowerCase() || config.hostnames.includes(name);

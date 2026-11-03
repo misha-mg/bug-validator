@@ -7,7 +7,7 @@ import { type BugView, type Request, type Result, type Run, checked, result } fr
 import { type LogEvent, type ServiceStatus, liveness } from './service-log.ts';
 import { type Day, type Share, checksPerDay, fieldChecksPassedAfterComment, gaps, needsAttention, periodStats, startOfDay } from './stats.ts';
 
-export const CHART_DAYS = 30;
+const CHART_DAYS = 30;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const SUMMARY_WIDTH = 80;
 const ERROR_WIDTH = 120;
@@ -23,7 +23,7 @@ export interface PageContext {
   host?: string | undefined;
 }
 
-export const esc = (value: unknown): string =>
+const esc = (value: unknown): string =>
   String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 
 // ---- Layout
@@ -31,7 +31,7 @@ export const esc = (value: unknown): string =>
 /** The pages the masthead lists; a bug's page is under Bugs. */
 export type Section = 'home' | 'bugs';
 
-export function layout(title: string, main: string, ctx: PageContext, section: Section | null = null): string {
+function layout(title: string, main: string, ctx: PageContext, section: Section | null = null): string {
   const nav = (s: Section, href: string, name: string): string => `<a class="btn${s === section ? ' active' : ''}" href="${href}">${name}</a>`;
   return `<!doctype html>
 <html lang="en">
@@ -92,9 +92,9 @@ export function homePage(m: HomeModel, ctx: PageContext): string {
 <section class="frame problems">${frameHead('Field checks failed most often', total ? `first checks of ${bugsText(total)} · all time` : '')}
 ${total ? gapsTable(found) : '<p class="muted">No bug has been checked yet.</p>'}</section>
 <section class="frame attention">${frameHead('Needs attention', 'failed checks, bugs not the WebUI\'s')}
-${attention.length ? attentionTable(attention, ctx) : '<p class="muted">Nothing to look at.</p>'}</section>
+${attention.length ? attentionTable(attention) : '<p class="muted">Nothing to look at.</p>'}</section>
 <section class="frame activity">${frameHead('Activity', 'the latest events of the log')}
-${m.recent.length ? activityTable(m.recent, ctx) : '<p class="muted">Nothing logged yet.</p>'}</section>
+${m.recent.length ? activityTable(m.recent) : '<p class="muted">Nothing logged yet.</p>'}</section>
 </div>`;
   return layout('Bug validator', main, ctx, 'home');
 }
@@ -172,7 +172,7 @@ function gapsTable(found: ReturnType<typeof gaps>): string {
     .join('')}</tbody></table>`;
 }
 
-function attentionTable(bugs: BugView[], ctx: PageContext): string {
+function attentionTable(bugs: BugView[]): string {
   return `<table class="list"><thead><tr><th>Bug</th><th>Last check</th><th>What</th><th>Why</th></tr></thead><tbody>${bugs
     .map((b) => {
       // A bug not the WebUI's waits for a person's decision; its reason is the agent's.
@@ -185,7 +185,7 @@ function attentionTable(bugs: BugView[], ctx: PageContext): string {
     .join('')}</tbody></table>`;
 }
 
-function activityTable(recent: LogEvent[], ctx: PageContext): string {
+function activityTable(recent: LogEvent[]): string {
   return `<table class="list activity"><tbody>${[...recent]
     .reverse()
     .map((e) => {
@@ -250,10 +250,10 @@ export function eventText(e: LogEvent): string {
 // ---- Bugs
 
 /** An outcome in words, as the pages name it. */
-export const OUTCOME_TEXT: Record<Outcome, string> = { understood: 'understood', not_understood: 'not understood', not_webui: 'not a WebUI bug' };
+const OUTCOME_TEXT: Record<Outcome, string> = { understood: 'understood', not_understood: 'not understood', not_webui: 'not a WebUI bug' };
 
 export type Filter = 'all' | Result;
-export const FILTERS: Record<Filter, string> = { all: 'all', ...OUTCOME_TEXT, error: 'error', skipped: 'skipped' };
+const FILTERS: Record<Filter, string> = { all: 'all', ...OUTCOME_TEXT, error: 'error', skipped: 'skipped' };
 
 export interface BugsQuery {
   result: Filter;
@@ -508,10 +508,10 @@ export function dayChart(days: Day[]): string {
 // ---- Formatting
 
 const EN = 'en-GB';
-export const fmtClock = (d: Date): string => d.toLocaleTimeString(EN, { hour: '2-digit', minute: '2-digit', hour12: false });
-export const fmtDate = (d: Date): string => d.toLocaleDateString(EN, { day: '2-digit', month: 'short' });
-export const fmtTime = (d: Date): string => `${fmtDate(d)} ${fmtClock(d)}`;
-export const fmtDay = (d: Date): string => d.toLocaleDateString(EN, { weekday: 'short', day: '2-digit', month: 'short' });
+const fmtClock = (d: Date): string => d.toLocaleTimeString(EN, { hour: '2-digit', minute: '2-digit', hour12: false });
+const fmtDate = (d: Date): string => d.toLocaleDateString(EN, { day: '2-digit', month: 'short' });
+const fmtTime = (d: Date): string => `${fmtDate(d)} ${fmtClock(d)}`;
+const fmtDay = (d: Date): string => d.toLocaleDateString(EN, { weekday: 'short', day: '2-digit', month: 'short' });
 
 export function span(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
@@ -527,10 +527,10 @@ export function ago(now: Date, then: Date): string {
   return `${Math.floor(ms / day)}d ${String(Math.floor((ms % day) / 3_600_000)).padStart(2, '0')}h ago`;
 }
 
-export const bugsText = (n: number): string => `${n} bug${n === 1 ? '' : 's'}`;
+const bugsText = (n: number): string => `${n} bug${n === 1 ? '' : 's'}`;
 
 /** "85% (11)": the percentage, and how many it is. */
-export const shareText = (s: Share): string => (s.total ? `${Math.round((s.count * 100) / s.total)}% (${s.count})` : '–');
+const shareText = (s: Share): string => (s.total ? `${Math.round((s.count * 100) / s.total)}% (${s.count})` : '–');
 
 /** An error message on one line; the whole of it on hover when it is cut. */
 function errorText(error: unknown): string {

@@ -66,7 +66,7 @@ export const REQUIREMENTS: Record<RequirementId, string> = {
   R7: 'Project matches the product',
 };
 
-/** Field facts: the program checks these, and the agent must name every one that fails. */
+/** The field checks that are facts of the fields (R4–R6); for R1–R3 the code only looks for a heading. `scripts/late-changes.ts` measures by them. */
 export const FIELD_FACTS: readonly RequirementId[] = ['R4', 'R5', 'R6'];
 
 export const PROJECT_NAMES: Record<Project, string> = {

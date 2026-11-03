@@ -1,6 +1,7 @@
 # systemd user unit for the service. Install and operate: docs/architecture.md, Deploy.
-# Machine-specific: WorkingDirectory, the node path (PATH and ExecStart; PATH must also hold
-# `claude`) and the log path (StandardOutput, StandardError).
+# Machine-specific: WorkingDirectory, the node path (PATH and ExecStart; claude must be installed
+# with npm under that node, and PATH must also hold bwrap, ffmpeg and git) and the log path
+# (StandardOutput, StandardError).
 
 [Unit]
 Description=Bug Validator — checks new WebUI bugs in Jira

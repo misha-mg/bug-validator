@@ -1,11 +1,10 @@
 # Bug Validator — PRD
 
-Status: dry run (rollout step 2) on the home server since 2026-10-17, reviewed and hardened for
-the move to a server on 2026-10-28. On 2026-11-03 the check was redesigned: an agent that reads
-the WebUI code decides whether a bug can be fixed from its report. This document describes the
-redesigned check. It is not built yet; the running service still checks against the list, as
-the PRD at commit 8348001 describes. Decisions are dated in the Decisions section; the rest of
-the document states the design decided.
+Status: dry run on the home server since 2026-10-17, reviewed and hardened for the move to a
+server on 2026-10-28. On 2026-11-03 the check was redesigned: an agent that reads the WebUI code
+decides whether a bug can be fixed from its report; built on 2026-11-04, measured next (rollout
+step 3). Decisions are dated in the Decisions section; the rest of the document states the
+current state.
 
 A service that watches new WebUI bugs in Jira and, before the PM triages them, decides whether
 the report is enough to fix the bug: an agent reads the report, its attachments and the WebUI

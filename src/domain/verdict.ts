@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { OUTCOMES, type Outcome } from './bug.ts';
 
 /** What the agent returns (agent/instructions.md, Output). */
-export const VerdictSchema = z.object({
+const VerdictSchema = z.object({
   outcome: z.enum(OUTCOMES),
   /** For whoever tunes the instructions: `check` prints it, the service keeps nothing of it. */
   reasoning: z.string().max(6000),

@@ -11,8 +11,8 @@ import type { Jira } from '../jira/client.ts';
 /** Over this nothing is downloaded: a dump or a recording the agent would not get through. */
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 /** A video as frames: one every 2 seconds, at most 30 — a minute of screen. */
-export const FRAME_EVERY_S = 2;
-export const MAX_FRAMES = 30;
+const FRAME_EVERY_S = 2;
+const MAX_FRAMES = 30;
 const FFMPEG_TIMEOUT_MS = 120_000;
 
 const IMAGE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
