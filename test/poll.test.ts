@@ -76,15 +76,16 @@ class FakeAgent implements Agent {
   constructor(...outcomes: (unknown | Error)[]) {
     this.outcomes = outcomes;
   }
-  async run(prompt: string, _jsonSchema: object, signal?: AbortSignal): Promise<AgentRun> {
+  async run(prompt: string, _jsonSchema: object, _bugDir: string, signal?: AbortSignal): Promise<AgentRun> {
     this.prompts.push(prompt);
     const outcome = this.outcomes.length > 1 ? this.outcomes.shift() : this.outcomes[0];
     if (outcome === 'hang') {
-      // As the real agent: a stop kills the run.
+      // As the real agent: a stop kills the run, and one already asked for starts nothing.
+      if (signal?.aborted) throw new AgentError('the service is stopping', 'stopped');
       await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new AgentError('the service is stopping', 'stopped'))));
     }
     if (outcome instanceof Error) throw outcome;
-    return { output: outcome, costUsd: 0.002, durationMs: 10, turns: 1, model: 'haiku', instructions: 'abc' };
+    return { output: outcome, costUsd: 0.002, durationMs: 10, turns: 1, model: 'haiku', instructions: 'abc', secrets: [] };
   }
 }
 

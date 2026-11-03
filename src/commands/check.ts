@@ -1,4 +1,5 @@
 import { ClaudeAgent } from '../claude/agent.ts';
+import { JiraTool } from '../claude/jira-mcp.ts';
 import { loadConfig } from '../config.ts';
 import { Store } from '../db/store.ts';
 import { JiraClient } from '../jira/client.ts';
@@ -13,7 +14,15 @@ export async function check(key: string, recheck = false): Promise<void> {
   const config = loadConfig();
   const previousComment = recheck ? Store.recordedComment(config.dbFile, key) : null;
   if (recheck && previousComment === null) throw new Error(`${key} has no recorded comment to re-check`);
-  const out = await checkBug({ jira: new JiraClient(config.jira), agent: new ClaudeAgent(config.agent) }, key, { previousComment });
+  const jira = new JiraClient(config.jira);
+  const tool = new JiraTool(jira);
+  await tool.listen();
+  let out: Awaited<ReturnType<typeof checkBug>>;
+  try {
+    out = await checkBug({ jira, agent: new ClaudeAgent(config.agent, config.webui.dir, tool) }, key, { previousComment });
+  } finally {
+    await tool.close();
+  }
   const report = {
     key: out.bug.key,
     summary: out.bug.summary,

@@ -4,7 +4,7 @@ import { loadConfig } from '../src/config.ts';
 import { loadUiConfig } from '../src/ui/config.ts';
 
 // A plain object, not process.env: `.env` is loaded only into the real environment.
-const env = (vars: Record<string, string> = {}) => ({ JIRA_EMAIL: 'a@b.com', JIRA_API_TOKEN: 't', ...vars });
+const env = (vars: Record<string, string> = {}) => ({ JIRA_EMAIL: 'a@b.com', JIRA_API_TOKEN: 't', CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-x', ...vars });
 
 describe('config', () => {
   it('is a dry run unless DRY_RUN=false is set on purpose', () => {
@@ -16,7 +16,8 @@ describe('config', () => {
     assert.throws(() => loadConfig({}), /JIRA_EMAIL/);
     assert.throws(() => loadConfig(env({ POLL_INTERVAL_SECONDS: '0' })), /POLL_INTERVAL_SECONDS/);
     assert.throws(() => loadConfig(env({ AGENT_MAX_BUDGET_USD: '-1' })), /AGENT_MAX_BUDGET_USD/);
-    assert.equal(loadConfig(env()).agent.maxBudgetUsd, 0.5);
+    assert.throws(() => loadConfig(env({ CLAUDE_CODE_OAUTH_TOKEN: '' })), /CLAUDE_CODE_OAUTH_TOKEN/, 'the sandbox has no other login');
+    assert.deepEqual(loadConfig(env()).agent, { model: 'sonnet', timeoutMs: 600_000, maxTurns: 100, maxBudgetUsd: 2, token: 'sk-ant-oat01-x' });
   });
   it('the WebUI clone has a place and a source', () => {
     assert.deepEqual(loadConfig(env()).webui, { repoUrl: 'git@bitbucket.org:CGS/webui.git', dir: 'state/webui' });

@@ -1,3 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { AgentRun } from '../claude/agent.ts';
 import type { Bug } from '../domain/bug.ts';
 import { FIELD_FACTS } from '../domain/bug.ts';
 import { runBaseChecks, type BaseCheck } from '../domain/checks.ts';
@@ -6,6 +10,7 @@ import { buildPrompt } from '../domain/prompt.ts';
 import { parseVerdict, VerdictError, verdictJsonSchema, type Verdict } from '../domain/verdict.ts';
 import { JiraError, type RawIssue } from '../jira/client.ts';
 import { toBug } from '../jira/mapping.ts';
+import { prepareFiles } from './attachments.ts';
 import type { Deps } from './deps.ts';
 
 export interface CheckOutcome {
@@ -33,7 +38,17 @@ export async function checkBug(deps: Pick<Deps, 'jira' | 'agent'>, key: string, 
   const previousComment = options.previousComment ?? null;
   const bug = toBug(options.issue ?? (await deps.jira.getIssue(key)));
   const baseChecks = runBaseChecks(bug);
-  const run = await deps.agent.run(buildPrompt(bug, baseChecks, previousComment), verdictJsonSchema, options.signal);
+  // The run's files, in a directory of this run's own; gone with the run.
+  const runDir = mkdtempSync(join(tmpdir(), 'bug-validator-run-'));
+  const bugDir = join(runDir, 'bug');
+  let run: AgentRun;
+  try {
+    mkdirSync(bugDir);
+    await prepareFiles(deps.jira, bug, bugDir);
+    run = await deps.agent.run(buildPrompt(bug, baseChecks, previousComment), verdictJsonSchema, bugDir, options.signal);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
 
   const failedFacts = baseChecks.filter((c) => !c.passed && FIELD_FACTS.includes(c.id)).map((c) => c.id);
   const { verdict, strippedMentions, keysInComment } = parseVerdict(run.output, bug.reporter?.accountId ?? null, failedFacts, previousComment);

@@ -1,17 +1,17 @@
-// The agent's only tool: read-only Jira search and issue read, served over MCP on stdio.
-// Hand-written JSON-RPC (initialize, tools/list, tools/call) so the project keeps one dependency.
-// Started by claude itself (see agent.ts), which passes the JIRA_* variables in its environment.
-import { appendFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+// The agent's Jira tool: read-only search and issue read, served over MCP (streamable HTTP) by the
+// service itself on loopback, so the Jira token never enters the sandbox. Hand-written JSON-RPC
+// (initialize, tools/list, tools/call), so the project keeps one dependency. Each agent run gets
+// a secret of its own, revoked when the run ends.
+import { randomBytes } from 'node:crypto';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { z } from 'zod';
-import { loadConfig } from '../config.ts';
 import { ISSUE_KEY } from '../domain/key.ts';
-import { JiraError, JiraClient } from '../jira/client.ts';
+import { type Jira, JiraError } from '../jira/client.ts';
 import { toBug } from '../jira/mapping.ts';
 import { scopedJql } from '../jira/queries.ts';
-import { TOOL_ERRORS_ENV } from './agent.ts';
 
-const jira = new JiraClient(loadConfig().jira);
+export const JIRA_TOOLS = ['mcp__jira__search_issues', 'mcp__jira__get_issue'];
 
 const SearchInput = z.object({ jql: z.string().min(1), maxResults: z.number().int().min(1).max(20).default(10) });
 const IssueInput = z.object({ key: z.string().regex(ISSUE_KEY) });
@@ -42,82 +42,138 @@ const TOOLS = [
   },
 ];
 
-async function callTool(name: string, args: unknown): Promise<string> {
-  if (name === 'search_issues') {
-    const { jql, maxResults } = SearchInput.parse(args);
-    const issues = await jira.search(scopedJql(jql), ['summary', 'status', 'resolution', 'updated'], maxResults);
-    return JSON.stringify(
-      issues
-        // The personal account sees every project; the agent sees only the two in scope.
-        .filter((i) => ISSUE_KEY.test(i.key))
-        .map((i) => {
-          const f = i.fields as { summary?: string; status?: { name: string }; resolution?: { name: string } | null; updated?: string };
-          return { key: i.key, summary: f.summary, status: f.status?.name, resolution: f.resolution?.name ?? null, updated: f.updated?.slice(0, 10) };
-        }),
-    );
+interface Request {
+  jsonrpc: '2.0';
+  id?: number | string;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+const MAX_BODY = 64 * 1024;
+
+export class JiraTool {
+  private readonly jira: Pick<Jira, 'search' | 'getIssue'>;
+  private readonly server: Server;
+  /** The runs allowed in, by secret, with the first failure of Jira's own during each. */
+  private readonly runs = new Map<string, { failure: string | null }>();
+
+  constructor(jira: Pick<Jira, 'search' | 'getIssue'>) {
+    this.jira = jira;
+    this.server = createServer((req, res) => void this.handle(req, res));
   }
-  if (name === 'get_issue') {
-    const { key } = IssueInput.parse(args);
-    const b = toBug(await jira.getIssue(key));
-    return JSON.stringify({
-      key: b.key, summary: b.summary, status: b.status, labels: b.labels, versions: b.versions, devices: b.devices,
-      attachments: b.attachments.map((a) => a.filename), created: b.created.slice(0, 10), updated: b.updated.slice(0, 10),
-      description: b.description.slice(0, 4000),
-      comments: b.comments.map((c) => ({ author: c.author, created: c.created.slice(0, 10), body: c.body.slice(0, 1500) })),
+
+  /** Listens on loopback at a port of its own. */
+  listen(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.server.once('error', reject);
+      this.server.listen(0, '127.0.0.1', () => resolve());
     });
   }
-  throw new Error(`unknown tool ${name}`);
-}
 
-interface Request { jsonrpc: '2.0'; id?: number | string; method: string; params?: Record<string, unknown> }
+  get url(): string {
+    const address = this.server.address() as AddressInfo | null;
+    if (!address) throw new Error('the Jira tool is not listening');
+    return `http://127.0.0.1:${address.port}/mcp`;
+  }
 
-function send(msg: object): void {
-  process.stdout.write(JSON.stringify(msg) + '\n');
-}
+  /** A secret for one run; the run's requests carry it as a bearer token. */
+  grant(): string {
+    const secret = randomBytes(24).toString('base64url');
+    this.runs.set(secret, { failure: null });
+    return secret;
+  }
 
-async function handle(req: Request): Promise<void> {
-  const { id, method, params = {} } = req;
-  if (id === undefined) return; // notifications (notifications/initialized) need no answer
-  try {
+  /** Jira's own failure during the run, if any: a search that failed is not "nothing found". */
+  failure(secret: string): string | null {
+    return this.runs.get(secret)?.failure ?? null;
+  }
+
+  revoke(secret: string): void {
+    this.runs.delete(secret);
+  }
+
+  close(): Promise<void> {
+    return new Promise((resolve) => this.server.close(() => resolve()));
+  }
+
+  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const secret = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1];
+    const run = secret ? this.runs.get(secret) : undefined;
+    if (!run) return end(res, 401, 'no such run');
+    if (req.method === 'DELETE') return end(res, 200, '');
+    if (req.method !== 'POST') return end(res, 405, 'POST only');
+    let body = '';
+    for await (const chunk of req) {
+      body += chunk;
+      if (body.length > MAX_BODY) return end(res, 413, 'too large');
+    }
+    let message: Request;
+    try {
+      message = JSON.parse(body) as Request;
+    } catch {
+      return end(res, 400, 'not JSON');
+    }
+    if (message.id === undefined) return end(res, 202, ''); // a notification (notifications/initialized) needs no answer
+    const answer = await this.answer(message, run);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(answer));
+  }
+
+  private async answer(req: Request, run: { failure: string | null }): Promise<object> {
+    const { id, method, params = {} } = req;
     switch (method) {
       case 'initialize':
-        send({ jsonrpc: '2.0', id, result: { protocolVersion: params['protocolVersion'] ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'jira', version: '0.1.0' } } });
-        return;
+        return { jsonrpc: '2.0', id, result: { protocolVersion: params['protocolVersion'] ?? '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'jira', version: '0.2.0' } } };
       case 'ping':
-        send({ jsonrpc: '2.0', id, result: {} });
-        return;
+        return { jsonrpc: '2.0', id, result: {} };
       case 'tools/list':
-        send({ jsonrpc: '2.0', id, result: { tools: TOOLS } });
-        return;
+        return { jsonrpc: '2.0', id, result: { tools: TOOLS } };
       case 'tools/call': {
         const name = String(params['name']);
         try {
-          const text = await callTool(name, params['arguments'] ?? {});
-          send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text }] } });
+          const text = await this.call(name, params['arguments'] ?? {});
+          return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text }] } };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           // A bad JQL is the agent's to fix; Jira itself failing makes the run untrustworthy (agent.ts).
-          const file = process.env[TOOL_ERRORS_ENV];
-          if (file && err instanceof JiraError && err.environmental) appendFileSync(file, `${name}: ${message}\n`);
-          send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `error: ${message}` }], isError: true } });
+          if (err instanceof JiraError && err.environmental) run.failure ??= `${name}: ${message}`;
+          return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `error: ${message}` }], isError: true } };
         }
-        return;
       }
       default:
-        send({ jsonrpc: '2.0', id, error: { code: -32601, message: `method not found: ${method}` } });
+        return { jsonrpc: '2.0', id, error: { code: -32601, message: `method not found: ${method}` } };
     }
-  } catch (err) {
-    send({ jsonrpc: '2.0', id, error: { code: -32603, message: err instanceof Error ? err.message : String(err) } });
+  }
+
+  private async call(name: string, args: unknown): Promise<string> {
+    if (name === 'search_issues') {
+      const { jql, maxResults } = SearchInput.parse(args);
+      const issues = await this.jira.search(scopedJql(jql), ['summary', 'status', 'resolution', 'updated'], maxResults);
+      return JSON.stringify(
+        issues
+          // The personal account sees every project; the agent sees only the two in scope.
+          .filter((i) => ISSUE_KEY.test(i.key))
+          .map((i) => {
+            const f = i.fields as { summary?: string; status?: { name: string }; resolution?: { name: string } | null; updated?: string };
+            return { key: i.key, summary: f.summary, status: f.status?.name, resolution: f.resolution?.name ?? null, updated: f.updated?.slice(0, 10) };
+          }),
+      );
+    }
+    if (name === 'get_issue') {
+      const { key } = IssueInput.parse(args);
+      const b = toBug(await this.jira.getIssue(key));
+      return JSON.stringify({
+        key: b.key, summary: b.summary, status: b.status, labels: b.labels, versions: b.versions, devices: b.devices,
+        attachments: b.attachments.map((a) => a.filename), created: b.created.slice(0, 10), updated: b.updated.slice(0, 10),
+        description: b.description.slice(0, 4000),
+        comments: b.comments.map((c) => ({ author: c.author, created: c.created.slice(0, 10), body: c.body.slice(0, 1500) })),
+      });
+    }
+    throw new Error(`unknown tool ${name}`);
   }
 }
 
-createInterface({ input: process.stdin }).on('line', (line) => {
-  if (!line.trim()) return;
-  let req: Request;
-  try {
-    req = JSON.parse(line) as Request;
-  } catch {
-    return;
-  }
-  void handle(req);
-});
+function end(res: ServerResponse, status: number, text: string): void {
+  res.writeHead(status, { 'Content-Type': 'text/plain' });
+  res.end(text);
+}

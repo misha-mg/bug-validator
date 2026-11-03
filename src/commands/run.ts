@@ -3,6 +3,7 @@ import { hostname } from 'node:os';
 import { resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { ClaudeAgent } from '../claude/agent.ts';
+import { JiraTool } from '../claude/jira-mcp.ts';
 import { loadConfig } from '../config.ts';
 import { Store } from '../db/store.ts';
 import { JiraClient } from '../jira/client.ts';
@@ -22,14 +23,13 @@ const REQUEST_TICK_MS = 2000;
  */
 export async function run(): Promise<void> {
   const config = loadConfig();
-  const claudeVersion = ClaudeAgent.version();
+  const jira = new JiraClient(config.jira);
+  const tool = new JiraTool(jira);
+  await tool.listen();
+  const agent = new ClaudeAgent(config.agent, config.webui.dir, tool);
+  const claudeVersion = await agent.version();
   lock(`${config.dbFile}.lock`);
-  const deps: Deps = {
-    config,
-    jira: new JiraClient(config.jira),
-    agent: new ClaudeAgent(config.agent),
-    store: new Store(config.dbFile),
-  };
+  const deps: Deps = { config, jira, agent, store: new Store(config.dbFile) };
   log.info('service_start', {
     dryRun: config.dryRun,
     pollIntervalS: config.pollIntervalMs / 1000,
@@ -37,7 +37,6 @@ export async function run(): Promise<void> {
     model: config.agent.model,
     agentTimeoutS: config.agent.timeoutMs / 1000,
     claudeVersion,
-    claudeAuth: config.agent.auth,
     host: hostname(),
     // The absolute path and the rows in it: a database that is not the expected one shows here.
     dbFile: resolve(config.dbFile),
@@ -80,6 +79,7 @@ export async function run(): Promise<void> {
     }
   }
   deps.store.close();
+  await tool.close();
   log.info('service_stopped');
 }
 
