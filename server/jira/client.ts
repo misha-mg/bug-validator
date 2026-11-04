@@ -1,4 +1,4 @@
-import type { Config } from '../config.ts'
+import type { JiraConfig } from '../config.ts'
 
 /**
  * A Jira request failed. Without a status it never reached Jira (network, timeout); with one, Jira
@@ -90,15 +90,51 @@ const REQUEST_TIMEOUT_MS = 30_000
 /** A download of up to 50 MB (pipeline/attachments.ts) over an office line. */
 const DOWNLOAD_TIMEOUT_MS = 180_000
 
-/** Jira REST v2 through the api.atlassian.com gateway (scoped API tokens work only there). */
+/**
+ * Jira REST v2 through the api.atlassian.com gateway (scoped API tokens work only there), by the
+ * site's cloud id: JIRA_CLOUD_ID when set, otherwise read once from the site's /_edge/tenant_info.
+ */
 export class JiraClient implements Jira {
-  private readonly api: string
+  private readonly site: string
+  private readonly cloudId: string | null
   private readonly auth: string
+  private api: Promise<string> | undefined
   private self: Promise<{ accountId: string }> | undefined
 
-  constructor(jira: Config['jira']) {
-    this.api = `https://api.atlassian.com/ex/jira/${jira.cloudId}/rest/api/2`
+  constructor(jira: JiraConfig) {
+    this.site = jira.baseUrl
+    this.cloudId = jira.cloudId
     this.auth = 'Basic ' + Buffer.from(`${jira.email}:${jira.apiToken}`).toString('base64')
+  }
+
+  /** The REST base, asked for once; a lookup that failed is asked again next time. */
+  private apiBase(): Promise<string> {
+    this.api ??= this.lookupCloudId().then(
+      (id) => `https://api.atlassian.com/ex/jira/${id}/rest/api/2`,
+      (err: unknown) => {
+        this.api = undefined
+        throw err
+      },
+    )
+    return this.api
+  }
+
+  /** The site says its own cloud id, to anyone; a failure here is the surroundings', never a bug's. */
+  private async lookupCloudId(): Promise<string> {
+    if (this.cloudId) return this.cloudId
+    const url = `${this.site}/_edge/tenant_info`
+    let info: { cloudId?: unknown }
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+      if (!res.ok) throw new JiraError(`HTTP ${res.status} on GET ${url}: the site's tenant info`)
+      info = (await res.json()) as { cloudId?: unknown }
+    } catch (err) {
+      if (err instanceof JiraError) throw err
+      throw new JiraError(`request failed: ${describe(err)} (GET ${url})`)
+    }
+    if (typeof info.cloudId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(info.cloudId))
+      throw new JiraError(`no cloud id in ${url}: set JIRA_CLOUD_ID`)
+    return info.cloudId
   }
 
   async search(jql: string, fields: string[], maxResults: number): Promise<RawIssue[]> {
@@ -127,7 +163,10 @@ export class JiraClient implements Jira {
     const path = `/attachment/content/${encodeURIComponent(id)}`
     let res: Response
     try {
-      res = await fetch(this.api + path, { headers: { Authorization: this.auth }, signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+      res = await fetch((await this.apiBase()) + path, {
+        headers: { Authorization: this.auth },
+        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+      })
     } catch (err) {
       throw new JiraError(`request failed: ${describe(err)}`)
     }
@@ -178,7 +217,7 @@ export class JiraClient implements Jira {
     // The body is read inside the try as well: a timeout or a reset while it arrives is a request
     // that failed without an answer, like one that never reached Jira.
     try {
-      res = await fetch(this.api + path, {
+      res = await fetch((await this.apiBase()) + path, {
         ...init,
         headers: { Authorization: this.auth, Accept: 'application/json', 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

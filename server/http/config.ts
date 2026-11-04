@@ -5,15 +5,15 @@ import { z } from 'zod'
 import { Env, parseEnv } from '../config.ts'
 import { type Guard, guardFromEnv } from './guard.ts'
 
-const UiEnv = Env.pick({ JIRA_BASE_URL: true, DB_FILE: true, LOG_FILE: true }).extend({
+const UiEnv = Env.pick({ JIRA_BASE_URL: true, VALIDATOR_DB_FILE: true, VALIDATOR_LOG_FILE: true }).extend({
   // This machine only, unless the deployment opens it on purpose (deploy/bug-validator-ui.service).
-  UI_HOST: z.string().min(1).default('127.0.0.1'),
-  UI_PORT: z.coerce.number().int().min(1).max(65535).default(8081),
+  VALIDATOR_HOST: z.string().min(1).default('127.0.0.1'),
+  VALIDATOR_PORT: z.coerce.number().int().min(1).max(65535).default(8081),
   // Names the UI may be opened by besides IP addresses, localhost and this machine's name.
-  UI_HOSTNAMES: z.string().default(''),
+  VALIDATOR_HOSTNAMES: z.string().default(''),
   // Both set: the pages ask for this login (HTTP basic auth).
-  UI_USER: z.string().min(1).optional(),
-  UI_PASSWORD: z.string().min(1).optional(),
+  VALIDATOR_USER: z.string().min(1).optional(),
+  VALIDATOR_PASSWORD: z.string().min(1).optional(),
 })
 
 export interface UiConfig {
@@ -32,11 +32,11 @@ export const REALM = 'Bug validator'
 export function loadUiConfig(env: NodeJS.ProcessEnv = process.env): UiConfig {
   const e = parseEnv(UiEnv, env)
   return {
-    dbFile: e.DB_FILE,
-    logFile: e.LOG_FILE,
-    jiraBaseUrl: e.JIRA_BASE_URL,
-    host: e.UI_HOST,
-    port: e.UI_PORT,
-    guard: guardFromEnv(e.UI_HOSTNAMES, e.UI_USER, e.UI_PASSWORD, REALM),
+    dbFile: e.VALIDATOR_DB_FILE,
+    logFile: e.VALIDATOR_LOG_FILE,
+    jiraBaseUrl: e.JIRA_BASE_URL.replace(/\/+$/, ''),
+    host: e.VALIDATOR_HOST,
+    port: e.VALIDATOR_PORT,
+    guard: guardFromEnv(e.VALIDATOR_HOSTNAMES, e.VALIDATOR_USER, e.VALIDATOR_PASSWORD, REALM),
   }
 }

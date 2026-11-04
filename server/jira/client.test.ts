@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'vitest'
-import { JiraClient, JiraError } from './client.ts'
+import { ISSUE_FIELDS, JiraClient, JiraError } from './client.ts'
 import { scopedJql } from './queries.ts'
 
 describe('JiraError', () => {
@@ -40,6 +40,30 @@ describe('JiraClient', () => {
       client().attachment('10001'),
       (err: JiraError) => err.status === 404 && /attachment\/content\/10001/.test(err.message),
     )
+  })
+  it('reads the cloud id from the site once when it is not set, and asks again after a failure', async () => {
+    const urls: string[] = []
+    globalThis.fetch = async (input) => {
+      const url = String(input)
+      urls.push(url)
+      if (url === 'https://x/_edge/tenant_info') return Response.json({ cloudId: 'tenant-1' })
+      return Response.json({ accountId: 'me' })
+    }
+    const c = new JiraClient({ baseUrl: 'https://x', cloudId: null, email: 'a@b.com', apiToken: 't' })
+    assert.deepEqual(await c.myself(), { accountId: 'me' })
+    await c.getIssue('KAZ-1')
+    assert.deepEqual(urls, [
+      'https://x/_edge/tenant_info',
+      'https://api.atlassian.com/ex/jira/tenant-1/rest/api/2/myself',
+      'https://api.atlassian.com/ex/jira/tenant-1/rest/api/2/issue/KAZ-1?fields=' + ISSUE_FIELDS.join(','),
+    ])
+
+    globalThis.fetch = async () => new Response('down', { status: 503 })
+    const fresh = new JiraClient({ baseUrl: 'https://x', cloudId: null, email: 'a@b.com', apiToken: 't' })
+    await assert.rejects(fresh.getIssue('KAZ-1'), (err: JiraError) => err.environmental && /tenant info/.test(err.message))
+    globalThis.fetch = async () => Response.json({})
+    await assert.rejects(fresh.getIssue('KAZ-1'), /set JIRA_CLOUD_ID/)
+    assert.equal(client().getIssue.length, 1, 'with JIRA_CLOUD_ID set the site is never asked')
   })
   it('asks who it is once', async () => {
     let asked = 0

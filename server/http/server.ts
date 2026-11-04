@@ -36,9 +36,9 @@ const ACTIONS: Record<string, (dbFile: string, form: URLSearchParams) => string>
  * answers a monitor: 200 while the service runs and polls, 503 otherwise.
  *
  * A page is served only to a Host the UI knows (an IP address, localhost, this machine's name,
- * UI_HOSTNAMES): a site that points its own name at this server cannot read the pages through a
+ * VALIDATOR_HOSTNAMES): a site that points its own name at this server cannot read the pages through a
  * visitor's browser. A request is taken only from the UI's own pages: another site cannot make a
- * visitor's browser ask for checks. With UI_USER and UI_PASSWORD, every page asks for the login.
+ * visitor's browser ask for checks. With VALIDATOR_USER and VALIDATOR_PASSWORD, every page asks for the login.
  */
 export function startUi(config: UiConfig, host = config.host, port = config.port): Promise<Server> {
   // One reader lives for the server's life: it reads the log incrementally.

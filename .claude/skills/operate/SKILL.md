@@ -33,7 +33,7 @@ A start refused: the reason is in the log or the journal. `Bad configuration` is
 (`CLAUDE_CODE_OAUTH_TOKEN` is required since 2026-11-04); `cannot start claude in the sandbox` is
 bwrap (namespaces: Deploy), claude not under node's prefix, or the token; `git clone failed` /
 `git fetch failed` is the SSH key or Bitbucket (SSH moves to `ssh.bitbucket.org` on 2026-11-12:
-`WEBUI_REPO_URL`); `the database is locked by a service on <host>` is a lock file left by
+`VALIDATOR_WEBUI_REPO_URL`); `the database is locked by a service on <host>` is a lock file left by
 another machine (Moving to another machine).
 
 ## A migration
@@ -53,7 +53,7 @@ can be deleted once the service has run a day. `maintain` keeps 14 daily backups
   429/5xx: wait), Claude (a usage limit: wait; auth: `claude setup-token`, the token into
   `.env`, restart), the clone (`CloneError`: the key, the host). The checks wait; nothing is
   lost and no bug loses an attempt.
-- **checking KEY for a long time:** the agent's cap is `AGENT_TIMEOUT_SECONDS` (600 by default);
+- **checking KEY for a long time:** the agent's cap is `VALIDATOR_AGENT_TIMEOUT_SECONDS` (600 by default);
   a stop kills the run and the bug is checked again later.
 
 ## Do not

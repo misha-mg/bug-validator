@@ -188,7 +188,7 @@ Every WebUI bug counts, whoever reported it.
    keeps none.
 4. **Dry run** with the new check, the process of step 2 unchanged: every comment posted by a
    person. Going on is a judgement call, no formal exit criterion.
-5. **Comments live** (`DRY_RUN=false`), from the personal account, once the comment's wording
+5. **Comments live** (`VALIDATOR_DRY_RUN=false`), from the personal account, once the comment's wording
    rules are set. Before that, check whether Jira notifies watchers when a comment is edited.
 6. Later, separately decided: suggest links as Jira links; measure the success metric.
 
@@ -202,7 +202,7 @@ Every WebUI bug counts, whoever reported it.
   Base checks have unit tests with real descriptions as fixtures.
 - AC3: Restarting the service, deleting the database, a crash while posting, or a re-check never
   produces a second comment on the same bug.
-- AC4: With `DRY_RUN=true` the service writes nothing to Jira of its own accord; only a comment a
+- AC4: With `VALIDATOR_DRY_RUN=true` the service writes nothing to Jira of its own accord; only a comment a
   person confirms in the web UI is posted.
 - AC5: The agent reads the bug through the project's read-only Jira server (KAZ and RPG only),
   the bug's attachments (a HAR file cleaned of cookies, authorization headers and tokens) and a
@@ -301,7 +301,7 @@ Every WebUI bug counts, whoever reported it.
     KAZ-9044). Related bugs are named only after reading them; half the dry run's matched a
     shared word.
   - The web UI listens on this machine unless its unit opens it, serves only known host names,
-    takes requests only from its own pages, and may ask for a login (`UI_USER`); the 2026-10-26
+    takes requests only from its own pages, and may ask for a login (`VALIDATOR_USER`); the 2026-10-26
     "no login" holds on the LAN. `/healthz` for a monitor; the UI tells a crashed service from a
     running one.
   - Operations: the schema is versioned and backed up before a migration; `maintain` (a daily

@@ -22,7 +22,7 @@ machine: `.about/architecture.md`, Deploy.
   `state/`, writes only check and post requests, and imports the tables, the statuses, the
   outcomes and the requirement ids from the service's own modules.
 - The service writes nothing to Jira of its own until the PRD's rollout reaches "comments live":
-  `DRY_RUN=true` is the default; the UI's Post to Jira posts one confirmed comment in any mode.
+  `VALIDATOR_DRY_RUN=true` is the default; the UI's Post to Jira posts one confirmed comment in any mode.
   The service's agent runs in a bubblewrap sandbox that holds only the WebUI clone, the run's
   files and claude (`.about/architecture.md`, The agent run); the deny list in
   `.claude/settings.json` protects only interactive Claude Code sessions in this repository.

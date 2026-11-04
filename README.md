@@ -39,7 +39,7 @@ cp .env.example .env && chmod 600 .env   # JIRA_EMAIL, JIRA_API_TOKEN, CLAUDE_CO
 npm install
 npm run check -- KAZ-9025                # one bug: the outcome, the agent's reasoning, the comment; nothing written
 node scripts/agreement.ts marks.tsv      # the agent against a developer's marks: agreement, cost, time
-npm start                                # the service, DRY_RUN=true by default
+npm start                                # the service, VALIDATOR_DRY_RUN=true by default
 npm run ui                               # the web UI, http://127.0.0.1:8081/
 npm test && npm run typecheck
 ```

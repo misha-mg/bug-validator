@@ -41,7 +41,7 @@ server/
     poll.ts          one poll: query → first-start bootstrap → moved bugs → plan → checks, requests first
   commands/          run (the loop), check (one bug, writes nothing), request (the service checks a bug next), ui (the web UI), maintain (backup, log size)
   ui/                the web UI: a separate process that reads state/ and writes nothing but check and post requests
-    config.ts        UI_HOST, UI_PORT, UI_HOSTNAMES, UI_USER, UI_PASSWORD, plus the service's DB_FILE, LOG_FILE and JIRA_BASE_URL
+    config.ts        VALIDATOR_HOST, VALIDATOR_PORT, VALIDATOR_HOSTNAMES, VALIDATOR_USER, VALIDATOR_PASSWORD, plus the service's VALIDATOR_DB_FILE, VALIDATOR_LOG_FILE and JIRA_BASE_URL
     read.ts          the database, read-only → one view per bug with its runs, the requests; never creates the file
     service-log.ts   service.log → the service's state and its latest events, read as it grows; /healthz's answer
     stats.ts         counts by period and outcome, the field checks failed most often, bugs per day, field checks passed after a comment
@@ -103,7 +103,7 @@ pipeline: it never loads the agent, the clone or the Jira client.
    row takes the new state and fingerprint:
    - `understood` or `not_webui` → that status, no comment. A row with a comment id keeps the
      id and the text, and the comment in Jira is left as it is (prd.md, Open questions);
-   - `not_understood` with `DRY_RUN=true` → `dry_run` with the comment; a `commented` or
+   - `not_understood` with `VALIDATOR_DRY_RUN=true` → `dry_run` with the comment; a `commented` or
      `posting` row is left as it is and the check goes to `runs` only, whatever its outcome, so
      the record of the comment in Jira stays true;
    - live, with a comment id → the edit to the agent's new text (skipped when the text is the
@@ -183,7 +183,7 @@ prompt lists it as not available with the reason, and the agent may ask for it.
 
 ## The WebUI clone
 
-`WEBUI_DIR` holds a clone of `WEBUI_REPO_URL`, the service's own, never a developer's working
+`VALIDATOR_WEBUI_DIR` holds a clone of `VALIDATOR_WEBUI_REPO_URL`, the service's own, never a developer's working
 tree, made with the machine's git credentials (an SSH key with read access), which the agent
 never sees. `Clone.update(maxAge)` clones it when missing and fetches `origin/master` when the
 last fetch is older than `maxAge`; only a fetch is followed by a checkout (detached, forced, so a
@@ -247,10 +247,10 @@ Inside: `claude -p --restricted` (no shell, no edits, no web; the file tools con
 working directories, a second fence under bwrap's) with `--tools Read,Grep,Glob`, `--add-dir
 /work/bug`, `--setting-sources ''` (no settings, no CLAUDE.md of its own: the instructions point
 the agent to the WebUI's), `--strict-mcp-config` with one server, the Jira tool, `--allowedTools`
-for those five tools, `--max-turns AGENT_MAX_TURNS`, `--max-budget-usd AGENT_MAX_BUDGET_USD`,
+for those five tools, `--max-turns VALIDATOR_AGENT_MAX_TURNS`, `--max-budget-usd VALIDATOR_AGENT_MAX_BUDGET_USD`,
 `--no-session-persistence`, `--json-schema` for the verdict, `--system-prompt` from
 `agent/instructions.md` (read on every run: an edit reaches the next bug without a restart).
-`AGENT_TIMEOUT_SECONDS` kills a run.
+`VALIDATOR_AGENT_TIMEOUT_SECONDS` kills a run.
 
 The Jira tool (`jira-mcp.ts`, MCP over streamable HTTP, hand-written JSON-RPC) runs in the
 service, not in the sandbox, so the Jira token never enters it: it listens on `127.0.0.1` at a
@@ -306,21 +306,21 @@ provisional until rollout step 3 measures them.
 | `CLAUDE_CODE_OAUTH_TOKEN` | — | from `claude setup-token`; the only Claude login the sandbox has |
 | `JIRA_BASE_URL` | the company site | for links |
 | `JIRA_CLOUD_ID` | the company site's | every REST request goes through `api.atlassian.com/ex/jira/<id>` |
-| `DRY_RUN` | `true` | `false` posts comments; anything else is refused |
-| `POLL_INTERVAL_SECONDS` | `180` | also how old the clone's fetch may be before a check |
-| `AGENT_MODEL` | `sonnet` | compare models on the same bugs with `scripts/agreement.ts` |
-| `AGENT_TIMEOUT_SECONDS` | `600` | one agent run |
-| `AGENT_MAX_TURNS` | `100` | one agent run |
-| `AGENT_MAX_BUDGET_USD` | `2` | one agent run; a sonnet check of a clear bug costs about $0.04 |
-| `WEBUI_REPO_URL` | `git@bitbucket.org:CGS/webui.git` | read with the machine's git credentials; Bitbucket moves SSH to `ssh.bitbucket.org` on 2026-11-12 |
-| `WEBUI_DIR` | `state/webui` | the service's clone |
-| `DB_FILE` | `state/bug-validator.sqlite` | |
-| `LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
-| `BACKUP_DIR` | `state/backups` | `maintain`'s copies of the database, the latest 14 kept |
-| `UI_HOST` | `127.0.0.1` | this machine only; the UI's unit sets `0.0.0.0` for the office network |
-| `UI_PORT` | `8081` | |
-| `UI_HOSTNAMES` | — | names the UI may be opened by, comma-separated, besides IP addresses, localhost and the machine's name |
-| `UI_USER`, `UI_PASSWORD` | — | both set: every page asks for this login (`/healthz` does not) |
+| `VALIDATOR_DRY_RUN` | `true` | `false` posts comments; anything else is refused |
+| `VALIDATOR_POLL_INTERVAL_SECONDS` | `180` | also how old the clone's fetch may be before a check |
+| `VALIDATOR_AGENT_MODEL` | `sonnet` | compare models on the same bugs with `scripts/agreement.ts` |
+| `VALIDATOR_AGENT_TIMEOUT_SECONDS` | `600` | one agent run |
+| `VALIDATOR_AGENT_MAX_TURNS` | `100` | one agent run |
+| `VALIDATOR_AGENT_MAX_BUDGET_USD` | `2` | one agent run; a sonnet check of a clear bug costs about $0.04 |
+| `VALIDATOR_WEBUI_REPO_URL` | `git@bitbucket.org:CGS/webui.git` | read with the machine's git credentials; Bitbucket moves SSH to `ssh.bitbucket.org` on 2026-11-12 |
+| `VALIDATOR_WEBUI_DIR` | `state/webui` | the service's clone |
+| `VALIDATOR_DB_FILE` | `state/bug-validator.sqlite` | |
+| `VALIDATOR_LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
+| `VALIDATOR_BACKUP_DIR` | `state/backups` | `maintain`'s copies of the database, the latest 14 kept |
+| `VALIDATOR_HOST` | `127.0.0.1` | this machine only; the UI's unit sets `0.0.0.0` for the office network |
+| `VALIDATOR_PORT` | `8081` | |
+| `VALIDATOR_HOSTNAMES` | — | names the UI may be opened by, comma-separated, besides IP addresses, localhost and the machine's name |
+| `VALIDATOR_USER`, `VALIDATOR_PASSWORD` | — | both set: every page asks for this login (`/healthz` does not) |
 
 Attempts at the first check (3), the query cap (200 issues per poll), the wait before the first
 check (30 min), the quiet before a re-check (15 min), the checks per bug (5), the pending requests
@@ -335,9 +335,9 @@ cp .env.example .env && chmod 600 .env      # fill in JIRA_EMAIL, JIRA_API_TOKEN
 npm run check -- KAZ-9025                   # one bug: the outcome, the agent's reasoning, the comment; nothing written
 npm run check -- KAZ-9025 --recheck         # as a re-check of the comment recorded in the database
 node scripts/agreement.ts marks.tsv         # KEY<TAB>understood|not_understood|not_webui per line: agreement, cost, time
-npm start                                   # the loop, DRY_RUN=true by default; log on stdout
+npm start                                   # the loop, VALIDATOR_DRY_RUN=true by default; log on stdout
 npm run request -- KAZ-9025                 # the running service checks the bug next (a key or a link)
-npm run ui                                  # the web UI on http://127.0.0.1:8081/ (UI_HOST to open it wider)
+npm run ui                                  # the web UI on http://127.0.0.1:8081/ (VALIDATOR_HOST to open it wider)
 node server/cli.ts maintain                   # back up the database, cut the log down to size
 npm test && npm run typecheck
 ```
@@ -353,7 +353,7 @@ takes the ids and names from `bug.ts`.
 
 ### UI
 
-`npm run ui` serves three pages on `UI_PORT`, read from `DB_FILE` and `LOG_FILE` on every
+`npm run ui` serves three pages on `VALIDATOR_PORT`, read from `VALIDATOR_DB_FILE` and `VALIDATOR_LOG_FILE` on every
 request; the log exists when the service runs under systemd (a local `npm start` logs to
 stdout, so the Service block shows "no log"). It opens the database read-only, never creates it,
 and writes nothing but requests: the form in the header (a key or a link to the bug) and the
@@ -363,10 +363,10 @@ in with the result. No external resources: the pages work on a network without i
 
 The UI is opened from the office network as `http://<server-ip>:8081/`; no TLS, no proxy, nothing
 outside the LAN (firewall the port to it). It serves only a Host it knows (an IP address,
-localhost, the machine's name, `UI_HOSTNAMES`), so a site that points its own name at the server
+localhost, the machine's name, `VALIDATOR_HOSTNAMES`), so a site that points its own name at the server
 cannot read the pages through a visitor's browser; it takes a request only from its own pages
 (`Origin`, `Sec-Fetch-Site`), so another site cannot make a visitor's browser ask for checks or
-posts; a body over 4 KB is refused. `UI_USER` and `UI_PASSWORD` add a login. The pages forbid
+posts; a body over 4 KB is refused. `VALIDATOR_USER` and `VALIDATOR_PASSWORD` add a login. The pages forbid
 framing.
 
 - `/` — the service (running, stopping, stopped, crashed or silent; last poll and how many failed
@@ -432,7 +432,7 @@ once past 5 MB, copied to `service.log.1` and emptied in place (the UI reads bot
 again when missing.
 
 Claude auth: `claude setup-token` once (opens the browser), paste the token into `.env`, restart.
-**Going live:** `DRY_RUN=false` in `.env`, `systemctl --user restart bug-validator`.
+**Going live:** `VALIDATOR_DRY_RUN=false` in `.env`, `systemctl --user restart bug-validator`.
 
 **Moving to another machine.** The rows are what keeps a bug from being checked as new; a missing
 database is a first start that skips everything in Created.

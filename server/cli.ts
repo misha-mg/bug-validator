@@ -6,11 +6,11 @@ import { ui } from './commands/ui.ts'
 import { log } from './log.ts'
 
 const USAGE = `usage:
-  node server/cli.ts run             poll Jira and check new bugs (DRY_RUN=true by default)
+  node server/cli.ts run             poll Jira and check new bugs (VALIDATOR_DRY_RUN=true by default)
   node server/cli.ts check <KEY>     check one bug and print the result; writes nothing
     [--recheck]                    as a re-check: the agent edits the comment recorded for the bug
   node server/cli.ts request <KEY|URL>  the running service checks the bug next, whatever its state
-  node server/cli.ts ui              serve the web UI (UI_HOST, UI_PORT); reads the database and the log
+  node server/cli.ts ui              serve the web UI (VALIDATOR_HOST, VALIDATOR_PORT); reads the database and the log
   node server/cli.ts maintain        back up the database, cut the log down to size (daily, from a timer)
 `
 
