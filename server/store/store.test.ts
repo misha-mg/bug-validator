@@ -30,6 +30,7 @@ const result = {
   commentId: null,
   webuiCommit: 'abc',
   files: [],
+  reasoning: 'Ports.vue filters the rows out',
 }
 const statusOf = (s: Store, key: string) => s.rows([key]).get(key)?.status
 
@@ -207,18 +208,18 @@ describe('Store', () => {
     assert.deepEqual({ ...row }, { summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1' })
     const figures = db.prepare("SELECT model, instructions, cost_usd, turns, agent_ms FROM runs WHERE key = 'KAZ-5'").get()
     assert.deepEqual({ ...figures }, { model: 'haiku', instructions: 'abc', cost_usd: 0.002, turns: 3, agent_ms: 900 })
-    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 4)
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 5)
     db.close()
     new Store(file).close()
     assert.equal(readdirSync(dir).filter((f) => f.startsWith('old.sqlite.before-v')).length, 1, 'no copy when there is nothing to migrate')
     assert.equal(Store.recordedComment(file, 'RPG-2'), 'old comment')
     assert.equal(Store.recordedComment(file, 'KAZ-404'), null)
   })
-  it("migrates a database of the list's check: complete is understood, old verdicts take the new shape, old runs are version 1", () => {
+  it("migrates a database of the list's check: complete is understood, old verdicts take the new shape, old runs are version 1 without reasoning", () => {
     const file = join(tempDir(), 'v3.sqlite')
     new Store(file).close()
     const db = new DatabaseSync(file)
-    for (const column of ['webui_commit', 'files', 'version']) db.exec(`ALTER TABLE runs DROP COLUMN ${column}`)
+    for (const column of ['webui_commit', 'files', 'version', 'reasoning']) db.exec(`ALTER TABLE runs DROP COLUMN ${column}`)
     db.exec('PRAGMA user_version = 3')
     db.exec(`INSERT INTO checks (key, issue_id, status, checked_at, verdict, comment) VALUES
       ('KAZ-1', 'i1', 'complete', 't', '{"comment_needed":false,"comment":"","missing":[],"related":[]}', NULL),
@@ -237,28 +238,29 @@ describe('Store', () => {
       { outcome: 'understood', reason: '', comment: '', related: [] },
       { outcome: 'not_understood', reason: '', comment: '[~accountid:r]\nPlease add:\n- HAR file', related: ['KAZ-1'] },
     ])
-    const runs = read.prepare('SELECT key, verdict, version FROM runs ORDER BY key').all() as {
+    const runs = read.prepare('SELECT key, verdict, version, reasoning FROM runs ORDER BY key').all() as {
       key: string
       verdict: string
       version: number
+      reasoning: string | null
     }[]
     assert.deepEqual(
-      runs.map((r) => [r.key, r.version]),
+      runs.map((r) => [r.key, r.version, r.reasoning]),
       [
-        ['KAZ-2', 1],
-        ['KAZ-3', 1],
+        ['KAZ-2', 1, null],
+        ['KAZ-3', 1, null],
       ],
     )
     assert.equal(runs[1]!.verdict, '"broken"', 'a broken verdict is kept, as a string')
     s.recordResult(ref('KAZ-4'), result)
     assert.deepEqual(
-      { ...read.prepare("SELECT version, webui_commit, files FROM runs WHERE key = 'KAZ-4'").get() },
-      { version: 2, webui_commit: 'abc', files: '[]' },
+      { ...read.prepare("SELECT version, webui_commit, files, reasoning FROM runs WHERE key = 'KAZ-4'").get() },
+      { version: 2, webui_commit: 'abc', files: '[]', reasoning: 'Ports.vue filters the rows out' },
     )
     read.close()
     s.close()
     assert.ok(
-      readdirSync(dirname(file)).some((f) => f.startsWith('v3.sqlite.before-v4-')),
+      readdirSync(dirname(file)).some((f) => f.startsWith('v3.sqlite.before-v5-')),
       'a copy before the migration',
     )
   })

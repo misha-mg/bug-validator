@@ -263,7 +263,7 @@ describe('bugs', () => {
       /KAZ-2 ↗ Ports table is empty after clearing the filter \d\d:\d\d comment · dry run R1 R4 R6 1 3/,
       'absent at the first check',
     )
-    assert.match(page, /KAZ-3 ↗ Login page freezes \d\d:\d\d understood/)
+    assert.match(page, /KAZ-3 ↗ Login page freezes \d\d:\d\d understood 1 /, 'one check is counted')
     assert.match(page, /RPG-6 ↗ Port counter lags behind the CLI \d\d:\d\d not a WebUI bug R6/)
     assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 ↗ \d\d:\d\d skipped$/)
     assert.match(
@@ -454,7 +454,16 @@ describe('one bug', () => {
     assert.match(html, /<table class="wide history">/)
     assert.match(
       page,
-      /first check not understood · abc123def456 · table\.png \(image\) · \$0\.03 comment .* re-check VerdictError: not_understood without a comment .* re-check not understood · abc123def456 · \$0\.03 comment/,
+      /first check not understood · abc123def456 · table\.png \(image\) · \$0\.03 reasoning Looked at Ports\.vue: .* comment .* re-check VerdictError: not_understood without a comment .* re-check not understood · abc123def456 · \$0\.03 reasoning The answer names the page; .* comment/,
+    )
+    assert.match(
+      page,
+      /Reasoning The answer names the page; the request is still missing\. History/,
+      "the latest finished check's reasoning",
+    )
+    assert.match(
+      html,
+      /<details><summary>reasoning<\/summary><p class="reasoning">Looked at Ports\.vue: the filter is cleared, but the request that fills the table is not in the report\.<\/p><\/details>/,
     )
     assert.match(
       page,
@@ -467,7 +476,7 @@ describe('one bug', () => {
       'posting is the one thing to press; the check is plain',
     )
     assert.doesNotMatch(page, /Request /)
-    assert.doesNotMatch(html, /class="reason/)
+    assert.doesNotMatch(html, /class="reason"/)
   })
   it('shows the check asked for: pending, failed, or for a bug not checked yet', () => {
     const pending = bugPage(bugModel('KAZ-1'), ctx)
@@ -525,7 +534,8 @@ describe('one bug', () => {
     const understood = text(bugPage(bugModel('KAZ-3'), ctx))
     assert.match(understood, /Result understood/)
     assert.match(understood, /The agent found the cause and understood the report: no comment\./)
-    assert.doesNotMatch(understood, /Related|Checks \d/)
+    assert.match(understood, /Checks 1 /, 'one check is said, not left blank')
+    assert.doesNotMatch(understood, /Related|Checks \d · first/)
     const notWebuiHtml = bugPage(bugModel('RPG-6'), ctx)
     const notWebui = text(notWebuiHtml)
     assert.match(

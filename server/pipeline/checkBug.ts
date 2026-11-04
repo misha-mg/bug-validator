@@ -19,7 +19,7 @@ export interface CheckOutcome {
   fingerprint: string
   fieldChecks: FieldCheck[]
   verdict: Verdict
-  /** The agent's reasoning: printed by `check`, never recorded. */
+  /** The agent's reasoning: printed by `check`, recorded with the run, shown in the UI, never posted. */
   reasoning: string
   files: RunFile[]
   webuiCommit: string

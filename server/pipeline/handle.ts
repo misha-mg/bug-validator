@@ -80,6 +80,7 @@ export async function handle(deps: Deps, bug: IssueRef, row: BugRow | null, sign
       verdict: out.verdict,
       webuiCommit: out.webuiCommit,
       files: out.files,
+      reasoning: out.reasoning,
       agent: out.agent,
     }
     const failedFields = out.fieldChecks.filter((c) => !c.passed).map((c) => c.id)

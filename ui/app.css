@@ -151,3 +151,9 @@ td.absent {
 .jira-comment s {
   color: var(--muted);
 }
+/* The agent's reasoning, as it wrote it: line breaks kept. */
+.reasoning {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0 0 8px;
+}

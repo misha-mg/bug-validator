@@ -39,6 +39,14 @@ describe('readBugs', () => {
       [bug.history[0]?.webuiCommit, bug.history[0]?.version, bug.history[0]?.costUsd, bug.history[0]?.files.map((f) => f.kind)],
       ['abc123def456', 2, 0.03, ['image']],
     )
+    assert.deepEqual(
+      bug.history.map((r) => r.reasoning),
+      [
+        'Looked at Ports.vue: the filter is cleared, but the request that fills the table is not in the report.',
+        '',
+        'The answer names the page; the request is still missing.',
+      ],
+    )
     assert.ok(bug.history[0]!.at < bug.history[2]!.at)
     assert.equal(firstRun(bug), bug.history[0])
     assert.equal(readBug(sampleState().dbFile, 'KAZ-5')?.history[0]?.version, 1, 'a check by the list')

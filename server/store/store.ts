@@ -41,6 +41,8 @@ export interface CheckResultRow {
   /** The WebUI commit the agent read, and the files it got of the attachments. */
   webuiCommit: string
   files: unknown
+  /** The agent's reasoning: where it looked, what it found, why it decided. Shown in the UI, never posted. */
+  reasoning: string
   agent?: RunFigures
 }
 
@@ -122,6 +124,10 @@ const MIGRATIONS: ((db: DatabaseSync) => void)[] = [
       const update = db.prepare(`UPDATE ${table} SET verdict = ? WHERE rowid = ?`)
       for (const row of rows) update.run(JSON.stringify(listVerdict(row.verdict)), row.rowid)
     }
+  },
+  // 5: a run keeps the agent's reasoning (prd.md, 2026-11-04); the runs before it have none.
+  (db) => {
+    db.exec('ALTER TABLE runs ADD COLUMN reasoning TEXT')
   },
 ]
 
@@ -412,6 +418,7 @@ export class Store {
         comment: r.comment,
         webuiCommit: r.webuiCommit,
         files: r.files,
+        reasoning: r.reasoning,
         agent: r.agent,
       })
       this.db
@@ -444,7 +451,7 @@ export class Store {
    */
   recordRun(
     key: string,
-    r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'webuiCommit' | 'files' | 'agent'>,
+    r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'webuiCommit' | 'files' | 'reasoning' | 'agent'>,
   ): void {
     this.addRun(key, now(), r)
   }
@@ -564,6 +571,7 @@ export class Store {
       error?: string
       webuiCommit?: string
       files?: unknown
+      reasoning?: string
       agent?: RunFigures | undefined
     },
   ): void {
@@ -571,7 +579,7 @@ export class Store {
     const a = run.agent
     this.db
       .prepare(
-        'INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms, webui_commit, files, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms, webui_commit, files, version, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         key,
@@ -589,6 +597,7 @@ export class Store {
         run.webuiCommit ?? null,
         json(run.files),
         CHECK_VERSION,
+        run.reasoning ?? null,
       )
   }
 

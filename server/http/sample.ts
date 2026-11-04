@@ -77,6 +77,8 @@ export interface RunExtra {
   webuiCommit?: string
   files?: { filename: string; path: string; kind: string; note: string }[]
   costUsd?: number
+  /** The agent's reasoning; none, as a run before 2026-11-04, unless given. */
+  reasoning?: string
 }
 
 /** One check in the history: the field checks it found failed (and so its outcome and comment), or the error it ended with. */
@@ -93,7 +95,7 @@ export function run(
   const checks = failed && REQUIREMENT_IDS.filter((id) => id !== 'R7').map((id) => ({ id, passed: !failed.includes(id), detail: '' }))
   const outcome = extra.outcome ?? (comment ? 'not_understood' : 'understood')
   db.prepare(
-    'INSERT INTO runs (key, at, base_checks, verdict, comment, error, webui_commit, files, version, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO runs (key, at, base_checks, verdict, comment, error, webui_commit, files, version, cost_usd, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(
     key,
     stamp(at),
@@ -105,6 +107,7 @@ export function run(
     error ? null : JSON.stringify(extra.files ?? []),
     extra.version ?? 2,
     error ? null : (extra.costUsd ?? 0.03),
+    extra.reasoning ?? null,
   )
   db.close()
 }
@@ -140,9 +143,10 @@ export function sampleState(): State {
   // Minutes apart, not hours: the first check must fall on today whenever the tests run.
   run(dbFile, 'KAZ-2', ago(2 * MINUTE, now), ['R1', 'R4', 'R6'], null, ASKED, {
     files: [{ filename: 'table.png', path: '1-table.png', kind: 'image', note: '51 KB' }],
+    reasoning: 'Looked at Ports.vue: the filter is cleared, but the request that fills the table is not in the report.',
   })
   run(dbFile, 'KAZ-2', ago(MINUTE, now), null, 'VerdictError: not_understood without a comment')
-  run(dbFile, 'KAZ-2', now, ['R4', 'R6'], null, ANSWERED)
+  run(dbFile, 'KAZ-2', now, ['R4', 'R6'], null, ANSWERED, { reasoning: 'The answer names the page; the request is still missing.' })
   insert(dbFile, {
     key: 'KAZ-3',
     status: 'understood',
