@@ -1,4 +1,4 @@
-# systemd user unit for the service. Install and operate: docs/architecture.md, Deploy.
+# systemd user unit for the service. Install and operate: .about/architecture.md, Deploy.
 # Machine-specific: WorkingDirectory, the node path (PATH and ExecStart; claude must be installed
 # with npm under that node, and PATH must also hold bwrap, ffmpeg and git) and the log path
 # (StandardOutput, StandardError).
@@ -15,9 +15,9 @@ WorkingDirectory=%h/npb/bug-validator
 Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
 # The team's day: the UI's "today" and every time on its pages.
 Environment=TZ=Europe/Warsaw
-# claude stays at the version it was tested with; update it by hand (docs/architecture.md, Deploy).
+# claude stays at the version it was tested with; update it by hand (.about/architecture.md, Deploy).
 Environment=DISABLE_AUTOUPDATER=1
-ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node src/main.ts run
+ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node server/cli.ts run
 Restart=always
 RestartSec=15
 # A stop kills the agent run in progress; the bug loses nothing and is checked at a later poll.

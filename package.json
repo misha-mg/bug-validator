@@ -8,13 +8,13 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node src/main.ts run",
+    "start": "node server/cli.ts run",
     "check": "tsc --noEmit && prettier --check .",
     "test": "vitest run",
     "format": "prettier --write .",
-    "ui": "node src/main.ts ui",
-    "request": "node src/main.ts request",
-    "maintain": "node src/main.ts maintain"
+    "ui": "node server/cli.ts ui",
+    "request": "node server/cli.ts request",
+    "maintain": "node server/cli.ts maintain"
   },
   "dependencies": {
     "zod": "^4.1.12"

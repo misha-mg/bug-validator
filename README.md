@@ -24,9 +24,9 @@ loopback. The program keeps the guardrails — the outcome and the comment agree
 mentioned and nobody else, every bug named exists, no secret of the run is repeated — and the
 record: one row per bug, one per check, never a second comment on a bug.
 
-What it checks and why: [`docs/prd.md`](docs/prd.md). Modules, data flow, statuses, log,
-configuration, running and deploying: [`docs/architecture.md`](docs/architecture.md). Jira's ids
-and fields: [`docs/jira-reference.md`](docs/jira-reference.md). The agent's prompt:
+What it checks and why: [`.about/prd/bug-validator.md`](.about/prd/bug-validator.md). Modules, data flow, statuses, log,
+configuration, running and deploying: [`.about/architecture.md`](.about/architecture.md). Jira's ids
+and fields: [`.about/jira-reference.md`](.about/jira-reference.md). The agent's prompt:
 [`agent/instructions.md`](agent/instructions.md).
 
 ## Running it
@@ -45,7 +45,7 @@ npm test && npm run typecheck
 ```
 
 The first run clones WebUI into `state/webui`. Deployment is three systemd user units
-(`deploy/`): the service, the web UI and a daily maintenance timer — `docs/architecture.md`,
+(`deploy/`): the service, the web UI and a daily maintenance timer — `.about/architecture.md`,
 Deploy.
 
 ## Working on it

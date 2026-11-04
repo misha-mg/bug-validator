@@ -8,5 +8,5 @@ Description=Bug Validator maintenance — database backup, log size
 Type=oneshot
 WorkingDirectory=%h/npb/bug-validator
 Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node src/main.ts maintain
+ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node server/cli.ts maintain
 NoNewPrivileges=yes

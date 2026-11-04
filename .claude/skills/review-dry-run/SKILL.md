@@ -6,7 +6,7 @@ user-invocable: true
 
 # Review the dry run
 
-The service records every check (`docs/architecture.md`, Row statuses, One bug step 5). In a
+The service records every check (`.about/architecture.md`, Row statuses, One bug step 5). In a
 dry run nothing reaches Jira unless a person posts it from the web UI. This skill reads the
 record; it never writes the database (`state/bug-validator.sqlite`) and never posts.
 
@@ -19,7 +19,7 @@ record; it never writes the database (`state/bug-validator.sqlite`) and never po
 
 ```
 node -e "
-import('/home/cgs/npb/bug-validator/src/ui/read.ts').then(({ readBugs, result }) => {
+import('./server/http/read.ts').then(({ readBugs, result }) => {
   const since = new Date(process.argv[1]);
   for (const b of readBugs('state/bug-validator.sqlite').filter((b) => b.checkedAt >= since)) {
     console.log(b.key, result(b), b.history.length, '|', b.summary, b.reason ? '|' + b.reason : '');

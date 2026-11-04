@@ -1,5 +1,5 @@
 # systemd user unit for the web UI, next to bug-validator.service. Install and operate:
-# docs/architecture.md, Deploy. Machine-specific as there: WorkingDirectory, the node path, the log.
+# .about/architecture.md, Deploy. Machine-specific as there: WorkingDirectory, the node path, the log.
 
 [Unit]
 Description=Bug Validator UI — the web view of the checks
@@ -13,7 +13,7 @@ Environment=TZ=Europe/Warsaw
 # Opened from the office network by the server's address. The default is this machine only;
 # firewall the port to the LAN, and set UI_USER and UI_PASSWORD in .env for a login.
 Environment=UI_HOST=0.0.0.0
-ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node src/main.ts ui
+ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node server/cli.ts ui
 Restart=always
 RestartSec=5
 NoNewPrivileges=yes

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# The service and its command line (server/cli.ts): run | check KEY [--recheck] | request KEY | ui | maintain.
+set -euo pipefail
+repo="$(dirname "$(readlink -f "$0")")/.."
+exec node "$repo/server/cli.ts" "$@"

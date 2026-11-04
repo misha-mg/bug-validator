@@ -7,15 +7,15 @@ user-invocable: true
 # Save a bug as a fixture
 
 The fixtures in `test/fixtures/` are real issues saved from Jira, with the fields the service
-reads (`ISSUE_FIELDS` in `src/jira/client.ts`): `test/fixtures.ts` turns one into a `Bug` with
+reads (`ISSUE_FIELDS` in `server/jira/client.ts`): `test/fixtures.ts` turns one into a `Bug` with
 `bug('KAZ-9025')`. They are data, never edited by hand but for a field a test needs.
 
 ## Save one
 
 ```
 node -e "
-import('/home/cgs/npb/bug-validator/src/config.ts').then(async ({ loadConfig }) => {
-  const { JiraClient } = await import('/home/cgs/npb/bug-validator/src/jira/client.ts');
+import('./server/config.ts').then(async ({ loadConfig }) => {
+  const { JiraClient } = await import('./server/jira/client.ts');
   const key = process.argv[1];
   const issue = await new JiraClient(loadConfig().jira).getIssue(key);
   require('node:fs').writeFileSync('test/fixtures/' + key + '.json', JSON.stringify(issue, null, 2) + '\n');
@@ -40,5 +40,5 @@ reporters keep editing, so a bug that just arrived may change.
 - A fixture holds real text, names and account ids of colleagues; it stays in the repository as
   the others do, but do not add one for a bug whose text should not be there.
 - The comment on the fixture's purpose goes in the test that uses it, not in the JSON.
-- `docs/architecture.md`, Running, names the fixtures a tuning session uses; a new one that
+- `.about/architecture.md`, Running, names the fixtures a tuning session uses; a new one that
   shows a rule of the instructions can be named there too.

@@ -8,7 +8,7 @@ user-invocable: true
 
 Three systemd user units (`deploy/`): `bug-validator` (the service), `bug-validator-ui` (the
 web UI on 8081) and the `bug-validator-maintain` timer (a daily backup, the log's size). The
-whole of it: `docs/architecture.md`, Deploy and Log. Nothing below writes to Jira.
+whole of it: `.about/architecture.md`, Deploy and Log. Nothing below writes to Jira.
 
 ```
 systemctl --user status bug-validator bug-validator-ui

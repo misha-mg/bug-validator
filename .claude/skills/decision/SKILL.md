@@ -1,14 +1,14 @@
 ---
 name: decision
-description: "Record a product or design decision the way this project does: a dated entry in docs/prd.md Decisions, the sections that state the current state updated in the same change, docs/architecture.md when a mechanism changes, an open idea when nothing is decided. Use when a rule, a threshold, a trigger, an outcome's meaning, a rollout step or a non-goal changes, or when an idea is discussed and parked."
+description: "Record a product or design decision the way this project does: a dated entry in .about/prd/bug-validator.md Decisions, the sections that state the current state updated in the same change, .about/architecture.md when a mechanism changes, an open idea when nothing is decided. Use when a rule, a threshold, a trigger, an outcome's meaning, a rollout step or a non-goal changes, or when an idea is discussed and parked."
 user-invocable: true
 ---
 
 # Record a decision
 
-`docs/prd.md` is the record of what was decided and why; `docs/architecture.md` of how it is
+`.about/prd/bug-validator.md` is the record of what was decided and why; `.about/architecture.md` of how it is
 built. A decision made or changed goes into the PRD in the same change as the code (CLAUDE.md).
-What is discussed but not decided goes to `docs/open-ideas/`, one file each.
+What is discussed but not decided goes to `.about/open-ideas/`, one file each.
 
 ## The entry
 
@@ -29,16 +29,16 @@ moves. A decision that reverses an earlier one names it; the earlier entry is le
 
 | It changes… | Then also… |
 |---|---|
-| a mechanism (a status, a step of a check, a log event, a configuration variable) | `docs/architecture.md`, the matching section; a log event is a hand-kept contract with `src/ui/service-log.ts` and `src/ui/html.ts` (CLAUDE.md) |
+| a mechanism (a status, a step of a check, a log event, a configuration variable) | `.about/architecture.md`, the matching section; a log event is a hand-kept contract with `server/http/service-log.ts` and `server/http/view.ts` (CLAUDE.md) |
 | what the agent must do or say | `agent/instructions.md`; the `tune-agent` skill |
-| a field of Jira, an id, a status of the workflow | `docs/jira-reference.md` |
-| a threshold or a cap | the constant or the default in code, `docs/architecture.md` Configuration, `.env.example` |
+| a field of Jira, an id, a status of the workflow | `.about/jira-reference.md` |
+| a threshold or a cap | the constant or the default in code, `.about/architecture.md` Configuration, `.env.example` |
 | the stage of the rollout | the status line of the PRD, CLAUDE.md's "Stage" |
-| the agent's isolation or what it may read | `docs/architecture.md` The agent run, AC5 |
+| the agent's isolation or what it may read | `.about/architecture.md` The agent run, AC5 |
 
 ## An idea, not a decision
 
-`docs/open-ideas/<kebab-name>.md`: the status line (`idea, not decided`, from whom, when), the
+`.about/open-ideas/<kebab-name>.md`: the status line (`idea, not decided`, from whom, when), the
 problem it addresses, the idea in a few lines, what is open. When it is decided, its substance
 moves into the PRD and the file goes; when it is dropped, the PRD's entry says so and the file
 goes too.

@@ -4,14 +4,14 @@
 // the cost and time figures, and every disagreement with the agent's reasoning.
 //   node scripts/agreement.ts marks.tsv
 import { readFileSync } from 'node:fs'
-import { ClaudeAgent } from '../src/claude/agent.ts'
-import { JiraTool } from '../src/claude/jira-mcp.ts'
-import { loadConfig } from '../src/config.ts'
-import { OUTCOMES, type Outcome } from '../src/domain/bug.ts'
-import { ISSUE_KEY } from '../src/domain/key.ts'
-import { JiraClient } from '../src/jira/client.ts'
-import { checkBug } from '../src/pipeline/checkBug.ts'
-import { Clone } from '../src/webui/clone.ts'
+import { ClaudeAgent } from '../server/claude/agent.ts'
+import { JiraTool } from '../server/claude/jira-mcp.ts'
+import { loadConfig } from '../server/config.ts'
+import { OUTCOMES, type Outcome } from '../server/domain/bug.ts'
+import { ISSUE_KEY } from '../server/domain/key.ts'
+import { JiraClient } from '../server/jira/client.ts'
+import { checkBug } from '../server/pipeline/checkBug.ts'
+import { Clone } from '../server/webui/clone.ts'
 
 const file = process.argv[2]
 if (!file) {

@@ -1,12 +1,12 @@
 ---
 name: tune-agent
-description: "Tune the agent's instructions (agent/instructions.md) on real bugs: run `check` on one bug or `scripts/agreement.ts` on a developer's marks, read the agent's reasoning, change the prompt, run again. Use when an outcome looks wrong, a comment asks for what nobody needs, the agreement with a developer is measured (PRD rollout step 3), or a model or cap is compared. Never for changing what the program enforces: that is code (src/domain/verdict.ts) and a PRD decision."
+description: "Tune the agent's instructions (agent/instructions.md) on real bugs: run `check` on one bug or `scripts/agreement.ts` on a developer's marks, read the agent's reasoning, change the prompt, run again. Use when an outcome looks wrong, a comment asks for what nobody needs, the agreement with a developer is measured (PRD rollout step 3), or a model or cap is compared. Never for changing what the program enforces: that is code (server/domain/verdict.ts) and a PRD decision."
 user-invocable: true
 ---
 
 # Tune the agent
 
-The agent writes the whole verdict; the program only validates it (`docs/architecture.md`, One
+The agent writes the whole verdict; the program only validates it (`.about/architecture.md`, One
 bug, step 4). So a wrong outcome or a bad question is almost always the prompt's, and the prompt
 is `agent/instructions.md`, read on every run: the running service picks up an edit without a
 restart. Nothing here writes to Jira or to the database.
@@ -41,20 +41,20 @@ for a clear bug); keep the file to the bugs the question is about.
 
 - Change one thing at a time and run the same bugs again. Keep the edit in the voice of the
   file: short, concrete, an example where a rule is subtle.
-- The outcomes' definitions and the comment's shape come from `docs/prd.md` (The check,
+- The outcomes' definitions and the comment's shape come from `.about/prd/bug-validator.md` (The check,
   Comment). A change there is a decision: use the `decision` skill, not only this file.
 - The output contract (`outcome`, `reasoning`, `reason`, `comment`) is enforced by
-  `src/domain/verdict.ts`; the instructions describe it and must stay in step. Adding a field is
+  `server/domain/verdict.ts`; the instructions describe it and must stay in step. Adding a field is
   code, tests and the PRD, not a prompt edit.
-- The list R1–R7 is a hint in the prompt (`src/domain/prompt.ts`), never a rule: do not write
+- The list R1–R7 is a hint in the prompt (`server/domain/prompt.ts`), never a rule: do not write
   "always ask for a HAR" back into the instructions; the 2026-11-03 decision removed exactly that.
-- A model or cap found better goes into the defaults (`src/config.ts`, `.env.example`,
-  `docs/architecture.md` Configuration) and into the PRD as a dated decision with the numbers.
+- A model or cap found better goes into the defaults (`server/config.ts`, `.env.example`,
+  `.about/architecture.md` Configuration) and into the PRD as a dated decision with the numbers.
 
 ## When the prompt is not the problem
 
 - The agent could not read something: the `files` list says `unread` with the reason
-  (`src/pipeline/attachments.ts`). A kind the agent should read is code.
+  (`server/pipeline/attachments.ts`). A kind the agent should read is code.
 - The verdict was refused (`VerdictError` in `check`'s error): the agent broke the contract.
   Usually the mention line or a comment on an understood bug; the instructions' Output section
   is where to make it clearer.

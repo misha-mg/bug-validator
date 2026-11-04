@@ -1,16 +1,16 @@
 /**
  * How bug reports change after they are created: the measurement behind
- * docs/open-ideas/recheck-on-change.md. Reads Jira and the database, writes nothing.
+ * .about/open-ideas/recheck-on-change.md. Reads Jira and the database, writes nothing.
  *
  *   node scripts/late-changes.ts [days]     WebUI bugs created in the last `days` (default 90)
  */
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
-import { loadConfig } from '../src/config.ts'
-import { FIELD_FACTS, type RequirementId } from '../src/domain/bug.ts'
-import { checkFields } from '../src/domain/checks.ts'
-import { type ChangelogEntry, ISSUE_FIELDS, JiraClient, type RawIssue } from '../src/jira/client.ts'
-import { jiraTime as time, toBug } from '../src/jira/mapping.ts'
+import { loadConfig } from '../server/config.ts'
+import { FIELD_FACTS, type RequirementId } from '../server/domain/bug.ts'
+import { checkFields } from '../server/domain/checks.ts'
+import { type ChangelogEntry, ISSUE_FIELDS, JiraClient, type RawIssue } from '../server/jira/client.ts'
+import { jiraTime as time, toBug } from '../server/jira/mapping.ts'
 
 /** What the check reads, as changelog fields; everything else (assignee, links, labels) is not content. */
 const KINDS = ['description', 'summary', 'HAR', 'other attachment', 'Affects versions', 'Devices', 'project'] as const
