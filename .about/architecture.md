@@ -49,11 +49,12 @@ server/
     read.ts            the database, read-only → one view per bug with its runs, the requests, the posts, the heartbeat; never creates the file
     service-log.ts     service.log → the service's state and its latest events, read as it grows; the liveness from the heartbeat; /healthz's answer
     stats.ts           counts by period and outcome, the field checks failed most often, bugs per day, field checks passed after a comment
-    view.ts            the three pages as pure functions: HTML strings from what was read
+    view.ts            the pages (Cockpit, Bugs, Statistics, one bug) as pure functions: HTML strings from what was read; the Tone map
     server.ts          node:http: the pages, the static files from ui/, /healthz; guard.ts on every request
     sample.ts          the sample state the tests build: the service's tables made by the real Store, a log, a heartbeat
-ui/                    what the browser gets: sheet.css (the design system, pipeline-ui's copy), app.css (the faces and the pages' layout),
-                       fonts/ (Barlow, OFL), theme.js (the theme switch, runs in <head>) and app.js (the refresh script)
+ui/                    what the browser gets: sheet.css, theme.js and fonts/ (the design system, copied from pipeline-ui by
+                       `npm run sheet:sync`, scripts/sheet-sync.sh), app.css (the pages' own layout) and app.js (the refresh,
+                       the fold, the toasts, the chart's tooltip)
 agent/instructions.md  the agent's system prompt
 deploy/                systemd user units: the service, the UI, and maintain with its daily timer
 scripts/late-changes.ts   how reports change after creation (read-only measurement): `node scripts/late-changes.ts [days]`
@@ -270,8 +271,8 @@ tool that sends anything out.
 ## Log
 
 One JSON line per event: `ts`, `level`, `event`, then fields. The UI reads them all
-(`server/http/service-log.ts`, `view.ts`): the Service block from the ones marked, the Activity block
-from every event but `poll` and `check_start`, one line each.
+(`server/http/service-log.ts`, `view.ts`): the cockpit's cards and state sources from the ones marked,
+its Activity frame from every event but `poll` and `check_start`, one line each.
 
 | event | fields | UI |
 |---|---|---|
@@ -371,57 +372,89 @@ takes the ids and names from `bug.ts`.
 
 ### UI
 
-`npm run ui` serves three pages on `VALIDATOR_PORT`, read from `VALIDATOR_DB_FILE` and `VALIDATOR_LOG_FILE` on every
-request; the log exists when the service runs under systemd (a local `npm start` logs to
-stdout, so the Service block shows "no log"). It opens the database read-only, never creates it,
-and writes nothing but requests: the form in the header (a key or a link to the bug) and the
-button on a bug's page ask the service to check that bug next; Post to Jira on a bug's page, once
-confirmed, asks it to post the comment shown. The page then shows the request waiting and fills
-in with the result. No external resources: the pages work on a network without internet access.
+`npm run ui` serves the console on `VALIDATOR_PORT`, read from `VALIDATOR_DB_FILE` and
+`VALIDATOR_LOG_FILE` on every request; the log exists when the service runs under systemd (a local
+`npm start` logs to stdout, so the Service card says "no log"). It opens the database read-only,
+never creates it, and writes nothing but requests: the form in the masthead (a key or a link to
+the bug) and the button on a bug's page ask the service to check that bug next; Post to Jira on a
+bug's page, once confirmed, asks it to post the comment shown. The page then shows the request
+waiting and fills in with the result. No external resources: the pages work on a network without
+internet access.
 
 The UI is opened from the office network as `http://<server-ip>:8081/`; no TLS, no proxy, nothing
 outside the LAN (firewall the port to it). It serves only a Host it knows (an IP address,
-localhost, the machine's name, `VALIDATOR_HOSTNAMES`), so a site that points its own name at the server
-cannot read the pages through a visitor's browser; it takes a request only from its own pages
-(`Origin`, `Sec-Fetch-Site`), so another site cannot make a visitor's browser ask for checks or
-posts; a body over 4 KB is refused. `VALIDATOR_USER` and `VALIDATOR_PASSWORD` add a login. The pages forbid
-framing.
+localhost, the machine's name, `VALIDATOR_HOSTNAMES`), so a site that points its own name at the
+server cannot read the pages through a visitor's browser; it takes a request only from its own
+pages (`Origin`, `Sec-Fetch-Site`), so another site cannot make a visitor's browser ask for checks
+or posts; a body over 4 KB is refused. `VALIDATOR_USER` and `VALIDATOR_PASSWORD` add a login. The
+pages forbid framing.
 
-- `/` — the service (running, stopping, stopped, crashed or silent; last poll and how many failed
-  in a row; mode; in Created and how many of them wait; started; model; claude version; the
-  WebUI commit; poll interval; the bug being checked; the checks requested and waiting; skipped
-  at the first start), bugs first checked today / 7 days / all time by outcome with the failed
-  checks and the agent's cost, the field checks that passed after a comment, bugs per day of
-  their first check for 30 days by outcome, the field checks failed most often at first checks,
-  what needs attention (failed first checks, failed re-checks of a bug with a comment,
-  interrupted posts, bugs not the WebUI's with the agent's reason), and the latest 30 events of
-  the log.
-- `/bugs` — every bug by the day of its last check, latest first: outcome, the field checks
-  absent at the first check, related bugs, how many checks. `?result=` narrows by outcome, error
-  or skipped (chips), `?q=` searches keys, summaries and reporters (the form; Enter submits).
-- `/bugs/<KEY>` — the outcome, the reason (not a WebUI bug), the field checks, the related
-  bugs, every check with its outcome, commit, files, cost and the comment it recorded (a
-  version 1 check marked "list check"), and the comment as it is (or would be) in Jira, the
-  mention by name, answered questions struck through. A comment Jira does not have gets Post to
-  Jira: a confirmation with the comment, the check it came from and the reporter it notifies,
-  then a post request (`?post` opens the confirmation without JavaScript). For a bug asked for
-  and not checked yet, the request alone.
+The masthead names the three pages as pipeline-ui's does: Cockpit, Bugs, Statistics.
+
+- `/` **Cockpit** — four cards: **Service** (running, stopping, stopped, crashed or silent, from
+  the heartbeat and the log; the last poll, and its error when it failed), **Checking** (the bug
+  the agent is on, for how long, a link to it), **In Created** (the count of the last poll, how
+  many wait, the poll interval), **Mode** (dry run or live, the model, the claude version). Under
+  them, left: **State sources** folded to a lamp and a word — the service log (found, its last
+  line's age), the database (found, its rows), Jira (the last poll went through), claude and the
+  WebUI clone (known from `service_start`) — each with an OK / not OK pill, and the facts under
+  them (started, the heartbeat, the WebUI commit, the poll interval); the frame opens on a click,
+  the choice is kept in the browser, and until one is made it is open while a source is not OK;
+  **Requested** (the checks asked for by hand and not yet made); **Skipped at the first start**
+  when any. Right: **Needs attention** (failed first checks, failed re-checks of a commented bug,
+  interrupted posts, bugs not the WebUI's with the agent's reason) and **Activity** (the latest
+  30 events of the log).
+- `/bugs` **Bugs** — the filters row: the result chips with their counts (understood in moss, not
+  understood and not a WebUI bug together, error in rust, skipped apart), the search field (keys,
+  summaries, reporters; Enter submits, the form is a GET: `?result=`, `?q=`), Clear once narrowed.
+  Then every bug by the day of its last check, latest first: the Jira arrow, the summary on one
+  line, the clock, the result as a pill, the field checks absent at the first check, related bugs,
+  how many checks.
+- `/stats` **Statistics** — a period (`?period=today|7d|30d|all`, 30 days by default), counted by
+  the bugs first checked in it: a strip of six (checked, understood, not understood, not a WebUI
+  bug, failed, the agent's cost with the median per check); the field checks failed most often at
+  first checks as bars; the field checks passed after the comment (over bugs re-checked after it);
+  bugs checked per day as stacked columns by their result now, over the period's days (all time:
+  since the first check, 90 days at most), with a tooltip per day.
+- `/bugs/<KEY>` — the facts (reporter, result, checked, checks, related bugs as pills, the
+  request or the post waiting or failed, Jira), a reason block under them when the check failed,
+  the post was interrupted, or the bug is not the WebUI's; the actions, the one to press in slate
+  (Post to Jira when a comment waits, else Check again); the field checks; every check with its
+  outcome, commit, files, cost and the comment it recorded (a version 1 check marked "list check");
+  the comment as it is (or would be) in Jira, the mention by name, answered questions struck
+  through. A comment Jira does not have gets Post to Jira: a confirmation with the comment, the
+  check it came from and the reporter it notifies, then a post request (`?post` opens the
+  confirmation without JavaScript). For a bug asked for and not checked yet, the request alone.
 - `/healthz` — JSON for a monitor: `ok`, `state`, `pollFailures`, `lastSeen`.
 
-The pages are rendered on the server (`view.ts`, pure functions tested in `view.test.ts`); `app.js`
-fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden,
-the search box has focus or a confirmation is open, keeping an opened comment open, and opens the
-confirmation as a modal; `theme.js` keeps the light or dark choice made with the header's button
-in the browser (the system's setting until then). Everything works with JavaScript off, minus the
-refresh and the switch. The look is the drafting sheet pipeline-ui shares: one surface, hairline
-frames with a cross at each corner, Barlow Condensed for titles and values, letter-spaced
-capitals for labels, slate for the one action and for a comment, moss for understood, rust for an
-error; the dark theme is the same sheet in the dark. Its tokens and parts (the masthead, the page
-width, frames, cards, buttons, pills, chips, tables) are `ui/sheet.css`, pipeline-ui's
-`ui/src/sheet.css` copied here (ADR unification). `app.css` only lays out the pages. Times are
-the server's local time (`TZ` in the units: Europe/Warsaw), written as `2026-11-04 23:10`,
-durations as `1h 05m` or `5m 03s`, a time ago as `5m 03s ago` and a day row as `Tue 04 Nov`
-(`server/format.ts`, the words pipeline-ui's console uses). Jira links use `JIRA_BASE_URL`. Pages, styles and scripts are never cached; the fonts are, for a year.
+The pages are rendered on the server (`view.ts`, pure functions tested in `view.test.ts`; the
+numbers in `stats.ts`). A POST answers with a redirect to the bug's page carrying
+`?toast=<kind>:<text>`: `app.js` shows it as a toast of the sheet (closed by itself after its
+time, held while the pointer is over it) and drops the parameter from the URL; a page without
+JavaScript shows the same text as a notice at the top. `app.js` also fetches the page again every
+5 s and swaps `<main>` when it changed (not while the tab is hidden, the search box has focus or a
+confirmation is open; an opened comment stays open, the sources stay folded or not), opens the
+confirmation as a modal, folds the state sources, and draws the chart's tooltip and band from the
+`data-*` of the column under the pointer. `theme.js` keeps the light or dark choice made with the
+masthead's button in the browser (the system's setting until then). Everything works with
+JavaScript off, minus the refresh, the toasts, the fold and the tooltip.
+
+The look is the drafting sheet (`ui/sheet.css`) shared with pipeline-ui, whose `ui/src/sheet.css`,
+`ui/public/theme.js` and `ui/public/fonts/` are its source of truth (ADR unification):
+`npm run sheet:sync` (`scripts/sheet-sync.sh`, pipeline-ui at `../pipeline-ui` or
+`PIPELINE_UI_DIR`) copies the three into `ui/`, and `server/http/sheet.test.ts` fails when the
+copy falls behind (skipped where pipeline-ui is not checked out). The sheet holds every part the
+pages draw — the masthead, cards, the strip, filters, pills, chips, tables, facts, notices, the
+reason block, the confirmation dialog, lamps, bars, the column chart, toasts — and the chart's
+SVG markup contract, which `view.ts` writes on the server with the columns placed in percentages
+of the plot's width (the frame's width is not known there). `ui/app.css` only lays out the pages:
+the cockpit's two columns, the bugs' day rows and `.req` chips, the statistics' pair, a bug's
+`.two` columns and its Jira comment. One `Tone` map (`view.ts`) gives a result its pill:
+understood `ok`, not understood `live` (slate), not a WebUI bug `strong`, error `bad`, skipped
+plain. Times are the server's local time (`TZ` in the units: Europe/Warsaw), written as
+`2026-11-04 23:10`, durations as `1h 05m` or `5m 03s`, a time ago as `5m 03s ago` and a day row
+as `Tue 04 Nov` (`server/format.ts`, the words pipeline-ui's console uses). Jira links use
+`JIRA_BASE_URL`. Pages, styles and scripts are never cached; the fonts are, for a year.
 
 ### Deploy
 

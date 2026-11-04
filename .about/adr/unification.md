@@ -33,9 +33,34 @@ repositories' `CLAUDE.md`:
 - **The tools.** vitest runs the tests, prettier formats the code (`.prettierrc.json`,
   `.prettierignore` the same in both), and the npm scripts have the same names: `start`,
   `check`, `test`, `format`. Conventional Commits.
-- **The look.** `sheet.css` is pipeline-ui's; bug-validator holds a copy under `ui/`. The
-  `sheet:sync` script that refreshes the copy, and the test that checks it is current, come with
-  the design change that follows this one.
+- **The look.** `sheet.css` is pipeline-ui's; bug-validator holds a copy under `ui/`, refreshed
+  by `npm run sheet:sync` and checked by `server/http/sheet.test.ts` (below, The pages).
+
+## The pages (2026-11-05)
+
+The console now has the three pages pipeline-ui's has, under the same names in the masthead —
+**Cockpit** (`/`), **Bugs** (`/bugs`), **Statistics** (`/stats`) — and a bug's page under Bugs.
+A person walking from one console to the other finds the same things in the same places: cards
+across the top of the cockpit for what is going on now, state sources folded to a lamp, what
+needs attention and the latest events; a filters row of counted chips over a wide table; a strip
+of numbers, bars and stacked columns per day on the statistics page. Before, the home page held
+everything at once — the service's facts, three period tiles, a chart, the gaps, the attention
+list and the activity — and the numbers had no period of their own.
+
+The pages are drawn only with the sheet's parts, so every reusable part lives in pipeline-ui's
+`sheet.css` and bug-validator's `app.css` only lays them out. That holds for the column chart too:
+the sheet documents the SVG markup it styles (`div.columns`, `ul.legend`, `div.plot`, the grid,
+the columns' parts, the dates, the hit rects, `div.tip`), pipeline-ui writes it in the browser
+(`Columns.vue`) and bug-validator writes the same markup on the server (`view.ts`,
+`columnChart`), with `app.js` adding the tooltip from the hits' `data-*`. Drawing the chart its
+own way would have meant a second set of chart rules to keep in step; following the contract
+means one stylesheet styles both charts and a change to the chart's look is made once. The one
+difference is forced by where it is drawn: the server does not know the frame's width, so the
+columns are placed in percentages of the plot and the axis numbers sit in its left padding.
+
+Toasts follow the same rule with no framework: a POST redirects with `?toast=<kind>:<text>`,
+`app.js` renders the sheet's toast markup and drops the parameter, and a page without JavaScript
+shows the text as a notice — the console keeps working with JavaScript off, as it always has.
 
 ## Considered options
 

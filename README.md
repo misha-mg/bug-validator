@@ -43,6 +43,7 @@ bin/bug-validator check KAZ-9025         # one bug: the outcome, the agent's rea
 node scripts/agreement.ts marks.tsv      # the agent against a developer's marks: agreement, cost, time
 bin/bug-validator run                    # the service (npm start), VALIDATOR_DRY_RUN=true by default
 bin/bug-validator ui                     # the web console (npm run ui), http://127.0.0.1:8081/
+npm run sheet:sync                       # the design system copied from ../pipeline-ui (or PIPELINE_UI_DIR)
 npm run check && npm test                # tsc and prettier, then vitest
 ```
 
@@ -52,6 +53,10 @@ into `state/webui`. Deployment is three systemd user units (`deploy/`): the serv
 console and a daily maintenance timer — `.about/architecture.md`, Deploy.
 
 ## Working on it
+
+The console (`.about/architecture.md`, UI) has three pages, Cockpit, Bugs and Statistics, drawn
+with the design system pipeline-ui owns: `ui/sheet.css`, `ui/theme.js` and `ui/fonts/` are copies
+made by `npm run sheet:sync`, and a test fails when they fall behind.
 
 `CLAUDE.md` holds the rules for the code and the docs; `.claude/skills/` the recurring work:
 tuning the agent, reviewing the dry run, operating the service, saving a bug as a fixture,

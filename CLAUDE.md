@@ -37,8 +37,7 @@ formatting. Node 24 runs the server's TypeScript as it is (type stripping): only
 - Each file opens with a comment that says what it is for; comments say why, not what.
 - The layout, the shared modules and the environment names are the ones pipeline-ui has (ADR
   unification): `server/format.ts`, `server/log.ts` and `server/http/guard.ts` are the same
-  files in both repositories, byte for byte — an edit to one is copied to the other. So is
-  `ui/sheet.css`, pipeline-ui's `ui/src/sheet.css`; `ui/app.css` only lays out the pages.
+  files in both repositories, byte for byte — an edit to one is copied to the other.
 - No machine-specific or company-specific values in the repository: no home paths, user names,
   hosts, the Jira site or its cloud id, the WebUI repository URL. They come from `.env`
   (gitignored, `chmod 600`, template `.env.example`), read once in `server/config.ts`
@@ -73,6 +72,12 @@ formatting. Node 24 runs the server's TypeScript as it is (type stripping): only
   interactive Claude Code sessions in this repository.
 - `state/webui` is the service's clone, never a developer's working tree: never commit, push or
   change branches there.
+- `ui/sheet.css`, `ui/theme.js` and `ui/fonts/` are the design system (the sheet) and
+  pipeline-ui is its source of truth (`ui/src/sheet.css`, `ui/public/theme.js`,
+  `ui/public/fonts/` there): never edit the copies. A part the pages need goes in pipeline-ui's
+  sheet; then `npm run sheet:sync` (pipeline-ui at `../pipeline-ui` or `PIPELINE_UI_DIR`) brings
+  it here, and `server/http/sheet.test.ts` fails until it has. `ui/app.css` only lays out the
+  pages with the sheet's tokens.
 - Never print `.env` or an unfiltered `env`.
 
 ## The running service

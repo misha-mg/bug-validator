@@ -12,8 +12,8 @@ record; it never writes the database (`state/bug-validator.sqlite`) and never po
 
 ## Where to look
 
-- The web UI, `http://127.0.0.1:8081/` (or the server's IP): `/` for the numbers and what needs
-  attention, `/bugs?result=not_understood` for the comments, `/bugs?result=not_webui` for the
+- The web UI, `http://127.0.0.1:8081/` (or the server's IP): `/` for what needs attention and the
+  service, `/stats` for the numbers of a period, `/bugs?result=not_understood` for the comments, `/bugs?result=not_webui` for the
   bugs a person must decide on, `/bugs/<KEY>` for one bug with its history and the Post button.
 - Without the UI, the same data through the UI's reader (read-only, never creates the file):
 

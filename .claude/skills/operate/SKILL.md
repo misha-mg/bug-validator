@@ -48,7 +48,7 @@ can be deleted once the service has run a day. `maintain` keeps 14 daily backups
 ## The UI says…
 
 - **crashed:** the latest start ended in `fatal`; systemd restarts it, up to 5 times in 10
-  minutes. Read the error on the home page or in the log, fix the cause, `restart`.
+  minutes. Read the error on the cockpit's Service card or in the log, fix the cause, `restart`.
 - **silent:** the heartbeat in the database is older than 15 s and the log says nothing of a
   stop: the process is gone or stuck. Look at `systemctl --user status`; a stuck one is
   restarted.
