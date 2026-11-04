@@ -14,9 +14,50 @@ export interface Stats {
   byOutcome: Record<Outcome, Share>
   /** Bugs whose last attempt failed: to be tried again, or left after the last attempt. */
   errors: number
+  /** Every check of these bugs, the re-checks and the failed ones included. */
+  checks: number
   /** What the agent spent on every check of these bugs, the failed ones included. */
   costUsd: number
+  /** The cost of the middle check; null before a check with a cost. */
+  medianCostUsd: number | null
+  /** The first check of the period's bugs, or null without one. */
+  since: Date | null
 }
+
+/** The statistics page's periods: bugs first checked today, in the last 7 or 30 days, or ever. */
+export type Period = 'today' | '7d' | '30d' | 'all'
+export const PERIODS: readonly Period[] = ['today', '7d', '30d', 'all']
+export const PERIOD_LABEL: Record<Period, string> = { today: 'Today', '7d': '7 days', '30d': '30 days', all: 'All time' }
+const PERIOD_DAYS: Record<Period, number | null> = { today: 1, '7d': 7, '30d': 30, all: null }
+
+/** `?period=`; 30 days unless the parameter names another period. */
+export const periodOf = (value: string | null): Period => ((PERIODS as readonly string[]).includes(value ?? '') ? (value as Period) : '30d')
+
+/** The moment a period starts: today's midnight, the same clock n days ago, or nothing for all time. */
+export function periodStart(period: Period, now: Date): Date | undefined {
+  const days = PERIOD_DAYS[period]
+  if (days === null) return undefined
+  const start = startOfDay(now)
+  start.setDate(start.getDate() - (days - 1))
+  return start
+}
+
+/** The bugs of a period: those first checked in it (skipped bugs never were, so a period has none). */
+export const periodBugs = (bugs: BugView[], period: Period, now: Date): BugView[] => {
+  const since = periodStart(period, now)
+  return bugs.filter((b) => result(b) !== 'skipped' && (!since || b.firstCheckedAt >= since))
+}
+
+/** How many days the period's chart shows: the period's own, or for all time the days since the first check, 90 at most. */
+export function chartDays(period: Period, bugs: BugView[], now: Date): number {
+  const days = PERIOD_DAYS[period]
+  if (days !== null) return days
+  const first = bugs.filter((b) => result(b) !== 'skipped').map((b) => b.firstCheckedAt.getTime())
+  if (!first.length) return 7
+  const span = Math.floor((startOfDay(now).getTime() - startOfDay(new Date(Math.min(...first))).getTime()) / DAY_MS) + 1
+  return Math.min(90, Math.max(7, span))
+}
+const DAY_MS = 24 * 60 * 60 * 1000
 
 /**
  * Stats of the bugs first checked at or after `since` (all of them when it is not given): a bug
@@ -28,11 +69,20 @@ export function periodStats(bugs: BugView[], since?: Date): Stats {
   const byOutcome = Object.fromEntries(
     OUTCOMES.map((o) => [o, { count: done.filter((b) => result(b) === o).length, total: done.length }]),
   ) as Record<Outcome, Share>
+  const runs = inside.flatMap((b) => b.history)
+  const costs = runs
+    .map((run) => run.costUsd)
+    .filter((c): c is number => c !== null)
+    .sort((a, b) => a - b)
+  const first = inside.map((b) => b.firstCheckedAt.getTime())
   return {
     checked: done.length,
     byOutcome,
     errors: inside.filter((b) => result(b) === 'error').length,
-    costUsd: inside.reduce((sum, b) => sum + b.history.reduce((s, run) => s + (run.costUsd ?? 0), 0), 0),
+    checks: runs.length,
+    costUsd: costs.reduce((sum, c) => sum + c, 0),
+    medianCostUsd: costs.length ? costs[Math.floor(costs.length / 2)]! : null,
+    since: first.length ? new Date(Math.min(...first)) : null,
   }
 }
 

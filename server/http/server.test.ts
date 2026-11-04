@@ -33,7 +33,7 @@ describe('server', () => {
     server.close()
   })
 
-  it('serves the three pages', async () => {
+  it('serves the pages', async () => {
     const home = await get('/')
     assert.equal(home.status, 200)
     assert.equal(home.type, 'text/html; charset=utf-8')
@@ -43,6 +43,10 @@ describe('server', () => {
     assert.equal(bugs.status, 200)
     assert.match(bugs.body, /KAZ-2/)
     assert.doesNotMatch(bugs.body, /RPG-4/)
+    const stats = await get('/stats?period=7d')
+    assert.equal(stats.status, 200)
+    assert.match(stats.body, /<a class="chip on" href="\/stats\?period=7d">7 days<\/a>/)
+    assert.match((await get('/stats?period=x')).body, /<a class="chip on" href="\/stats\?period=30d">/, '30 days unless a period is named')
     const bug = await get('/bugs/KAZ-2')
     assert.equal(bug.status, 200)
     assert.match(bug.body, /<title>KAZ-2 · Bug validator<\/title>/)
@@ -87,14 +91,19 @@ describe('server', () => {
       })
     const res = await post('https://jira.example.com/browse/RPG-4')
     assert.equal(res.status, 303)
-    assert.equal(res.headers.get('location'), '/bugs/RPG-4')
+    const location = res.headers.get('location') ?? ''
+    assert.match(location, /^\/bugs\/RPG-4\?toast=success%3ACheck\+of\+RPG-4\+requested/, 'the bug’s page, with the toast')
+    assert.match(
+      (await get(location)).body,
+      /<div class="notice calm" data-toast="success">Check of RPG-4 requested: the service takes it before its next poll<\/div>/,
+    )
     assert.deepEqual(
       readRequests(state.dbFile).map((r) => r.key),
       ['KAZ-77', 'KAZ-1', 'RPG-4'],
     )
     assert.match((await get('/bugs/RPG-4')).body, /Request<\/dt><dd>waiting · just now/)
-    assert.match((await get('/')).body, /RPG-4<\/a> · just now/)
-    assert.equal((await post('KAZ-9')).headers.get('location'), '/bugs/KAZ-9')
+    assert.match((await get('/')).body, /RPG-4<\/a><\/td><td class="num dim">just now/)
+    assert.match((await post('KAZ-9')).headers.get('location') ?? '', /^\/bugs\/KAZ-9\?toast=/)
     const page = await get('/bugs/KAZ-9')
     assert.equal(page.status, 200, 'a page for a bug not checked yet')
     assert.match(page.body, /Not checked yet/)
@@ -117,7 +126,7 @@ describe('server', () => {
     assert.equal((await post('KAZ-3', readBug(state.dbFile, 'KAZ-3')!.checkedAt.toISOString())).status, 400, 'no comment to post')
     const res = await post('KAZ-5', readBug(state.dbFile, 'KAZ-5')!.checkedAt.toISOString())
     assert.equal(res.status, 303)
-    assert.equal(res.headers.get('location'), '/bugs/KAZ-5')
+    assert.match(res.headers.get('location') ?? '', /^\/bugs\/KAZ-5\?toast=success%3APost\+of\+the\+comment\+on\+KAZ-5\+requested/)
     assert.deepEqual(
       readPosts(state.dbFile).map((p) => [p.key, p.error]),
       [['KAZ-5', null]],

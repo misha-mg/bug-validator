@@ -2,7 +2,20 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import { readBugs } from './read.ts'
-import { checksPerDay, fieldChecksPassedAfterComment, gaps, needsAttention, periodStats, startOfDay } from './stats.ts'
+import {
+  PERIODS,
+  type Period,
+  chartDays,
+  checksPerDay,
+  fieldChecksPassedAfterComment,
+  gaps,
+  needsAttention,
+  periodBugs,
+  periodOf,
+  periodStart,
+  periodStats,
+  startOfDay,
+} from './stats.ts'
 import { DAY, ago, daysAgo, emptyState, insert, run, sampleState, stamp } from './sample.ts'
 
 const state = sampleState()
@@ -11,18 +24,44 @@ const share = (count: number, total: number) => ({ count, total })
 
 describe('stats', () => {
   it("counts the checks of each period by outcome, with the agent's cost", () => {
-    const all = periodStats(bugs)
+    const { since, ...all } = periodStats(bugs)
     assert.deepEqual(all, {
       checked: 4,
       byOutcome: { understood: share(1, 4), not_understood: share(2, 4), not_webui: share(1, 4) },
       errors: 1,
+      checks: 6,
       costUsd: 0.15,
+      medianCostUsd: 0.03,
     })
+    assert.equal(since?.getTime(), daysAgo(20, state.now).getTime(), 'the skipped bug counts here; the page leaves it out')
     const week = periodStats(bugs, ago(7 * DAY, state.now))
     assert.deepEqual([week.checked, week.byOutcome.not_understood.count, week.errors, week.costUsd], [3, 1, 1, 0.12])
     const today = periodStats(bugs, startOfDay(state.now))
     assert.deepEqual([today.checked, today.byOutcome.not_understood.count, today.errors, today.costUsd], [1, 1, 0, 0.06])
     assert.deepEqual(periodStats([]).byOutcome.understood, share(0, 0))
+    assert.deepEqual([periodStats([]).medianCostUsd, periodStats([]).since], [null, null])
+  })
+  it('a period is the bugs first checked in it, skipped ones never; its chart spans it, all time at most 90 days', () => {
+    const keys = (period: Period) => periodBugs(bugs, period, state.now).map((b) => b.key)
+    assert.deepEqual(keys('today'), ['KAZ-2'])
+    assert.deepEqual(keys('7d'), ['KAZ-2', 'RPG-4', 'KAZ-3', 'RPG-6'])
+    assert.deepEqual(keys('all'), ['KAZ-2', 'RPG-4', 'KAZ-3', 'RPG-6', 'KAZ-5'])
+    assert.equal(periodStart('today', state.now)?.getTime(), startOfDay(state.now).getTime())
+    assert.equal(periodStart('7d', state.now)?.getTime(), daysAgo(6, startOfDay(state.now)).getTime())
+    assert.equal(periodStart('all', state.now), undefined)
+    assert.deepEqual(
+      PERIODS.map((p) => periodOf(p)),
+      PERIODS,
+    )
+    assert.equal(periodOf('nonsense'), '30d')
+    assert.equal(periodOf(null), '30d')
+    assert.deepEqual([chartDays('today', bugs, state.now), chartDays('7d', bugs, state.now), chartDays('30d', bugs, state.now)], [1, 7, 30])
+    assert.equal(chartDays('all', bugs, state.now), 11, 'from the first check 10 days ago to today')
+    assert.equal(chartDays('all', [], state.now), 7)
+    const s = emptyState()
+    insert(s.dbFile, { key: 'KAZ-9', status: 'understood', checked_at: stamp(daysAgo(200, s.now)) })
+    run(s.dbFile, 'KAZ-9', daysAgo(200, s.now), [])
+    assert.equal(chartDays('all', readBugs(s.dbFile), s.now), 90)
   })
   it('gaps are the field checks found failed on the first check, the most common first', () => {
     const found = gaps(bugs)

@@ -1,53 +1,43 @@
-/* The UI's own stylesheet, on the drafting sheet (sheet.css, shared with pipeline-ui, which
-   names the faces): the layout of the three pages. */
-.time {
-  white-space: nowrap;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.num {
-  text-align: right;
-}
-.missing {
-  color: var(--slate-ink);
-  font-weight: 600;
-}
+/* The console's own layout, on the drafting sheet (sheet.css, shared with pipeline-ui, which
+   names the faces and every part): the cockpit's columns, the bugs' table, the statistics' pair
+   and chart, a bug's page. */
+
+/* The field checks a report lacked, as small chips. */
 .req {
   display: inline-block;
   padding: 1px 6px;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: var(--radius);
   font: 11px var(--mono);
   cursor: help;
 }
+td.absent {
+  white-space: nowrap;
+}
 
-/* Home: the cards across, the service left of the chart and the gaps, the activity full width;
-   one column on a narrow window. */
-.home {
+/* Cockpit: the cards across, the state sources and the requests left of what needs attention and
+   the activity; one column on a narrow window. The service's state in moss while it runs. */
+.cards .card .value.live {
+  color: var(--moss);
+}
+.cockpit {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: 360px minmax(0, 1fr);
   gap: var(--gap);
-}
-.home .cards,
-.home .activity {
-  grid-column: 1 / -1;
-}
-.home .cards {
-  grid-template-columns: repeat(4, 1fr);
-  margin-bottom: 8px;
+  align-items: start;
 }
 @media (max-width: 1100px) {
-  .home {
+  .cockpit {
     grid-template-columns: 1fr;
-  }
-  .home .cards {
-    grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (max-width: 700px) {
-  .home .cards {
-    grid-template-columns: 1fr;
-  }
+.sources .facts {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.sources .facts dl.kv dt,
+.sources .facts dl.kv dd {
+  padding: 5px 0;
 }
 /* Activity: the time and the key as wide as they are, the text takes the rest and wraps. */
 .activity td:not(:last-child) {
@@ -58,110 +48,44 @@
   overflow-wrap: anywhere;
 }
 
-/* The chart and the gaps: bars in the three result colours, the gap bar in slate. */
-.chart {
-  margin: 0;
+/* Bugs: the search field among the filters, a day's checks under its date. */
+.filters .opts .field {
+  max-width: 26rem;
 }
-svg.days {
-  display: block;
-}
-svg.days rect.understood {
-  fill: var(--moss);
-}
-svg.days rect.not_understood {
-  fill: var(--slate);
-}
-svg.days rect.not_webui {
-  fill: var(--muted);
-}
-svg.days rect.error {
-  fill: var(--rust);
-}
-svg.days text {
-  font: 9px var(--sans);
-  text-anchor: middle;
-  fill: var(--muted);
-}
-svg.days text.count {
-  fill: var(--text);
-}
-svg.days text.today {
-  fill: var(--text);
-  font-weight: 600;
-}
-.legend {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 10px;
-}
-.sw {
-  display: inline-block;
-  width: 0.7em;
-  height: 0.7em;
-  margin: 0 0.3em 0 0.8em;
-  vertical-align: -1px;
-}
-.sw.understood {
-  background: var(--moss);
-}
-.sw.not_understood {
-  background: var(--slate);
-}
-.sw.not_webui {
-  background: var(--muted);
-}
-.sw.error {
-  background: var(--rust);
-}
-.problems td.bar {
-  width: 35%;
-}
-.problems td.bar div {
-  height: 6px;
-  margin-top: 6px;
-  background: var(--slate);
-  opacity: 0.85;
-}
-.problems tr.dim td.bar div {
-  display: none;
-}
-
-/* Bugs: the filters and the search over the list, a day's checks under its date. */
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  align-items: center;
-  margin: -8px 0 26px;
-}
-.toolbar .field {
-  flex: 1;
-  min-width: 16rem;
-}
-.list tbody tr.day th {
+.bugs tbody tr.day th {
   padding: 22px 0 8px;
   border-bottom: 1px solid var(--line);
 }
-.list td.summary a {
+.bugs td.summary a {
   color: var(--text);
   text-decoration: none;
 }
-.list td.summary a:hover {
+.bugs td.summary a:hover {
   text-decoration: underline;
 }
-.bugs a.jira {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-left: 6px;
-  text-decoration: none;
+
+/* Statistics: the two bar frames side by side, the chart under them. The chart's axis numbers
+   sit in the plot's left padding: the columns are placed in percentages of the rest. */
+.stats-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--gap);
 }
-.bugs a.jira:hover {
-  color: var(--text);
+@media (max-width: 900px) {
+  .stats-pair {
+    grid-template-columns: 1fr;
+  }
+}
+.columns .plot {
+  padding-left: 30px;
+}
+.columns .tip {
+  margin-left: 30px;
 }
 
-/* One bug: its facts on top, requirements left, the comment right. */
+/* One bug: its facts on top, the checks left, the comment right. The reason block sits under the
+   facts, not under pills as on the sheet, so it keeps its distance from them. */
 .bug-head {
   margin-bottom: 26px;
 }
@@ -171,58 +95,45 @@ svg.days text.today {
 .bug-head dl.kv {
   max-width: 760px;
 }
+.bug-head .reason {
+  margin: 18px 0 0;
+  max-width: 760px;
+}
 .bug-head .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
 }
-/* The confirmation of a post: a sheet over the page, the comment as Jira will show it. */
-dialog.confirm {
-  width: min(560px, calc(100vw - 32px));
-  background: var(--bg);
-  color: var(--text);
+/* The confirmation opened without JavaScript (?post): in the flow, under the buttons. */
+.bug-head dialog.confirm[open]:not(:modal) {
+  margin: 18px 0 0;
 }
-dialog.confirm::backdrop {
-  background: rgb(0 0 0 / 0.35);
-}
-dialog.confirm p {
-  margin: 0 0 14px;
-}
-dialog.confirm form {
-  display: flex;
-  gap: 10px;
-  margin-top: 18px;
-}
-.columns {
+.two {
   display: grid;
   grid-template-columns: 3fr 2fr;
   gap: var(--gap);
   align-items: start;
 }
 @media (max-width: 1100px) {
-  .columns {
+  .two {
     grid-template-columns: 1fr;
   }
 }
+.checks h3:first-child {
+  margin-top: 0;
+}
 .requirements tbody th,
-.requirements td:nth-child(2),
-.requirements td:nth-child(3),
-.requirements thead th:not(:last-child) {
+.requirements td:nth-child(2) {
   width: 1%;
   white-space: nowrap;
 }
 .requirements td:last-child {
   overflow-wrap: anywhere;
 }
-.related th {
-  width: 1%;
-  padding-right: 10px;
-}
 .history td:not(:last-child) {
   width: 1%;
   white-space: nowrap;
-  padding-right: 22px;
 }
 .history details {
   margin-top: 4px;

@@ -6,9 +6,10 @@ import { ISSUE_KEY } from '../domain/key.ts'
 import { describeError, log } from '../log.ts'
 import type { UiConfig } from './config.ts'
 import { SECURITY_HEADERS, TooLarge, knownHost, loggedIn, loginChallenge, readBody, sameOrigin } from './guard.ts'
-import { type PageContext, bugPage, bugsPage, bugsQuery, errorPage, homePage } from './view.ts'
+import { type PageContext, bugPage, bugsPage, bugsQuery, errorPage, homePage, statsPage, toastOf, toastParam } from './view.ts'
 import { readBug, readBugs, readHeartbeat, readPosts, readRequests } from './read.ts'
 import { health, ServiceLog } from './service-log.ts'
+import { periodOf } from './stats.ts'
 
 const STATIC: Record<string, string> = {
   '/sheet.css': 'text/css',
@@ -22,14 +23,20 @@ const FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/
 /** A posted form is small; anything bigger is not one. */
 const MAX_BODY = 4096
 
-/** What a person can ask the service for: the form's path → the request it writes; returns the bug's key. */
-const ACTIONS: Record<string, (dbFile: string, form: URLSearchParams) => string> = {
-  '/requests': (dbFile, form) => requestCheck(dbFile, form.get('key') ?? ''),
-  '/posts': (dbFile, form) => requestPost(dbFile, form.get('key') ?? '', form.get('checked') ?? ''),
+/** What a person can ask the service for: the form's path → the request it writes; returns the bug's key and what the toast says. */
+const ACTIONS: Record<string, (dbFile: string, form: URLSearchParams) => { key: string; done: string }> = {
+  '/requests': (dbFile, form) => {
+    const key = requestCheck(dbFile, form.get('key') ?? '')
+    return { key, done: `Check of ${key} requested: the service takes it before its next poll` }
+  },
+  '/posts': (dbFile, form) => {
+    const key = requestPost(dbFile, form.get('key') ?? '', form.get('checked') ?? '')
+    return { key, done: `Post of the comment on ${key} requested: the service posts it next` }
+  },
 }
 
 /**
- * The web UI: three pages rendered from the database and the log on every request, plus the
+ * The web UI: the pages rendered from the database and the log on every request, plus the
  * stylesheets (the drafting sheet shared with pipeline-ui, and the UI's own), their fonts and the
  * scripts. Pages, styles and scripts are not cached: an edit shows on reload; the fonts are. The
  * writes are `POST /requests`, a check asked for by hand, and `POST /posts`, a recorded comment
@@ -91,15 +98,25 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
     return
   }
   const status = serviceLog.read()
-  const ctx: PageContext = { jiraBaseUrl: config.jiraBaseUrl, dryRun: status?.dryRun ?? null, now: new Date(), host: req.headers.host }
+  const ctx: PageContext = {
+    jiraBaseUrl: config.jiraBaseUrl,
+    dryRun: status?.dryRun ?? null,
+    now: new Date(),
+    host: req.headers.host,
+    toast: toastOf(url.searchParams),
+  }
   const action = req.method === 'POST' ? ACTIONS[path] : undefined
   if (action) {
     if (!sameOrigin(req))
       return send(res, 403, 'text/html', errorPage(403, 'A check or a post can be asked for from the UI’s own pages only.', ctx))
     const form = new URLSearchParams(await readBody(req, MAX_BODY))
     try {
-      const key = action(config.dbFile, form)
-      res.writeHead(303, { ...SECURITY_HEADERS, Location: `/bugs/${key}` })
+      const { key, done } = action(config.dbFile, form)
+      // The bug's page, with the notification in the URL: app.js shows it as a toast, a page without JavaScript as a notice.
+      res.writeHead(303, {
+        ...SECURITY_HEADERS,
+        Location: `/bugs/${key}?${new URLSearchParams({ toast: toastParam({ kind: 'success', text: done }) })}`,
+      })
       res.end()
     } catch (err) {
       send(res, 400, 'text/html', errorPage(400, err instanceof Error ? err.message : String(err), ctx))
@@ -120,12 +137,16 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
           recent: serviceLog.recent,
           requests: readRequests(config.dbFile),
           heartbeat: readHeartbeat(config.dbFile),
+          dbPath: config.dbFile,
+          dbFound: existsSync(config.dbFile),
         },
         ctx,
       ),
     )
   } else if (path === '/bugs') {
     send(res, 200, 'text/html', bugsPage(readBugs(config.dbFile), bugsQuery(url.searchParams), ctx))
+  } else if (path === '/stats') {
+    send(res, 200, 'text/html', statsPage(readBugs(config.dbFile), periodOf(url.searchParams.get('period')), ctx))
   } else if (path.startsWith('/bugs/')) {
     const key = path.slice('/bugs/'.length)
     if (!ISSUE_KEY.test(key)) return send(res, 400, 'text/html', errorPage(400, `Not a KAZ or RPG key: ${key}`, ctx))
