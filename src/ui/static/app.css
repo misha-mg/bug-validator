@@ -1,76 +1,286 @@
 /* The UI's own stylesheet, on the drafting sheet (sheet.css, shared with pipeline-ui): the
    Barlow faces it names, and the layout of the three pages. */
-@font-face { font-family: 'Barlow'; font-weight: 400; font-display: swap; src: url(/fonts/barlow-latin-400-normal.woff2) format('woff2'); }
-@font-face { font-family: 'Barlow'; font-weight: 500; font-display: swap; src: url(/fonts/barlow-latin-500-normal.woff2) format('woff2'); }
-@font-face { font-family: 'Barlow'; font-weight: 600; font-display: swap; src: url(/fonts/barlow-latin-600-normal.woff2) format('woff2'); }
-@font-face { font-family: 'Barlow Condensed'; font-weight: 500; font-display: swap; src: url(/fonts/barlow-condensed-latin-500-normal.woff2) format('woff2'); }
-@font-face { font-family: 'Barlow Condensed'; font-weight: 600; font-display: swap; src: url(/fonts/barlow-condensed-latin-600-normal.woff2) format('woff2'); }
-@font-face { font-family: 'Barlow Condensed'; font-weight: 700; font-display: swap; src: url(/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2'); }
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/barlow-latin-400-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/barlow-latin-500-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonts/barlow-latin-600-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/barlow-condensed-latin-500-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonts/barlow-condensed-latin-600-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 700;
+  font-display: swap;
+  src: url(/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2');
+}
 
-.time { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
-.num { text-align: right; }
-.missing { color: var(--slate-ink); font-weight: 600; }
-.req { display: inline-block; padding: 1px 6px; border: 1px solid var(--line); border-radius: 2px; font: 11px var(--mono); cursor: help; }
+.time {
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.num {
+  text-align: right;
+}
+.missing {
+  color: var(--slate-ink);
+  font-weight: 600;
+}
+.req {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font: 11px var(--mono);
+  cursor: help;
+}
 
 /* Home: the cards across, the service left of the chart and the gaps, the activity full width;
    one column on a narrow window. */
-.home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--gap); }
-.home .cards, .home .activity { grid-column: 1 / -1; }
-.home .cards { grid-template-columns: repeat(4, 1fr); margin-bottom: 8px; }
-@media (max-width: 1100px) { .home { grid-template-columns: 1fr; } .home .cards { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 700px) { .home .cards { grid-template-columns: 1fr; } }
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--gap);
+}
+.home .cards,
+.home .activity {
+  grid-column: 1 / -1;
+}
+.home .cards {
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 8px;
+}
+@media (max-width: 1100px) {
+  .home {
+    grid-template-columns: 1fr;
+  }
+  .home .cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .home .cards {
+    grid-template-columns: 1fr;
+  }
+}
 /* Activity: the time and the key as wide as they are, the text takes the rest and wraps. */
-.activity td:not(:last-child) { width: 1%; white-space: nowrap; }
-.activity td:last-child { overflow-wrap: anywhere; }
+.activity td:not(:last-child) {
+  width: 1%;
+  white-space: nowrap;
+}
+.activity td:last-child {
+  overflow-wrap: anywhere;
+}
 
 /* The chart and the gaps: bars in the three result colours, the gap bar in slate. */
-.chart { margin: 0; }
-svg.days { display: block; }
-svg.days rect.understood { fill: var(--moss); }
-svg.days rect.not_understood { fill: var(--slate); }
-svg.days rect.not_webui { fill: var(--muted); }
-svg.days rect.error { fill: var(--rust); }
-svg.days text { font: 9px var(--sans); text-anchor: middle; fill: var(--muted); }
-svg.days text.count { fill: var(--text); }
-svg.days text.today { fill: var(--text); font-weight: 600; }
-.legend { font-size: 12px; color: var(--muted); margin-top: 10px; }
-.sw { display: inline-block; width: 0.7em; height: 0.7em; margin: 0 0.3em 0 0.8em; vertical-align: -1px; }
-.sw.understood { background: var(--moss); }
-.sw.not_understood { background: var(--slate); }
-.sw.not_webui { background: var(--muted); }
-.sw.error { background: var(--rust); }
-.problems td.bar { width: 35%; }
-.problems td.bar div { height: 6px; margin-top: 6px; background: var(--slate); opacity: 0.85; }
-.problems tr.dim td.bar div { display: none; }
+.chart {
+  margin: 0;
+}
+svg.days {
+  display: block;
+}
+svg.days rect.understood {
+  fill: var(--moss);
+}
+svg.days rect.not_understood {
+  fill: var(--slate);
+}
+svg.days rect.not_webui {
+  fill: var(--muted);
+}
+svg.days rect.error {
+  fill: var(--rust);
+}
+svg.days text {
+  font: 9px var(--sans);
+  text-anchor: middle;
+  fill: var(--muted);
+}
+svg.days text.count {
+  fill: var(--text);
+}
+svg.days text.today {
+  fill: var(--text);
+  font-weight: 600;
+}
+.legend {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.sw {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin: 0 0.3em 0 0.8em;
+  vertical-align: -1px;
+}
+.sw.understood {
+  background: var(--moss);
+}
+.sw.not_understood {
+  background: var(--slate);
+}
+.sw.not_webui {
+  background: var(--muted);
+}
+.sw.error {
+  background: var(--rust);
+}
+.problems td.bar {
+  width: 35%;
+}
+.problems td.bar div {
+  height: 6px;
+  margin-top: 6px;
+  background: var(--slate);
+  opacity: 0.85;
+}
+.problems tr.dim td.bar div {
+  display: none;
+}
 
 /* Bugs: the filters and the search over the list, a day's checks under its date. */
-.toolbar { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: -8px 0 26px; }
-.toolbar .field { flex: 1; min-width: 16rem; }
-.list tbody tr.day th { padding: 22px 0 8px; border-bottom: 1px solid var(--line); }
-.list td.summary a { color: var(--text); text-decoration: none; }
-.list td.summary a:hover { text-decoration: underline; }
-.bugs a.jira { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-left: 6px; text-decoration: none; }
-.bugs a.jira:hover { color: var(--text); }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+  margin: -8px 0 26px;
+}
+.toolbar .field {
+  flex: 1;
+  min-width: 16rem;
+}
+.list tbody tr.day th {
+  padding: 22px 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+.list td.summary a {
+  color: var(--text);
+  text-decoration: none;
+}
+.list td.summary a:hover {
+  text-decoration: underline;
+}
+.bugs a.jira {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-left: 6px;
+  text-decoration: none;
+}
+.bugs a.jira:hover {
+  color: var(--text);
+}
 
 /* One bug: its facts on top, requirements left, the comment right. */
-.bug-head { margin-bottom: 26px; }
-.bug-head .page-head { margin-bottom: 14px; }
-.bug-head dl.kv { max-width: 760px; }
-.bug-head .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.bug-head {
+  margin-bottom: 26px;
+}
+.bug-head .page-head {
+  margin-bottom: 14px;
+}
+.bug-head dl.kv {
+  max-width: 760px;
+}
+.bug-head .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
 /* The confirmation of a post: a sheet over the page, the comment as Jira will show it. */
-dialog.confirm { width: min(560px, calc(100vw - 32px)); background: var(--bg); color: var(--text); }
-dialog.confirm::backdrop { background: rgb(0 0 0 / 0.35); }
-dialog.confirm p { margin: 0 0 14px; }
-dialog.confirm form { display: flex; gap: 10px; margin-top: 18px; }
-.columns { display: grid; grid-template-columns: 3fr 2fr; gap: var(--gap); align-items: start; }
-@media (max-width: 1100px) { .columns { grid-template-columns: 1fr; } }
-.requirements tbody th, .requirements td:nth-child(2), .requirements td:nth-child(3), .requirements thead th:not(:last-child) { width: 1%; white-space: nowrap; }
-.requirements td:last-child { overflow-wrap: anywhere; }
-.related th { width: 1%; padding-right: 10px; }
-.history td:not(:last-child) { width: 1%; white-space: nowrap; padding-right: 22px; }
-.history details { margin-top: 4px; }
-.history summary { cursor: pointer; color: var(--slate-ink); font-size: 12px; }
-.jira-comment { background: var(--field); padding: 12px 14px; overflow-wrap: anywhere; }
-.jira-comment p { margin: 0 0 8px; }
-.jira-comment ul { margin: 0 0 8px; padding-left: 20px; }
-.jira-comment s { color: var(--muted); }
+dialog.confirm {
+  width: min(560px, calc(100vw - 32px));
+  background: var(--bg);
+  color: var(--text);
+}
+dialog.confirm::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+dialog.confirm p {
+  margin: 0 0 14px;
+}
+dialog.confirm form {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.columns {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: var(--gap);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+.requirements tbody th,
+.requirements td:nth-child(2),
+.requirements td:nth-child(3),
+.requirements thead th:not(:last-child) {
+  width: 1%;
+  white-space: nowrap;
+}
+.requirements td:last-child {
+  overflow-wrap: anywhere;
+}
+.related th {
+  width: 1%;
+  padding-right: 10px;
+}
+.history td:not(:last-child) {
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 22px;
+}
+.history details {
+  margin-top: 4px;
+}
+.history summary {
+  cursor: pointer;
+  color: var(--slate-ink);
+  font-size: 12px;
+}
+.jira-comment {
+  background: var(--field);
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+}
+.jira-comment p {
+  margin: 0 0 8px;
+}
+.jira-comment ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.jira-comment s {
+  color: var(--muted);
+}

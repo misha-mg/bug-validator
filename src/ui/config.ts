@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { Env, parseEnv } from '../config.ts';
+import { z } from 'zod'
+import { Env, parseEnv } from '../config.ts'
 
 // The service's variables the UI shares, so their defaults are written once, plus its own.
 const UiEnv = Env.pick({ JIRA_BASE_URL: true, DB_FILE: true, LOG_FILE: true }).extend({
@@ -11,29 +11,31 @@ const UiEnv = Env.pick({ JIRA_BASE_URL: true, DB_FILE: true, LOG_FILE: true }).e
   // Both set: the pages ask for this login (HTTP basic auth).
   UI_USER: z.string().min(1).optional(),
   UI_PASSWORD: z.string().min(1).optional(),
-});
+})
 
 export interface UiConfig {
-  dbFile: string;
-  logFile: string;
-  jiraBaseUrl: string;
-  host: string;
-  port: number;
-  hostnames: string[];
-  login: { user: string; password: string } | null;
+  dbFile: string
+  logFile: string
+  jiraBaseUrl: string
+  host: string
+  port: number
+  hostnames: string[]
+  login: { user: string; password: string } | null
 }
 
 /** The UI starts without Jira credentials: it reads the database and the log, nothing else. */
 export function loadUiConfig(env: NodeJS.ProcessEnv = process.env): UiConfig {
-  const e = parseEnv(UiEnv, env);
-  if (Boolean(e.UI_USER) !== Boolean(e.UI_PASSWORD)) throw new Error('Bad configuration: UI_USER and UI_PASSWORD go together');
+  const e = parseEnv(UiEnv, env)
+  if (Boolean(e.UI_USER) !== Boolean(e.UI_PASSWORD)) throw new Error('Bad configuration: UI_USER and UI_PASSWORD go together')
   return {
     dbFile: e.DB_FILE,
     logFile: e.LOG_FILE,
     jiraBaseUrl: e.JIRA_BASE_URL,
     host: e.UI_HOST,
     port: e.UI_PORT,
-    hostnames: e.UI_HOSTNAMES.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
+    hostnames: e.UI_HOSTNAMES.split(',')
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
     login: e.UI_USER && e.UI_PASSWORD ? { user: e.UI_USER, password: e.UI_PASSWORD } : null,
-  };
+  }
 }

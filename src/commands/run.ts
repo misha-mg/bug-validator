@@ -1,20 +1,20 @@
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { hostname } from 'node:os';
-import { resolve } from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
-import { ClaudeAgent } from '../claude/agent.ts';
-import { JiraTool } from '../claude/jira-mcp.ts';
-import { loadConfig } from '../config.ts';
-import { Store } from '../db/store.ts';
-import { JiraClient } from '../jira/client.ts';
-import { describeError, log } from '../log.ts';
-import type { Deps } from '../pipeline/deps.ts';
-import { poll } from '../pipeline/poll.ts';
-import { serveRequests } from '../pipeline/requests.ts';
-import { Clone } from '../webui/clone.ts';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { hostname } from 'node:os'
+import { resolve } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { ClaudeAgent } from '../claude/agent.ts'
+import { JiraTool } from '../claude/jira-mcp.ts'
+import { loadConfig } from '../config.ts'
+import { Store } from '../db/store.ts'
+import { JiraClient } from '../jira/client.ts'
+import { describeError, log } from '../log.ts'
+import type { Deps } from '../pipeline/deps.ts'
+import { poll } from '../pipeline/poll.ts'
+import { serveRequests } from '../pipeline/requests.ts'
+import { Clone } from '../webui/clone.ts'
 
 /** How often the service looks for a check asked for by hand while it waits for the next poll. */
-const REQUEST_TICK_MS = 2000;
+const REQUEST_TICK_MS = 2000
 
 /**
  * The service: poll, wait, repeat, until SIGINT or SIGTERM. Polls never overlap. While it waits,
@@ -23,17 +23,17 @@ const REQUEST_TICK_MS = 2000;
  * progress; the bug it was checking loses nothing and is checked at a later poll.
  */
 export async function run(): Promise<void> {
-  const config = loadConfig();
+  const config = loadConfig()
   // The lock first: the start checks fetch the clone, which two services must not do at once.
-  lock(`${config.dbFile}.lock`);
-  const jira = new JiraClient(config.jira);
-  const tool = new JiraTool(jira);
-  await tool.listen();
-  const agent = new ClaudeAgent(config.agent, config.webui.dir, tool);
-  const claudeVersion = await agent.version();
-  const clone = new Clone(config.webui.dir, config.webui.repoUrl);
-  const webuiCommit = await clone.update(0);
-  const deps: Deps = { config, jira, agent, clone, store: new Store(config.dbFile) };
+  lock(`${config.dbFile}.lock`)
+  const jira = new JiraClient(config.jira)
+  const tool = new JiraTool(jira)
+  await tool.listen()
+  const agent = new ClaudeAgent(config.agent, config.webui.dir, tool)
+  const claudeVersion = await agent.version()
+  const clone = new Clone(config.webui.dir, config.webui.repoUrl)
+  const webuiCommit = await clone.update(0)
+  const deps: Deps = { config, jira, agent, clone, store: new Store(config.dbFile) }
   log.info('service_start', {
     dryRun: config.dryRun,
     pollIntervalS: config.pollIntervalMs / 1000,
@@ -46,46 +46,46 @@ export async function run(): Promise<void> {
     // The absolute path and the rows in it: a database that is not the expected one shows here.
     dbFile: resolve(config.dbFile),
     bugs: deps.store.count(),
-  });
+  })
 
-  const stop = new AbortController();
+  const stop = new AbortController()
   const onSignal = (signal: string): void => {
-    log.info('service_stopping', { signal });
-    stop.abort();
-  };
-  process.once('SIGINT', () => onSignal('SIGINT'));
-  process.once('SIGTERM', () => onSignal('SIGTERM'));
+    log.info('service_stopping', { signal })
+    stop.abort()
+  }
+  process.once('SIGINT', () => onSignal('SIGINT'))
+  process.once('SIGTERM', () => onSignal('SIGTERM'))
 
   while (!stop.signal.aborted) {
-    const started = Date.now();
-    let ok = true;
+    const started = Date.now()
+    let ok = true
     try {
-      const summary = await poll(deps, stop.signal);
-      log.info('poll', { ...summary, ms: Date.now() - started });
+      const summary = await poll(deps, stop.signal)
+      log.info('poll', { ...summary, ms: Date.now() - started })
     } catch (err) {
       // Jira or Claude is unavailable: an error, not a quiet poll. The next poll simply tries again.
       // A stop is not a failure: the check it cut short is made again later.
-      if (!stop.signal.aborted) log.error('poll_failed', { error: describeError(err), ms: Date.now() - started });
-      ok = false;
+      if (!stop.signal.aborted) log.error('poll_failed', { error: describeError(err), ms: Date.now() - started })
+      ok = false
     }
-    const due = Date.now() + config.pollIntervalMs;
+    const due = Date.now() + config.pollIntervalMs
     while (!stop.signal.aborted && Date.now() < due) {
       if (ok) {
         // serveRequests logs each request's failure; this says the requests now wait for a poll.
         ok = await serveRequests(deps, stop.signal).then(
           () => true,
           (err: unknown) => {
-            if (!stop.signal.aborted) log.error('poll_failed', { error: describeError(err), ms: 0, requests: true });
-            return false;
+            if (!stop.signal.aborted) log.error('poll_failed', { error: describeError(err), ms: 0, requests: true })
+            return false
           },
-        );
+        )
       }
-      await sleep(Math.min(REQUEST_TICK_MS, due - Date.now()), undefined, { signal: stop.signal }).catch(() => undefined);
+      await sleep(Math.min(REQUEST_TICK_MS, due - Date.now()), undefined, { signal: stop.signal }).catch(() => undefined)
     }
   }
-  deps.store.close();
-  await tool.close();
-  log.info('service_stopped');
+  deps.store.close()
+  await tool.close()
+  log.info('service_stopped')
 }
 
 /**
@@ -95,25 +95,26 @@ export async function run(): Promise<void> {
  * still be running there.
  */
 function lock(file: string): void {
-  const me = `${hostname()} ${process.pid}`;
+  const me = `${hostname()} ${process.pid}`
   try {
-    writeFileSync(file, me, { flag: 'wx' });
+    writeFileSync(file, me, { flag: 'wx' })
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-    const [host, pid] = readFileSync(file, 'utf8').trim().split(' ');
-    if (host !== hostname()) throw new Error(`${file}: the database is locked by a service on ${host} (pid ${pid}); stop that one, then delete the file`);
-    if (running(Number(pid))) throw new Error(`${file}: another service runs on this database (pid ${pid}); stop it first`);
-    writeFileSync(file, me);
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    const [host, pid] = readFileSync(file, 'utf8').trim().split(' ')
+    if (host !== hostname())
+      throw new Error(`${file}: the database is locked by a service on ${host} (pid ${pid}); stop that one, then delete the file`)
+    if (running(Number(pid))) throw new Error(`${file}: another service runs on this database (pid ${pid}); stop it first`)
+    writeFileSync(file, me)
   }
-  process.once('exit', () => rmSync(file, { force: true }));
+  process.once('exit', () => rmSync(file, { force: true }))
 }
 
 /** The pid is a live `run` of this service's (a pid is reused after a reboot: the UI or a check may have it). */
 function running(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false
   try {
-    return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('main.ts\0run');
+    return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('main.ts\0run')
   } catch {
-    return false;
+    return false
   }
 }

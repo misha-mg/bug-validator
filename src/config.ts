@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { z } from 'zod';
+import { existsSync } from 'node:fs'
+import { z } from 'zod'
 
 export const Env = z.object({
   JIRA_BASE_URL: z.url().default('https://cgstowernetworks.atlassian.net'),
@@ -23,34 +23,34 @@ export const Env = z.object({
   // to ssh.bitbucket.org on 2026-11-12; until then only the old host answers.
   WEBUI_REPO_URL: z.string().min(1).default('git@bitbucket.org:CGS/webui.git'),
   WEBUI_DIR: z.string().min(1).default('state/webui'),
-});
+})
 
 /** A bug's first check is tried this many times, then the bug is recorded as failed. */
-export const MAX_ATTEMPTS = 3;
+export const MAX_ATTEMPTS = 3
 
 export interface Config {
-  jira: { baseUrl: string; cloudId: string; email: string; apiToken: string };
-  dryRun: boolean;
-  pollIntervalMs: number;
-  dbFile: string;
-  agent: { model: string; timeoutMs: number; maxTurns: number; maxBudgetUsd: number; token: string };
-  webui: { repoUrl: string; dir: string };
-  maxAttempts: number;
+  jira: { baseUrl: string; cloudId: string; email: string; apiToken: string }
+  dryRun: boolean
+  pollIntervalMs: number
+  dbFile: string
+  agent: { model: string; timeoutMs: number; maxTurns: number; maxBudgetUsd: number; token: string }
+  webui: { repoUrl: string; dir: string }
+  maxAttempts: number
 }
 
 /** The environment through a schema; `.env` in the working directory is loaded first. Fails fast on a bad value. */
 export function parseEnv<T extends z.ZodType>(schema: T, env: NodeJS.ProcessEnv): z.infer<T> {
-  if (env === process.env && existsSync('.env')) process.loadEnvFile('.env');
-  const parsed = schema.safeParse(env);
+  if (env === process.env && existsSync('.env')) process.loadEnvFile('.env')
+  const parsed = schema.safeParse(env)
   if (!parsed.success) {
-    const problems = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
-    throw new Error(`Bad configuration: ${problems.join('; ')}`);
+    const problems = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+    throw new Error(`Bad configuration: ${problems.join('; ')}`)
   }
-  return parsed.data;
+  return parsed.data
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const e = parseEnv(Env, env);
+  const e = parseEnv(Env, env)
   return {
     jira: { baseUrl: e.JIRA_BASE_URL, cloudId: e.JIRA_CLOUD_ID, email: e.JIRA_EMAIL, apiToken: e.JIRA_API_TOKEN },
     dryRun: e.DRY_RUN === 'true',
@@ -65,5 +65,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     webui: { repoUrl: e.WEBUI_REPO_URL, dir: e.WEBUI_DIR },
     maxAttempts: MAX_ATTEMPTS,
-  };
+  }
 }

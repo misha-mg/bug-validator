@@ -1,10 +1,10 @@
-import { ClaudeAgent } from '../claude/agent.ts';
-import { JiraTool } from '../claude/jira-mcp.ts';
-import { loadConfig } from '../config.ts';
-import { Store } from '../db/store.ts';
-import { JiraClient } from '../jira/client.ts';
-import { checkBug } from '../pipeline/checkBug.ts';
-import { Clone } from '../webui/clone.ts';
+import { ClaudeAgent } from '../claude/agent.ts'
+import { JiraTool } from '../claude/jira-mcp.ts'
+import { loadConfig } from '../config.ts'
+import { Store } from '../db/store.ts'
+import { JiraClient } from '../jira/client.ts'
+import { checkBug } from '../pipeline/checkBug.ts'
+import { Clone } from '../webui/clone.ts'
 
 /**
  * `check <KEY> [--recheck]`: one bug, everything printed, the agent's reasoning included, nothing
@@ -13,18 +13,22 @@ import { Clone } from '../webui/clone.ts';
  * tuning session sees one commit.
  */
 export async function check(key: string, recheck = false): Promise<void> {
-  const config = loadConfig();
-  const previousComment = recheck ? Store.recordedComment(config.dbFile, key) : null;
-  if (recheck && previousComment === null) throw new Error(`${key} has no recorded comment to re-check`);
-  const jira = new JiraClient(config.jira);
-  const tool = new JiraTool(jira);
-  await tool.listen();
-  let out: Awaited<ReturnType<typeof checkBug>>;
+  const config = loadConfig()
+  const previousComment = recheck ? Store.recordedComment(config.dbFile, key) : null
+  if (recheck && previousComment === null) throw new Error(`${key} has no recorded comment to re-check`)
+  const jira = new JiraClient(config.jira)
+  const tool = new JiraTool(jira)
+  await tool.listen()
+  let out: Awaited<ReturnType<typeof checkBug>>
   try {
-    const deps = { jira, agent: new ClaudeAgent(config.agent, config.webui.dir, tool), clone: new Clone(config.webui.dir, config.webui.repoUrl) };
-    out = await checkBug(deps, key, { previousComment });
+    const deps = {
+      jira,
+      agent: new ClaudeAgent(config.agent, config.webui.dir, tool),
+      clone: new Clone(config.webui.dir, config.webui.repoUrl),
+    }
+    out = await checkBug(deps, key, { previousComment })
   } finally {
-    await tool.close();
+    await tool.close()
   }
   const report = {
     key: out.bug.key,
@@ -40,9 +44,9 @@ export async function check(key: string, recheck = false): Promise<void> {
     webuiCommit: out.webuiCommit,
     strippedMentions: out.strippedMentions,
     agent: { ...out.agent, model: config.agent.model },
-  };
-  process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-  process.stdout.write('\n--- reasoning ---\n' + out.reasoning + '\n');
-  if (previousComment !== null) process.stdout.write('\n--- previous comment ---\n' + previousComment + '\n');
-  if (out.verdict.outcome === 'not_understood') process.stdout.write('\n--- comment ---\n' + out.verdict.comment + '\n');
+  }
+  process.stdout.write(JSON.stringify(report, null, 2) + '\n')
+  process.stdout.write('\n--- reasoning ---\n' + out.reasoning + '\n')
+  if (previousComment !== null) process.stdout.write('\n--- previous comment ---\n' + previousComment + '\n')
+  if (out.verdict.outcome === 'not_understood') process.stdout.write('\n--- comment ---\n' + out.verdict.comment + '\n')
 }

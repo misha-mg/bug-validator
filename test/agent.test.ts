@@ -1,39 +1,52 @@
-import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterAll, beforeAll, describe, it } from 'vitest';
-import { AgentError, ClaudeAgent, parseClaudeResult, troubleKind } from '../src/claude/agent.ts';
-import { JiraTool } from '../src/claude/jira-mcp.ts';
-import { JiraError } from '../src/jira/client.ts';
+import assert from 'node:assert/strict'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, beforeAll, describe, it } from 'vitest'
+import { AgentError, ClaudeAgent, parseClaudeResult, troubleKind } from '../src/claude/agent.ts'
+import { JiraTool } from '../src/claude/jira-mcp.ts'
+import { JiraError } from '../src/jira/client.ts'
 
 describe('parseClaudeResult', () => {
   it('returns the structured output and the run figures', () => {
-    const run = parseClaudeResult(JSON.stringify({ structured_output: { a: 1 }, total_cost_usd: 0.002, duration_ms: 1200, num_turns: 4 }));
-    assert.deepEqual(run, { output: { a: 1 }, costUsd: 0.002, durationMs: 1200, turns: 4 });
-  });
-  it('turns every bad outcome into an AgentError, the Claude service\'s trouble into one that spares the bug', () => {
-    assert.throws(() => parseClaudeResult('not json'), /something other than JSON/);
-    assert.throws(() => parseClaudeResult(JSON.stringify({ result: 'I could not decide' })), /no structured output/);
-    assert.throws(() => parseClaudeResult('{}'), AgentError);
+    const run = parseClaudeResult(JSON.stringify({ structured_output: { a: 1 }, total_cost_usd: 0.002, duration_ms: 1200, num_turns: 4 }))
+    assert.deepEqual(run, { output: { a: 1 }, costUsd: 0.002, durationMs: 1200, turns: 4 })
+  })
+  it("turns every bad outcome into an AgentError, the Claude service's trouble into one that spares the bug", () => {
+    assert.throws(() => parseClaudeResult('not json'), /something other than JSON/)
+    assert.throws(() => parseClaudeResult(JSON.stringify({ result: 'I could not decide' })), /no structured output/)
+    assert.throws(() => parseClaudeResult('{}'), AgentError)
     assert.throws(
       () => parseClaudeResult(JSON.stringify({ is_error: true, result: 'API Error: 529 Overloaded' })),
       (err: AgentError) => err.kind === 'service' && err.environmental,
-    );
+    )
     assert.throws(
       () => parseClaudeResult(JSON.stringify({ is_error: true, subtype: 'error_max_turns', result: 'stopped' })),
       (err: AgentError) => err.kind === 'run' && !err.environmental,
-    );
-  });
-  it('tells the service\'s trouble from the run\'s', () => {
-    for (const m of ['Claude AI usage limit reached|1761000000', 'rate_limit_error', 'Invalid API key · Please run /login', 'OAuth token has expired', 'API Error: 500', 'connect ETIMEDOUT']) {
-      assert.equal(troubleKind(m), 'service', m);
+    )
+  })
+  it("tells the service's trouble from the run's", () => {
+    for (const m of [
+      'Claude AI usage limit reached|1761000000',
+      'rate_limit_error',
+      'Invalid API key · Please run /login',
+      'OAuth token has expired',
+      'API Error: 500',
+      'connect ETIMEDOUT',
+    ]) {
+      assert.equal(troubleKind(m), 'service', m)
     }
-    for (const m of ['Prompt is too long', 'Reached max turns (25)', 'exceeded --max-budget-usd', 'claude exited with 1: unknown option', 'claude returned no structured output: see the network page, /login, bug RPG-6503 at line 503']) {
-      assert.equal(troubleKind(m), 'run', m);
+    for (const m of [
+      'Prompt is too long',
+      'Reached max turns (25)',
+      'exceeded --max-budget-usd',
+      'claude exited with 1: unknown option',
+      'claude returned no structured output: see the network page, /login, bug RPG-6503 at line 503',
+    ]) {
+      assert.equal(troubleKind(m), 'run', m)
     }
-  });
-});
+  })
+})
 
 // A stand-in for `bwrap` on PATH: it records its arguments and plays claude, as FAKE_CLAUDE says.
 const FAKE = `#!/usr/bin/env node
@@ -65,86 +78,94 @@ switch (mode) {
     break;
   }
 }
-`;
+`
 
 describe('ClaudeAgent', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'agent-'));
-  const argsFile = join(dir, 'args.json');
-  const saved = { PATH: process.env.PATH };
-  let jiraDown = false;
+  const dir = mkdtempSync(join(tmpdir(), 'agent-'))
+  const argsFile = join(dir, 'args.json')
+  const saved = { PATH: process.env.PATH }
+  let jiraDown = false
   const tool = new JiraTool({
     async search() {
-      if (jiraDown) throw new JiraError('HTTP 503', 503);
-      return [];
+      if (jiraDown) throw new JiraError('HTTP 503', 503)
+      return []
     },
     async getIssue() {
-      throw new Error('not here');
+      throw new Error('not here')
     },
-  });
-  const agent = (timeoutMs = 5000) => new ClaudeAgent({ model: 'sonnet', timeoutMs, maxTurns: 100, maxBudgetUsd: 2, token: 'sk-ant-oat01-secret' }, '/srv/webui', tool);
+  })
+  const agent = (timeoutMs = 5000) =>
+    new ClaudeAgent({ model: 'sonnet', timeoutMs, maxTurns: 100, maxBudgetUsd: 2, token: 'sk-ant-oat01-secret' }, '/srv/webui', tool)
   const run = (mode: string, a = agent(), signal?: AbortSignal) => {
-    writeFileSync(join(dir, 'mode'), mode);
-    return a.run('the prompt', { type: 'object' }, join(dir, 'bug'), signal);
-  };
+    writeFileSync(join(dir, 'mode'), mode)
+    return a.run('the prompt', { type: 'object' }, join(dir, 'bug'), signal)
+  }
   beforeAll(async () => {
-    writeFileSync(join(dir, 'bwrap'), FAKE);
-    chmodSync(join(dir, 'bwrap'), 0o755);
-    mkdirSync(join(dir, 'bug'));
-    process.env.PATH = `${dir}:${process.env.PATH}`;
-    await tool.listen();
-  });
+    writeFileSync(join(dir, 'bwrap'), FAKE)
+    chmodSync(join(dir, 'bwrap'), 0o755)
+    mkdirSync(join(dir, 'bug'))
+    process.env.PATH = `${dir}:${process.env.PATH}`
+    await tool.listen()
+  })
   afterAll(async () => {
-    Object.assign(process.env, saved);
-    await tool.close();
-    rmSync(dir, { recursive: true, force: true });
-  });
+    Object.assign(process.env, saved)
+    await tool.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
 
-  it('runs claude in the sandbox: the file tools over the clone and the run\'s files, the Jira tool, no settings; the secrets never arguments', async () => {
-    const result = await run('ok');
-    assert.deepEqual(result.output, { ok: true });
-    assert.equal(result.model, 'sonnet');
-    assert.match(result.instructions ?? '', /^[0-9a-f]{12}$/);
-    assert.equal(result.secrets.length, 2);
-    assert.ok(result.secrets.includes('sk-ant-oat01-secret'));
-    const args = JSON.parse(readFileSync(argsFile, 'utf8')) as string[];
-    const claude = args.slice(args.indexOf('--') + 1);
-    const flag = (name: string) => claude[claude.indexOf(name) + 1];
-    assert.ok(args.slice(0, args.indexOf('--')).includes('--unshare-all'), 'bwrap first');
-    assert.ok(args.includes('/srv/webui') && args.includes(join(dir, 'bug')), 'the clone and the files are bound');
-    assert.ok(claude.includes('--restricted'));
-    assert.equal(flag('--tools'), 'Read,Grep,Glob');
-    assert.equal(flag('--add-dir'), '/work/bug');
-    assert.equal(flag('--mcp-config'), '/home/agent/mcp.json');
-    assert.ok(claude.includes('--strict-mcp-config'));
-    assert.equal(flag('--allowedTools'), 'Read,Grep,Glob,mcp__jira__search_issues,mcp__jira__get_issue');
-    assert.equal(flag('--setting-sources'), '');
-    assert.equal(flag('--max-turns'), '100');
-    assert.equal(flag('--max-budget-usd'), '2');
-    const line = JSON.stringify(args);
-    for (const s of result.secrets) assert.doesNotMatch(line, new RegExp(s), 'no secret is an argument');
-    const env = JSON.parse(readFileSync(`${argsFile}.env`, 'utf8')) as Record<string, string>;
-    assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat01-secret', 'the token goes through the environment');
-    assert.equal(env.HOME, '/home/agent');
-    assert.ok(!('JIRA_API_TOKEN' in env) && !('FAKE_CLAUDE' in env), 'nothing of the service\'s environment');
-    assert.equal(readFileSync(`${argsFile}.mode`, 'utf8'), '600');
-  });
+  it("runs claude in the sandbox: the file tools over the clone and the run's files, the Jira tool, no settings; the secrets never arguments", async () => {
+    const result = await run('ok')
+    assert.deepEqual(result.output, { ok: true })
+    assert.equal(result.model, 'sonnet')
+    assert.match(result.instructions ?? '', /^[0-9a-f]{12}$/)
+    assert.equal(result.secrets.length, 2)
+    assert.ok(result.secrets.includes('sk-ant-oat01-secret'))
+    const args = JSON.parse(readFileSync(argsFile, 'utf8')) as string[]
+    const claude = args.slice(args.indexOf('--') + 1)
+    const flag = (name: string) => claude[claude.indexOf(name) + 1]
+    assert.ok(args.slice(0, args.indexOf('--')).includes('--unshare-all'), 'bwrap first')
+    assert.ok(args.includes('/srv/webui') && args.includes(join(dir, 'bug')), 'the clone and the files are bound')
+    assert.ok(claude.includes('--restricted'))
+    assert.equal(flag('--tools'), 'Read,Grep,Glob')
+    assert.equal(flag('--add-dir'), '/work/bug')
+    assert.equal(flag('--mcp-config'), '/home/agent/mcp.json')
+    assert.ok(claude.includes('--strict-mcp-config'))
+    assert.equal(flag('--allowedTools'), 'Read,Grep,Glob,mcp__jira__search_issues,mcp__jira__get_issue')
+    assert.equal(flag('--setting-sources'), '')
+    assert.equal(flag('--max-turns'), '100')
+    assert.equal(flag('--max-budget-usd'), '2')
+    const line = JSON.stringify(args)
+    for (const s of result.secrets) assert.doesNotMatch(line, new RegExp(s), 'no secret is an argument')
+    const env = JSON.parse(readFileSync(`${argsFile}.env`, 'utf8')) as Record<string, string>
+    assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat01-secret', 'the token goes through the environment')
+    assert.equal(env.HOME, '/home/agent')
+    assert.ok(!('JIRA_API_TOKEN' in env) && !('FAKE_CLAUDE' in env), "nothing of the service's environment")
+    assert.equal(readFileSync(`${argsFile}.mode`, 'utf8'), '600')
+  })
   it('asks claude its version inside the sandbox', async () => {
-    assert.equal(await agent().version(), '9.9.9 (Claude Code)');
-  });
-  it('the Jira tool answers the run by its secret, and a Jira failure during the run fails the run as the surroundings\'', async () => {
-    await run('search');
-    assert.match(readFileSync(`${argsFile}.search`, 'utf8'), /"content"/, 'the tool answered');
-    jiraDown = true;
-    await assert.rejects(run('search'), (err: AgentError) => /Jira failed for the agent: search_issues: HTTP 503/.test(err.message) && err.kind === 'service');
-    jiraDown = false;
-  });
-  it('a timeout is the run\'s failure; a stop, a usage limit or a crash are told apart', async () => {
-    await assert.rejects(run('hang', agent(300)), (err: AgentError) => /timed out/.test(err.message) && err.kind === 'run');
-    const stop = new AbortController();
-    setTimeout(() => stop.abort(), 100);
-    await assert.rejects(run('hang', agent(), stop.signal), (err: AgentError) => err.kind === 'stopped');
-    await assert.rejects(run('ok', agent(), AbortSignal.abort()), (err: AgentError) => err.kind === 'stopped', 'already stopped: not started');
-    await assert.rejects(run('limit'), (err: AgentError) => /usage limit/.test(err.message) && err.kind === 'service');
-    await assert.rejects(run('crash'), (err: AgentError) => /exited with 3: boom/.test(err.message) && err.kind === 'run');
-  });
-});
+    assert.equal(await agent().version(), '9.9.9 (Claude Code)')
+  })
+  it("the Jira tool answers the run by its secret, and a Jira failure during the run fails the run as the surroundings'", async () => {
+    await run('search')
+    assert.match(readFileSync(`${argsFile}.search`, 'utf8'), /"content"/, 'the tool answered')
+    jiraDown = true
+    await assert.rejects(
+      run('search'),
+      (err: AgentError) => /Jira failed for the agent: search_issues: HTTP 503/.test(err.message) && err.kind === 'service',
+    )
+    jiraDown = false
+  })
+  it("a timeout is the run's failure; a stop, a usage limit or a crash are told apart", async () => {
+    await assert.rejects(run('hang', agent(300)), (err: AgentError) => /timed out/.test(err.message) && err.kind === 'run')
+    const stop = new AbortController()
+    setTimeout(() => stop.abort(), 100)
+    await assert.rejects(run('hang', agent(), stop.signal), (err: AgentError) => err.kind === 'stopped')
+    await assert.rejects(
+      run('ok', agent(), AbortSignal.abort()),
+      (err: AgentError) => err.kind === 'stopped',
+      'already stopped: not started',
+    )
+    await assert.rejects(run('limit'), (err: AgentError) => /usage limit/.test(err.message) && err.kind === 'service')
+    await assert.rejects(run('crash'), (err: AgentError) => /exited with 3: boom/.test(err.message) && err.kind === 'run')
+  })
+})
