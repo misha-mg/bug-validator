@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import type { Comment } from '../src/domain/bug.ts';
 import { fingerprint } from '../src/domain/fingerprint.ts';
 import { bug } from './fixtures.ts';

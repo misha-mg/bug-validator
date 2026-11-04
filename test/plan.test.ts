@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import type { BugRow } from '../src/db/store.ts';
 import { FIRST_CHECK_AGE_MS, MAX_CHECKS, plan, QUIET_BEFORE_RECHECK_MS, type Watched } from '../src/pipeline/plan.ts';
 

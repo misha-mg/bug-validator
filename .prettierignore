@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+state/
+package-lock.json
+*.md
+test/fixtures/
+.claude/

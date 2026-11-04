@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { Attachment } from '../src/domain/bug.ts';
 import { JiraError } from '../src/jira/client.ts';
 import { MAX_ATTACHMENT_BYTES, prepareFiles } from '../src/pipeline/attachments.ts';
@@ -15,14 +15,14 @@ const att = (id: string, filename: string, mimeType = '', size = 100): Attachmen
 describe('prepareFiles', () => {
   let work: string;
   let video: Uint8Array;
-  before(() => {
+  beforeAll(() => {
     work = mkdtempSync(join(tmpdir(), 'bv-att-'));
     // Three seconds of a test pattern: real video, no fixture to keep.
     const file = join(work, 'in.mp4');
     execFileSync('ffmpeg', ['-nostdin', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=64x48:rate=5', '-t', '3', '-pix_fmt', 'yuv420p', file]);
     video = readFileSync(file);
   });
-  after(() => rmSync(work, { recursive: true, force: true }));
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
 
   it('images and text as they are, a HAR cleaned, a video as frames, in the attachments\' order', async () => {
     const dir = mkdtempSync(join(work, 'run-'));

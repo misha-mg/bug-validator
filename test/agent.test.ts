@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { afterAll, beforeAll, describe, it } from 'vitest';
 import { AgentError, ClaudeAgent, parseClaudeResult, troubleKind } from '../src/claude/agent.ts';
 import { JiraTool } from '../src/claude/jira-mcp.ts';
 import { JiraError } from '../src/jira/client.ts';
@@ -86,14 +86,14 @@ describe('ClaudeAgent', () => {
     writeFileSync(join(dir, 'mode'), mode);
     return a.run('the prompt', { type: 'object' }, join(dir, 'bug'), signal);
   };
-  before(async () => {
+  beforeAll(async () => {
     writeFileSync(join(dir, 'bwrap'), FAKE);
     chmodSync(join(dir, 'bwrap'), 0o755);
     mkdirSync(join(dir, 'bug'));
     process.env.PATH = `${dir}:${process.env.PATH}`;
     await tool.listen();
   });
-  after(async () => {
+  afterAll(async () => {
     Object.assign(process.env, saved);
     await tool.close();
     rmSync(dir, { recursive: true, force: true });

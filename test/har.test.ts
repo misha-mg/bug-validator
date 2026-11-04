@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { cleanHar, MAX_BODY_CHARS } from '../src/domain/har.ts';
 
 const fixture = readFileSync(new URL('./fixtures/session.har', import.meta.url), 'utf8');

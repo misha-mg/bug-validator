@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { request } from 'node:http';
-import { after, before, describe, it } from 'node:test';
+import { afterAll, beforeAll, describe, it } from 'vitest';
 import { startUi } from '../../src/ui/server.ts';
 import { readBug, readPosts, readRequests } from '../../src/ui/read.ts';
 import { appendLog, logLine, sampleState } from './state.ts';
@@ -16,11 +16,11 @@ const get = async (path: string): Promise<{ status: number; type: string; body: 
 };
 
 describe('server', () => {
-  before(async () => {
+  beforeAll(async () => {
     server = await startUi({ dbFile: state.dbFile, logFile: state.logFile, jiraBaseUrl: 'https://jira.example.com', host: '127.0.0.1', port: 0, hostnames: ['validator.lan'], login: null });
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
-  after(() => {
+  afterAll(() => {
     server.closeAllConnections();
     server.close();
   });

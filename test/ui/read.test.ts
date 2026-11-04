@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { checked, firstRun, readBug, readBugs, readRequests, result } from '../../src/ui/read.ts';
 import { emptyState, sampleState } from './state.ts';
 

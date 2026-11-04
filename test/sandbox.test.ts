@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { bwrapArgs, HOME, MCP_CONFIG, WORK_BUG, WORK_WEBUI } from '../src/claude/sandbox.ts';
 
 describe('bwrapArgs', () => {

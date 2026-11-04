@@ -9,17 +9,20 @@
   },
   "scripts": {
     "start": "node src/main.ts run",
-    "check": "node src/main.ts check",
-    "request": "node src/main.ts request",
+    "check": "tsc --noEmit && prettier --check .",
+    "test": "vitest run",
+    "format": "prettier --write .",
     "ui": "node src/main.ts ui",
-    "typecheck": "tsc --noEmit",
-    "test": "node --test \"test/**/*.test.ts\""
+    "request": "node src/main.ts request",
+    "maintain": "node src/main.ts maintain"
   },
   "dependencies": {
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/node": "^24.7.0",
-    "typescript": "^5.9.3"
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
   }
 }

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { after, describe, it } from 'node:test';
+import { afterAll, describe, it } from 'vitest';
 import { type IssueRef, MAX_PENDING_REQUESTS, requestCheck, requestPost, Store } from '../src/db/store.ts';
 
 const dirs: string[] = [];
@@ -12,7 +12,7 @@ const tempDir = (): string => {
   dirs.push(dir);
   return dir;
 };
-after(() => {
+afterAll(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 

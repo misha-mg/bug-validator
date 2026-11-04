@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { afterAll, beforeAll, describe, it } from 'vitest';
 import { Clone, CloneError } from '../src/webui/clone.ts';
 
 const git = (dir: string, ...args: string[]): string =>
@@ -13,7 +13,7 @@ describe('Clone', () => {
   let work: string;
   let origin: string;
   let upstream: string;
-  before(() => {
+  beforeAll(() => {
     work = mkdtempSync(join(tmpdir(), 'bv-clone-'));
     upstream = join(work, 'upstream');
     execFileSync('git', ['init', '--quiet', '-b', 'master', upstream]);
@@ -23,7 +23,7 @@ describe('Clone', () => {
     origin = join(work, 'origin.git');
     execFileSync('git', ['clone', '--quiet', '--bare', upstream, origin]);
   });
-  after(() => rmSync(work, { recursive: true, force: true }));
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
 
   it('clones when missing, fetches when stale, keeps the tree at master and tells the commit', async () => {
     const clone = new Clone(join(work, 'clone'), origin);

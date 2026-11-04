@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { type PageContext, ago, bugPage, bugsPage, bugsQuery, commentHtml, dayChart, eventText, filterBugs, homePage, resultLabel } from '../../src/ui/html.ts';
 import { readBug, readBugs, readRequests } from '../../src/ui/read.ts';
 import { ServiceLog } from '../../src/ui/service-log.ts';

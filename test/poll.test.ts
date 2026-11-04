@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { AgentError, type Agent, type AgentRun } from '../src/claude/agent.ts';
 import { Store } from '../src/db/store.ts';
 import { JiraError, type Jira, type RawIssue } from '../src/jira/client.ts';

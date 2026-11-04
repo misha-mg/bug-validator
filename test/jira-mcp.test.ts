@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, before, describe, it } from 'node:test';
+import { afterAll, beforeAll, describe, it } from 'vitest';
 import { JiraTool } from '../src/claude/jira-mcp.ts';
 import { JiraError, type RawIssue } from '../src/jira/client.ts';
 import { rawIssue } from './fixtures.ts';
@@ -19,11 +19,11 @@ describe('JiraTool', () => {
   };
   const tool = new JiraTool(jira);
   let secret: string;
-  before(async () => {
+  beforeAll(async () => {
     await tool.listen();
     secret = tool.grant();
   });
-  after(() => tool.close());
+  afterAll(() => tool.close());
 
   const post = (body: unknown, auth: string | null = `Bearer ${secret}`) =>
     fetch(tool.url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) }, body: JSON.stringify(body) });

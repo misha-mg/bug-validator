@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { RECENT, ServiceLog, UNHEALTHY_POLL_FAILURES, health, liveness } from '../../src/ui/service-log.ts';
 import { ago, appendLog, emptyState, logLine, sampleState } from './state.ts';
 

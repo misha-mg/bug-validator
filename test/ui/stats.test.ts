@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import { readBugs } from '../../src/ui/read.ts';
 import { checksPerDay, fieldChecksPassedAfterComment, gaps, needsAttention, periodStats, startOfDay } from '../../src/ui/stats.ts';
 import { DAY, ago, daysAgo, emptyState, insert, run, sampleState, stamp } from './state.ts';
