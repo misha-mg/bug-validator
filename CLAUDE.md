@@ -29,4 +29,9 @@ machine: `docs/architecture.md`, Deploy.
 - Credentials live in `.env` (gitignored, `chmod 600`, template `.env.example`). The agent's
   Jira tool runs in the service, so the Jira token never enters the sandbox; the Claude token
   does, and the program refuses any agent output that repeats it.
+- Skills for the recurring work, in `.claude/skills/`: `tune-agent` (the instructions on real
+  bugs, the agreement with a developer), `review-dry-run` (what the service recorded, what to
+  post), `operate` (the units, the log, a migration, a move), `bug-fixture` (a real bug saved
+  for a test), `decision` (a dated entry in the PRD and what it changes). Use the one that fits
+  before working from scratch.
 - Code, docs and Jira comments are in English. No AI attribution anywhere: commits, comments, Jira.
