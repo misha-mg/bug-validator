@@ -1,6 +1,6 @@
 import type { Bug, RequirementId } from './bug.ts';
 
-export interface BaseCheck {
+export interface FieldCheck {
   id: RequirementId;
   passed: boolean;
   detail: string;
@@ -36,12 +36,12 @@ export function hasSection(text: string, names: string[]): boolean {
 
 const deviceWordsRe = new RegExp(`(?:^|[^\\w-])(?:${DEVICE_WORDS.map(escape).join('|')})(?![\\w-])`, 'i');
 
-function sectionCheck(id: RequirementId, text: string, names: string[], label: string): BaseCheck {
+function sectionCheck(id: RequirementId, text: string, names: string[], label: string): FieldCheck {
   const passed = hasSection(text, names);
   return { id, passed, detail: passed ? `"${label}" heading present` : `no "${label}" heading` };
 }
 
-export function runBaseChecks(bug: Bug): BaseCheck[] {
+export function checkFields(bug: Bug): FieldCheck[] {
   const text = bug.description;
   const har = bug.attachments.filter((a) => a.filename.toLowerCase().endsWith('.har'));
   return [
@@ -62,7 +62,7 @@ export function runBaseChecks(bug: Bug): BaseCheck[] {
   ];
 }
 
-function deviceCheck(bug: Bug): BaseCheck {
+function deviceCheck(bug: Bug): FieldCheck {
   if (bug.project === 'RPG') {
     const passed = bug.devices.includes('AFS');
     return { id: 'R5', passed, detail: passed ? 'Devices: AFS' : 'Devices field does not name AFS' };

@@ -1,11 +1,19 @@
 export type Project = 'KAZ' | 'RPG';
 
 export interface Attachment {
+  /** Jira's id: what the content is read by. */
+  id: string;
   filename: string;
+  /** Bytes. */
+  size: number;
+  mimeType: string;
 }
 
 export interface Comment {
+  id: string;
   author: string;
+  /** Null for a deleted user. */
+  authorId: string | null;
   created: string;
   body: string;
 }
@@ -28,7 +36,23 @@ export interface Bug {
   updated: string;
 }
 
-/** What a bug report must contain (prd.md, Bug requirements). Related bugs are not one of them. */
+/** What the agent gets of an attachment: the kind says how it was made, `unread` why it was not. */
+export type FileKind = 'image' | 'har' | 'frames' | 'text' | 'unread';
+
+export interface RunFile {
+  /** The attachment's name as the reporter gave it. */
+  filename: string;
+  /** The path under the run's directory: a file, or a directory of frames. Empty when unread. */
+  path: string;
+  kind: FileKind;
+  note: string;
+}
+
+/** What a check ends in (prd.md, The check). Only `not_understood` gets a comment. */
+export const OUTCOMES = ['understood', 'not_understood', 'not_webui'] as const;
+export type Outcome = (typeof OUTCOMES)[number];
+
+/** The list (prd.md, The check): a guide for the agent and the web UI's statistics, not a rule. */
 export const REQUIREMENT_IDS = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7'] as const;
 export type RequirementId = (typeof REQUIREMENT_IDS)[number];
 
@@ -42,7 +66,7 @@ export const REQUIREMENTS: Record<RequirementId, string> = {
   R7: 'Project matches the product',
 };
 
-/** Field facts: the program checks these, and the agent must name every one that fails. */
+/** The field checks that are facts of the fields (R4–R6); for R1–R3 the code only looks for a heading. `scripts/late-changes.ts` measures by them. */
 export const FIELD_FACTS: readonly RequirementId[] = ['R4', 'R5', 'R6'];
 
 export const PROJECT_NAMES: Record<Project, string> = {

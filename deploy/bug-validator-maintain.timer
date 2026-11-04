@@ -1,0 +1,11 @@
+# Runs bug-validator-maintain.service daily; a day missed while the machine was off runs at boot.
+
+[Unit]
+Description=Bug Validator maintenance, daily
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

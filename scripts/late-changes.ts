@@ -8,7 +8,7 @@ import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { loadConfig } from '../src/config.ts';
 import { FIELD_FACTS, type RequirementId } from '../src/domain/bug.ts';
-import { runBaseChecks } from '../src/domain/checks.ts';
+import { checkFields } from '../src/domain/checks.ts';
 import { type ChangelogEntry, ISSUE_FIELDS, JiraClient, type RawIssue } from '../src/jira/client.ts';
 import { jiraTime as time, toBug } from '../src/jira/mapping.ts';
 
@@ -92,7 +92,7 @@ function measure(issue: RawIssue, changelog: ChangelogEntry[]): Measured {
   const near = (t: number): boolean => Math.abs(t - updated) < 1000;
   const updatedFrom = near(lastChange) ? 'changelog' : near(lastComment) ? 'comment' : 'neither';
 
-  const failingNow = runBaseChecks(bug).filter((c) => !c.passed && FIELD_FACTS.includes(c.id)).map((c) => c.id);
+  const failingNow = checkFields(bug).filter((c) => !c.passed && FIELD_FACTS.includes(c.id)).map((c) => c.id);
   return { key: bug.key, created, leftCreated, changes, labelledAt, updatedFrom, failingNow };
 }
 

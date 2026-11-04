@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { hasSection, runBaseChecks } from '../src/domain/checks.ts';
+import { hasSection, checkFields } from '../src/domain/checks.ts';
 import { bug } from './fixtures.ts';
 
 const result = (key: string, overrides = {}) =>
-  Object.fromEntries(runBaseChecks(bug(key, overrides)).map((c) => [c.id, c.passed]));
+  Object.fromEntries(checkFields(bug(key, overrides)).map((c) => [c.id, c.passed]));
 
 describe('section keys', () => {
   it('accepts inline keys and wiki headings', () => {

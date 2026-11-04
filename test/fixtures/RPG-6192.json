@@ -26,17 +26,20 @@
       {
         "filename": "192.168.201.73_cmi_download_error.har",
         "mimeType": "text/plain",
-        "size": 1777569
+        "size": 1777569,
+        "id": "10007"
       },
       {
         "filename": "image-20261014-070557.png",
         "mimeType": "image/png",
-        "size": 106886
+        "size": 106886,
+        "id": "10008"
       },
       {
         "filename": "image-20261014-070634.png",
         "mimeType": "image/png",
-        "size": 84883
+        "size": 84883,
+        "id": "10009"
       }
     ],
     "reporter": {

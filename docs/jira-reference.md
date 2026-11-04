@@ -40,7 +40,7 @@ Retired: NPB-I (Dharkan, Trident 2), NPB-Ie4 (Rio). Source: the webui repo's
 |---|---|---|
 | Affects versions | `versions` | daily builds, e.g. `5.10.0-commit.3089`; often added after creation |
 | Devices | `customfield_10033` | multi-select of products, not board types: All, NPB-All, AFS, Cuba, Dharkan, India, Kazaar, Napoli, Venezia, Ristretto, Volluto, NPB-Ie6-XL, NPB-Ie6, IOT, Rio, GLSUN Bypass |
-| Attachments | `attachment` | names only are used |
+| Attachments | `attachment` | `id`, `filename`, `size`, `mimeType`; the bytes by `GET /rest/api/2/attachment/content/{id}` (a redirect to a signed URL) |
 | Reporter | `reporter` | `accountId` for the mention, `displayName` for the UI |
 | Status, labels, description, comments, created, updated | standard | |
 

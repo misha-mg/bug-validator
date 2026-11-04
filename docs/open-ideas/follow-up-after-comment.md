@@ -7,8 +7,8 @@ Status: idea, not decided. Replaces the "re-read right before posting" step drop
 
 Does the comment work? That is: after the service asks for steps, a HAR or a build, does the
 reporter add them, and how fast? Since 2026-10-26 the re-checks record it while the bug is in
-Created (the `runs` table), and the UI counts the items that arrived then ("Items added after the
-comment"). Nothing records what arrives after the bug leaves Created.
+Created (the `runs` table), and the UI counts the field checks that passed then ("Field checks
+passed after the comment"). Nothing records what arrives after the bug leaves Created.
 
 ## The idea
 
@@ -23,5 +23,5 @@ measured directly, not through the triage count.
 ## Open
 
 - Trigger: a fixed delay, or the status change out of Created, or both.
-- R1–R3 cannot be judged by code; either the agent reads the bug again (one more run per
-  commented bug) or the follow-up covers field facts only.
+- R1–R3 cannot be judged by code; either the agent checks the bug again (one more run per
+  commented bug) or the follow-up covers the field checks only.

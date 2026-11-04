@@ -15,8 +15,11 @@ export const QUIET_BEFORE_RECHECK_MS = 15 * 60_000;
 /** Checks per bug, failed ones included: a guard against a bug that keeps changing or failing. */
 export const MAX_CHECKS = 5;
 
-/** The rows a check continues as a re-check, editing their comment: the comment made in the current mode. */
-export const recheckableStatuses = (dryRun: boolean): CheckStatus[] => (dryRun ? ['complete', 'dry_run'] : ['complete', 'commented']);
+/**
+ * The rows a check continues as a re-check, editing their comment: a bug not understood, with
+ * the comment made in the current mode. A bug understood, or not a WebUI bug, is done.
+ */
+export const recheckableStatuses = (dryRun: boolean): CheckStatus[] => (dryRun ? ['dry_run'] : ['commented']);
 
 export interface Plan {
   first: Watched[];
@@ -27,15 +30,21 @@ export interface Plan {
 
 /**
  * Which bugs of the query to check on this poll. A new bug waits until it is 30 minutes old; a
- * checked one whose report changed waits until nothing has moved on it for 15 minutes, so a burst
- * of edits gives one re-check. A re-check edits the comment made in the current mode: a dry-run
- * comment was never posted, and a dry run never overwrites a posted one.
+ * bug not understood whose report changed waits until nothing has moved on it for 15 minutes, so
+ * a burst of edits gives one re-check. A re-check edits the comment made in the current mode: a dry-run
+ * comment was never posted, and a dry run never overwrites a posted one. Live, a bug left
+ * `posting` is checked again at once: the check finds the comment in Jira, if it got there, and
+ * adopts it (handle.ts).
  */
 export function plan(watched: Watched[], rows: Map<string, BugRow>, now: number, dryRun: boolean): Plan {
   const recheckable = recheckableStatuses(dryRun);
   const out: Plan = { first: [], recheck: [], waiting: 0 };
   for (const bug of watched) {
     const row = rows.get(bug.key);
+    if (row?.status === 'posting') {
+      if (!dryRun && row.runs < MAX_CHECKS) out.first.push(bug);
+      continue;
+    }
     if (!row || row.status === 'retry') {
       if (row || now - bug.created >= FIRST_CHECK_AGE_MS) out.first.push(bug);
       else out.waiting += 1;

@@ -17,21 +17,23 @@ describe('plan', () => {
   });
   it('a changed report is re-checked once nothing has moved on the bug for 15 minutes', () => {
     assert.equal(QUIET_BEFORE_RECHECK_MS, 15 * MIN);
-    const rows = new Map([['KAZ-1', row('dry_run')], ['KAZ-2', row('dry_run')], ['KAZ-3', row('complete', 'new')]]);
+    const rows = new Map([['KAZ-1', row('dry_run')], ['KAZ-2', row('dry_run')], ['KAZ-3', row('dry_run', 'new')]]);
     const p = plan([bug('KAZ-1', 90, 14), bug('KAZ-2', 90, 15), bug('KAZ-3', 90, 60)], rows, NOW, true);
     assert.deepEqual(keys(p), { first: [], recheck: ['KAZ-2'], waiting: 1 }, 'KAZ-3 did not change');
   });
-  it('re-checks only comments of the current mode, rows with a fingerprint, and up to the cap', () => {
+  it('re-checks only bugs not understood, with the comment of the current mode, a fingerprint, and up to the cap', () => {
     const rows = new Map([
       ['KAZ-1', row('commented')],
       ['KAZ-2', row('dry_run')],
-      ['KAZ-3', row('complete', null)],
-      ['KAZ-4', row('complete', 'old', MAX_CHECKS)],
+      ['KAZ-3', row('dry_run', null)],
+      ['KAZ-4', row('dry_run', 'old', MAX_CHECKS)],
       ['KAZ-5', row('failed')],
       ['KAZ-6', row('skipped')],
       ['KAZ-7', row('posting')],
+      ['KAZ-8', row('understood')],
+      ['KAZ-9', row('not_webui')],
     ]);
-    const all = [1, 2, 3, 4, 5, 6, 7].map((n) => bug(`KAZ-${n}`, 90));
+    const all = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => bug(`KAZ-${n}`, 90));
     assert.deepEqual(keys(plan(all, rows, NOW, true)).recheck, ['KAZ-2']);
     assert.deepEqual(keys(plan(all, rows, NOW, false)).recheck, ['KAZ-1']);
   });

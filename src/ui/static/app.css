@@ -26,16 +26,18 @@
 /* The chart and the gaps: bars in the three result colours, the gap bar in slate. */
 .chart { margin: 0; }
 svg.days { display: block; }
-svg.days rect.no_comment { fill: var(--moss); }
-svg.days rect.comment { fill: var(--slate); }
+svg.days rect.understood { fill: var(--moss); }
+svg.days rect.not_understood { fill: var(--slate); }
+svg.days rect.not_webui { fill: var(--muted); }
 svg.days rect.error { fill: var(--rust); }
 svg.days text { font: 9px var(--sans); text-anchor: middle; fill: var(--muted); }
 svg.days text.count { fill: var(--text); }
 svg.days text.today { fill: var(--text); font-weight: 600; }
 .legend { font-size: 12px; color: var(--muted); margin-top: 10px; }
 .sw { display: inline-block; width: 0.7em; height: 0.7em; margin: 0 0.3em 0 0.8em; vertical-align: -1px; }
-.sw.no_comment { background: var(--moss); }
-.sw.comment { background: var(--slate); }
+.sw.understood { background: var(--moss); }
+.sw.not_understood { background: var(--slate); }
+.sw.not_webui { background: var(--muted); }
 .sw.error { background: var(--rust); }
 .problems td.bar { width: 35%; }
 .problems td.bar div { height: 6px; margin-top: 6px; background: var(--slate); opacity: 0.85; }
@@ -54,7 +56,12 @@ svg.days text.today { fill: var(--text); font-weight: 600; }
 .bug-head { margin-bottom: 26px; }
 .bug-head .page-head { margin-bottom: 14px; }
 .bug-head dl.kv { max-width: 760px; }
-.bug-head form { margin-top: 18px; }
+.bug-head .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+/* The confirmation of a post: a sheet over the page, the comment as Jira will show it. */
+dialog.confirm { width: min(560px, calc(100vw - 32px)); background: var(--bg); color: var(--text); }
+dialog.confirm::backdrop { background: rgb(0 0 0 / 0.35); }
+dialog.confirm p { margin: 0 0 14px; }
+dialog.confirm form { display: flex; gap: 10px; margin-top: 18px; }
 .columns { display: grid; grid-template-columns: 3fr 2fr; gap: var(--gap); align-items: start; }
 @media (max-width: 1100px) { .columns { grid-template-columns: 1fr; } }
 .requirements tbody th, .requirements td:nth-child(2), .requirements td:nth-child(3), .requirements thead th:not(:last-child) { width: 1%; white-space: nowrap; }

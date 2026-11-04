@@ -1,5 +1,5 @@
 import { loadConfig } from '../config.ts';
-import { requestCheck } from '../pipeline/requests.ts';
+import { requestCheck } from '../db/store.ts';
 
 /**
  * `request <KEY|URL>`: the running service checks the bug next, and records (or posts) the result

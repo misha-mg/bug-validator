@@ -10,10 +10,19 @@ export const Env = z.object({
   DRY_RUN: z.enum(['true', 'false']).default('true'),
   POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().default(180),
   DB_FILE: z.string().min(1).default('state/bug-validator.sqlite'),
-  AGENT_MODEL: z.string().min(1).default('haiku'),
-  AGENT_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(180),
-  // Long-lived token from `claude setup-token`; without it claude uses the machine's own login.
-  CLAUDE_CODE_OAUTH_TOKEN: z.string().min(1).optional(),
+  // The service logs to stdout; this is where the systemd unit appends it (the UI and `maintain` read it).
+  LOG_FILE: z.string().min(1).default('state/service.log'),
+  // The agent's model and caps are provisional until the measurement (prd.md, Rollout, step 3).
+  AGENT_MODEL: z.string().min(1).default('sonnet'),
+  AGENT_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(600),
+  AGENT_MAX_TURNS: z.coerce.number().int().positive().default(100),
+  AGENT_MAX_BUDGET_USD: z.coerce.number().positive().default(2),
+  // Long-lived token from `claude setup-token`: the sandbox has no other login.
+  CLAUDE_CODE_OAUTH_TOKEN: z.string().min(1),
+  // The WebUI repository the agent reads, cloned by the service for itself. Bitbucket moves SSH
+  // to ssh.bitbucket.org on 2026-11-12; until then only the old host answers.
+  WEBUI_REPO_URL: z.string().min(1).default('git@bitbucket.org:CGS/webui.git'),
+  WEBUI_DIR: z.string().min(1).default('state/webui'),
 });
 
 /** A bug's first check is tried this many times, then the bug is recorded as failed. */
@@ -24,7 +33,8 @@ export interface Config {
   dryRun: boolean;
   pollIntervalMs: number;
   dbFile: string;
-  agent: { model: string; timeoutMs: number; auth: 'oauth_token' | 'cli_login' };
+  agent: { model: string; timeoutMs: number; maxTurns: number; maxBudgetUsd: number; token: string };
+  webui: { repoUrl: string; dir: string };
   maxAttempts: number;
 }
 
@@ -46,7 +56,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dryRun: e.DRY_RUN === 'true',
     pollIntervalMs: e.POLL_INTERVAL_SECONDS * 1000,
     dbFile: e.DB_FILE,
-    agent: { model: e.AGENT_MODEL, timeoutMs: e.AGENT_TIMEOUT_SECONDS * 1000, auth: e.CLAUDE_CODE_OAUTH_TOKEN ? 'oauth_token' : 'cli_login' },
+    agent: {
+      model: e.AGENT_MODEL,
+      timeoutMs: e.AGENT_TIMEOUT_SECONDS * 1000,
+      maxTurns: e.AGENT_MAX_TURNS,
+      maxBudgetUsd: e.AGENT_MAX_BUDGET_USD,
+      token: e.CLAUDE_CODE_OAUTH_TOKEN,
+    },
+    webui: { repoUrl: e.WEBUI_REPO_URL, dir: e.WEBUI_DIR },
     maxAttempts: MAX_ATTEMPTS,
   };
 }
