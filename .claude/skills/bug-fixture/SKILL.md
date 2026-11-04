@@ -12,6 +12,8 @@ reads (`ISSUE_FIELDS` in `server/jira/client.ts`): `test/fixtures.ts` turns one 
 
 ## Save one
 
+From the repository root (the imports are relative to it):
+
 ```
 node -e "
 import('./server/config.ts').then(async ({ loadConfig }) => {

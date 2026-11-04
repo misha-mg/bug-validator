@@ -14,9 +14,9 @@ restart. Nothing here writes to Jira or to the database.
 ## One bug
 
 ```
-npm run check -- KAZ-1234            # the outcome, the files it got, the field checks, the reasoning, the comment
-npm run check -- KAZ-1234 --recheck  # as a re-check of the comment recorded for the bug
-VALIDATOR_AGENT_MODEL=haiku npm run check -- KAZ-1234   # another model, same bug
+bin/bug-validator check KAZ-1234            # the outcome, the files it got, the field checks, the reasoning, the comment
+bin/bug-validator check KAZ-1234 --recheck  # as a re-check of the comment recorded for the bug
+VALIDATOR_AGENT_MODEL=haiku bin/bug-validator check KAZ-1234   # another model, same bug
 ```
 
 Read in this order: the **outcome**, then the **reasoning** (where it looked, what it found,

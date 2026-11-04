@@ -8,7 +8,7 @@ user-invocable: true
 
 The service records every check (`.about/architecture.md`, Row statuses, One bug step 5). In a
 dry run nothing reaches Jira unless a person posts it from the web UI. This skill reads the
-record; it never writes the database (`state/bug-validator.sqlite`) and never posts.
+record; it never writes the database (`state/bug-validator.sqlite`) and never posts. Run the snippet below from the repository root.
 
 ## Where to look
 
@@ -42,7 +42,7 @@ holds the comment, `b.history[i]` each check with its `outcome`, `webuiCommit`, 
 - **Not a WebUI bug:** the agent's reason, and whether it holds; the decision (move the bug,
   reassign, leave it) is made in Jira by a person, not by the service.
 - **Understood:** nothing is kept of the cause (prd.md, 2026-11-03), so a spot check means
-  running `npm run check -- KEY` and reading the reasoning.
+  running `bin/bug-validator check KEY` and reading the reasoning.
 - **Failed checks:** the error on the bug's page. A `VerdictError` is the agent breaking the
   contract (tune), a timeout or budget is the caps (measure), the surroundings' failures
   (`check_deferred`, `poll_failed` in the log) are not the bug's.

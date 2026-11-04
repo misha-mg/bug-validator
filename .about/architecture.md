@@ -8,56 +8,63 @@ when it is not, writes the comment. Why things are as they are: `prd.md`.
 ## Layers
 
 ```
+bin/bug-validator      the command line: execs server/cli.ts (run | check <KEY> [--recheck] | request <KEY|URL> | ui | maintain)
 server/
-  main.ts            CLI: run | check <KEY> [--recheck] | request <KEY|URL> | ui | maintain
-  config.ts          env → typed Config; fails fast on a bad value
-  log.ts             one JSON line per event on stdout
-  domain/            pure functions, no I/O
-    bug.ts           Bug model, the run's files, the outcomes, requirement ids R1–R7
-    checks.ts        field checks: section headings, Affects versions, Devices, HAR
-    fingerprint.ts   a hash of the report: what a re-check watches
-    har.ts           a HAR file → the same HAR without cookies, tokens and binary bodies
-    prompt.ts        Bug + field checks + the run's files + the clone's commit (+ the previous comment on a re-check) → the agent's prompt
-    verdict.ts       the agent's JSON: schema and the guardrails
+  cli.ts               the commands above; a fatal error is one JSON line, so the UI can show it
+  config.ts            env → typed Config through one zod schema; fails fast on a bad value or an old, unprefixed name
+  log.ts               one JSON line per event on stdout; parseLogLine for the reader (the same file as pipeline-ui's)
+  format.ts            dates, durations, "ago", shares, as both consoles write them (the same file as pipeline-ui's)
+  domain/              pure functions, no I/O
+    bug.ts             Bug model, the run's files, the outcomes, requirement ids R1–R7
+    checks.ts          field checks: section headings, Affects versions, Devices, HAR
+    fingerprint.ts     a hash of the report: what a re-check watches
+    har.ts             a HAR file → the same HAR without cookies, tokens and binary bodies
+    key.ts             a KAZ or RPG key, from text or a link
+    prompt.ts          Bug + field checks + the run's files + the clone's commit (+ the previous comment on a re-check) → the agent's prompt
+    verdict.ts         the agent's JSON: schema and the guardrails
   jira/
-    client.ts        REST v2 through api.atlassian.com: search, get issue, attachment bytes, myself, changelog; add and edit comment (the only writes)
-    mapping.ts       raw issue JSON → Bug; Jira times
-    queries.ts       the trigger JQL; the agent's JQL narrowed to KAZ and RPG
+    client.ts          REST v2 through api.atlassian.com by the site's cloud id (JIRA_CLOUD_ID, or read once from the site): search, get issue, attachment bytes, myself, changelog; add and edit comment (the only writes)
+    mapping.ts         raw issue JSON → Bug; Jira times
+    queries.ts         the trigger JQL; the agent's JQL narrowed to KAZ and RPG
   webui/
-    clone.ts         the service's clone of WebUI: clone if missing, fetch master, check it out detached; the commit
+    clone.ts           the service's clone of WebUI: clone if missing, fetch master, check it out detached; the commit
   claude/
-    sandbox.ts       the bwrap arguments: what the agent sees (pure, tested)
-    agent.ts         runs `claude -p` inside bwrap, with the file tools and the Jira tool
-    jira-mcp.ts      the agent's Jira tool: search_issues, get_issue — read-only, KAZ and RPG only, served over HTTP by the service itself
-  db/
-    store.ts         SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta`, `requests` (checks asked for by hand) and `posts` (comments a person posts from the UI); the schema's migrations; a request written by the UI or the CLI, a post by the UI; a backup
+    sandbox.ts         the bwrap arguments: what the agent sees (pure, tested)
+    agent.ts           runs `claude -p` inside bwrap, with the file tools and the Jira tool
+    jira-mcp.ts        the agent's Jira tool: search_issues, get_issue — read-only, KAZ and RPG only, served over HTTP by the service itself
+  store/
+    store.ts           SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta` (the first start, the heartbeat), `requests` (checks asked for by hand) and `posts` (comments a person posts from the UI); the schema's migrations; a request written by the UI or the CLI, a post by the UI; a backup
   pipeline/
-    deps.ts          what the pipeline needs: config, Jira, agent, clone, store (Jira, the agent and the clone are interfaces)
-    attachments.ts   the bug's attachments → the run's files: downloaded, HAR cleaned, video cut to frames (ffmpeg)
-    checkBug.ts      one bug: fetch → field checks → clone → files → agent → verdict → guardrails
-    plan.ts          which bugs of a poll are due: first checks, re-checks, the waiting ones
-    handle.ts        one check and its record / post / edit; the service's comment found in Jira; which failures are the surroundings'
-    requests.ts      the posts and the checks asked for by hand, served before each check of a poll and while the service waits
-    poll.ts          one poll: query → first-start bootstrap → moved bugs → plan → checks, requests first
-  commands/          run (the loop), check (one bug, writes nothing), request (the service checks a bug next), ui (the web UI), maintain (backup, log size)
-  ui/                the web UI: a separate process that reads state/ and writes nothing but check and post requests
-    config.ts        VALIDATOR_HOST, VALIDATOR_PORT, VALIDATOR_HOSTNAMES, VALIDATOR_USER, VALIDATOR_PASSWORD, plus the service's VALIDATOR_DB_FILE, VALIDATOR_LOG_FILE and JIRA_BASE_URL
-    read.ts          the database, read-only → one view per bug with its runs, the requests; never creates the file
-    service-log.ts   service.log → the service's state and its latest events, read as it grows; /healthz's answer
-    stats.ts         counts by period and outcome, the field checks failed most often, bugs per day, field checks passed after a comment
-    html.ts          the three pages as pure functions: HTML strings from what was read
-    server.ts        node:http: the pages, the static files, /healthz; known hosts, same-origin requests, the optional login
-    static/          sheet.css (the design system, shared with pipeline-ui), app.css (the faces and the pages' layout),
-                     the fonts (Barlow, OFL), the theme switch (runs in <head>) and the refresh script
-agent/instructions.md   the agent's system prompt
-deploy/              systemd user units: the service, the UI, and maintain with its daily timer
+    deps.ts            what the pipeline needs: config, Jira, agent, clone, store (Jira, the agent and the clone are interfaces)
+    attachments.ts     the bug's attachments → the run's files: downloaded, HAR cleaned, video cut to frames (ffmpeg)
+    checkBug.ts        one bug: fetch → field checks → clone → files → agent → verdict → guardrails
+    plan.ts            which bugs of a poll are due: first checks, re-checks, the waiting ones
+    handle.ts          one check and its record / post / edit; the service's comment found in Jira; which failures are the surroundings'
+    requests.ts        the posts and the checks asked for by hand, served before each check of a poll and while the service waits
+    poll.ts            one poll: query → first-start bootstrap → moved bugs → plan → checks, requests first
+  commands/            run (the loop, the lock, the heartbeat), check (one bug, writes nothing), request (the service checks a bug next), ui (the web UI), maintain (backup, log size)
+  http/                the web UI: a separate process that reads state/ and writes nothing but check and post requests
+    config.ts          VALIDATOR_HOST, _PORT, _HOSTNAMES, _USER, _PASSWORD, plus the service's VALIDATOR_DB_FILE, VALIDATOR_LOG_FILE and JIRA_BASE_URL
+    guard.ts           the security headers, the Host check, the same-origin check, the login, the body cap (the same file as pipeline-ui's)
+    read.ts            the database, read-only → one view per bug with its runs, the requests, the posts, the heartbeat; never creates the file
+    service-log.ts     service.log → the service's state and its latest events, read as it grows; the liveness from the heartbeat; /healthz's answer
+    stats.ts           counts by period and outcome, the field checks failed most often, bugs per day, field checks passed after a comment
+    view.ts            the three pages as pure functions: HTML strings from what was read
+    server.ts          node:http: the pages, the static files from ui/, /healthz; guard.ts on every request
+    sample.ts          the sample state the tests build: the service's tables made by the real Store, a log, a heartbeat
+ui/                    what the browser gets: sheet.css (the design system, pipeline-ui's copy), app.css (the faces and the pages' layout),
+                       fonts/ (Barlow, OFL), theme.js (the theme switch, runs in <head>) and app.js (the refresh script)
+agent/instructions.md  the agent's system prompt
+deploy/                systemd user units: the service, the UI, and maintain with its daily timer
 scripts/late-changes.ts   how reports change after creation (read-only measurement): `node scripts/late-changes.ts [days]`
 scripts/agreement.ts      the agent against a developer's marks (rollout step 3): `node scripts/agreement.ts marks.tsv`
-test/                node:test; fixtures/ are real bugs saved from Jira (REST v2 JSON) and a HAR; ui/ builds its databases with the real Store
+test/fixtures/         real bugs saved from Jira (REST v2 JSON) and a HAR; test/fixtures.ts reads them
+*.test.ts              next to the code it tests (vitest); the UI's tests build their databases with the real Store (http/sample.ts)
+.about/                architecture.md (this file), prd/bug-validator.md, adr/, glossary.md, jira-reference.md, open-ideas/
 ```
 
-Dependencies: `zod` only. Node 24 runs the TypeScript directly and ships SQLite; there is no
-build step. `claude` must be installed with npm under node's prefix (the sandbox binds that
+Dependencies: `zod` only (vitest and prettier for development). Node 24 runs the TypeScript
+directly and ships SQLite; there is no build step. `claude` must be installed with npm under node's prefix (the sandbox binds that
 prefix, which gives it both); `bwrap` (bubblewrap), `ffmpeg` and `git` must be on PATH. The UI
 imports the service's tables, statuses, outcomes and requirement ids, and nothing of the
 pipeline: it never loads the agent, the clone or the Jira client.
@@ -263,7 +270,7 @@ tool that sends anything out.
 ## Log
 
 One JSON line per event: `ts`, `level`, `event`, then fields. The UI reads them all
-(`server/http/service-log.ts`, `html.ts`): the Service block from the ones marked, the Activity block
+(`server/http/service-log.ts`, `view.ts`): the Service block from the ones marked, the Activity block
 from every event but `poll` and `check_start`, one line each.
 
 | event | fields | UI |
@@ -284,12 +291,17 @@ from every event but `poll` and `check_start`, one line each.
 | `request_failed` | key, error, gaveUp | |
 | `post_failed` | key, error, gaveUp | |
 | `mentions_stripped` | key, stripped | |
+| `heartbeat_failed` | error | |
 | `fatal` | error | crashed, error |
 
-The UI calls the service *crashed* when its latest start ended in `fatal` (systemd keeps starting
-it), *silent* when nothing has been logged for two poll intervals plus the agent's timeout and two
-minutes. `/healthz` answers 200 while it runs and fewer than 5 polls in a row have failed, 503
-otherwise. The UI's own log (`ui_start`, `ui_stopping`, `ui_stopped`, `ui_error`) goes to
+Besides the log, the service writes a heartbeat into `meta` (`heartbeat_pid`,
+`heartbeat_started_at`, `heartbeat_seen_at`) every 5 s and at every poll; a write that fails is
+`heartbeat_failed` in the log, not a crash. The UI calls the service *running* while the heartbeat
+is younger than 15 s (*stopping* when the log says a stop is under way), *crashed* when its latest
+start ended in `fatal` (systemd keeps starting it), *stopped* when the heartbeat is stale and the
+log ends in `service_stopped`, and *silent* when the heartbeat is stale and the log says nothing of
+a stop. `/healthz` answers 200 while it runs and fewer than 5 polls in a row have failed, 503
+otherwise; its `lastSeen` is the later of the log's last line and the heartbeat. The UI's own log (`ui_start`, `ui_stopping`, `ui_stopped`, `ui_error`) goes to
 `state/ui.log` under systemd; `maintain` logs `backup` and `log_cut` (or `log_cut_skipped`, when
 the service wrote to the log between the copy and the cut: the next day's run tries again) to
 the journal.
@@ -297,22 +309,27 @@ the journal.
 ## Configuration
 
 `.env` in the working directory is loaded if present; a variable set in the environment wins.
-Only the first three have no default. The agent's model, timeout, turns and budget are
-provisional until rollout step 3 measures them.
+Everything of the service's own carries the `VALIDATOR_` prefix (pipeline-ui's is `PIPELINE_`);
+the Jira login and the Claude token keep the names both projects share. The first five have no
+default; the site's cloud id is read when not given. A variable set under its name from before the
+prefix (`DB_FILE` for `VALIDATOR_DB_FILE`, `UI_HOST` for `VALIDATOR_HOST`, …) while the new one is
+not set refuses the start, naming the rename: a deployment cannot fall back to a default
+unnoticed. The agent's model, timeout, turns and budget are provisional until rollout step 3
+measures them.
 
 | variable | default | meaning |
 |---|---|---|
+| `JIRA_BASE_URL` | — | the Jira site, for links and the cloud id lookup |
 | `JIRA_EMAIL`, `JIRA_API_TOKEN` | — | basic auth; a scoped API token (`jira-reference.md`) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | — | from `claude setup-token`; the only Claude login the sandbox has |
-| `JIRA_BASE_URL` | the company site | for links |
-| `JIRA_CLOUD_ID` | the company site's | every REST request goes through `api.atlassian.com/ex/jira/<id>` |
+| `VALIDATOR_WEBUI_REPO_URL` | — | the WebUI repository, read with the machine's git credentials (`run` and `check`; the UI and `maintain` do without) |
+| `JIRA_CLOUD_ID` | read from `<JIRA_BASE_URL>/_edge/tenant_info` once | every REST request goes through `api.atlassian.com/ex/jira/<id>` |
 | `VALIDATOR_DRY_RUN` | `true` | `false` posts comments; anything else is refused |
 | `VALIDATOR_POLL_INTERVAL_SECONDS` | `180` | also how old the clone's fetch may be before a check |
 | `VALIDATOR_AGENT_MODEL` | `sonnet` | compare models on the same bugs with `scripts/agreement.ts` |
 | `VALIDATOR_AGENT_TIMEOUT_SECONDS` | `600` | one agent run |
 | `VALIDATOR_AGENT_MAX_TURNS` | `100` | one agent run |
 | `VALIDATOR_AGENT_MAX_BUDGET_USD` | `2` | one agent run; a sonnet check of a clear bug costs about $0.04 |
-| `VALIDATOR_WEBUI_REPO_URL` | `git@bitbucket.org:CGS/webui.git` | read with the machine's git credentials; Bitbucket moves SSH to `ssh.bitbucket.org` on 2026-11-12 |
 | `VALIDATOR_WEBUI_DIR` | `state/webui` | the service's clone |
 | `VALIDATOR_DB_FILE` | `state/bug-validator.sqlite` | |
 | `VALIDATOR_LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
@@ -331,15 +348,16 @@ the log's size before `maintain` cuts it (5 MB) are constants in the code.
 
 ```
 npm install
-cp .env.example .env && chmod 600 .env      # fill in JIRA_EMAIL, JIRA_API_TOKEN, CLAUDE_CODE_OAUTH_TOKEN
-npm run check -- KAZ-9025                   # one bug: the outcome, the agent's reasoning, the comment; nothing written
-npm run check -- KAZ-9025 --recheck         # as a re-check of the comment recorded in the database
+cp .env.example .env && chmod 600 .env      # the Jira site and login, the Claude token, the WebUI repository
+bin/bug-validator check KAZ-9025            # one bug: the outcome, the agent's reasoning, the comment; nothing written
+bin/bug-validator check KAZ-9025 --recheck  # as a re-check of the comment recorded in the database
 node scripts/agreement.ts marks.tsv         # KEY<TAB>understood|not_understood|not_webui per line: agreement, cost, time
-npm start                                   # the loop, VALIDATOR_DRY_RUN=true by default; log on stdout
+npm start                                   # the loop (bin/bug-validator run), VALIDATOR_DRY_RUN=true by default; log on stdout
 npm run request -- KAZ-9025                 # the running service checks the bug next (a key or a link)
 npm run ui                                  # the web UI on http://127.0.0.1:8081/ (VALIDATOR_HOST to open it wider)
-node server/cli.ts maintain                   # back up the database, cut the log down to size
-npm test && npm run typecheck
+npm run maintain                            # back up the database, cut the log down to size
+npm run check && npm test                   # tsc and prettier, then vitest; before every commit
+npm run format                              # prettier over the repository
 ```
 
 The first `check` or `start` clones WebUI into `state/webui` (about half a minute, 200 MB).
@@ -390,7 +408,7 @@ framing.
   and not checked yet, the request alone.
 - `/healthz` — JSON for a monitor: `ok`, `state`, `pollFailures`, `lastSeen`.
 
-The pages are rendered on the server (`html.ts`, pure functions tested in `server/http/`); `app.js`
+The pages are rendered on the server (`view.ts`, pure functions tested in `view.test.ts`); `app.js`
 fetches the page again every 5 s and swaps `<main>` when it changed, not while the tab is hidden,
 the search box has focus or a confirmation is open, keeping an opened comment open, and opens the
 confirmation as a modal; `theme.js` keeps the light or dark choice made with the header's button
@@ -399,16 +417,18 @@ refresh and the switch. The look is the drafting sheet pipeline-ui shares: one s
 frames with a cross at each corner, Barlow Condensed for titles and values, letter-spaced
 capitals for labels, slate for the one action and for a comment, moss for understood, rust for an
 error; the dark theme is the same sheet in the dark. Its tokens and parts (the masthead, the page
-width, frames, cards, buttons, pills, chips, tables) are `static/sheet.css`, the same file as
-pipeline-ui's `ui/src/sheet.css`: an edit to one is copied to the other. `app.css` only lays out
-the pages. Times are the server's local time (`TZ` in the units: Europe/Warsaw). Jira links use
-`JIRA_BASE_URL`. Pages, styles and scripts are never cached; the fonts are, for a year.
+width, frames, cards, buttons, pills, chips, tables) are `ui/sheet.css`, pipeline-ui's
+`ui/src/sheet.css` copied here (ADR unification). `app.css` only lays out the pages. Times are
+the server's local time (`TZ` in the units: Europe/Warsaw), written as `2026-11-04 23:10`,
+durations as `1h 05m` or `5m 03s`, a time ago as `5m 03s ago` and a day row as `Tue 04 Nov`
+(`server/format.ts`, the words pipeline-ui's console uses). Jira links use `JIRA_BASE_URL`. Pages, styles and scripts are never cached; the fonts are, for a year.
 
 ### Deploy
 
-systemd user units (`deploy/`). Machine-specific in each: `WorkingDirectory`, the node path (in
-`PATH` and `ExecStart`; claude is installed with npm under that node, and `PATH` must also hold
-`bwrap`, `ffmpeg` and `git`) and, for the service and the UI, the log path. The units set
+systemd user units (`deploy/`): `ExecStart` is `node server/cli.ts run`, `ui` and `maintain`.
+Machine-specific in each: `WorkingDirectory`, the node path (in `PATH` and `ExecStart`; claude is
+installed with npm under that node, and `PATH` must also hold `bwrap`, `ffmpeg` and `git`) and, for
+the service and the UI, the log path; the UI's unit sets `VALIDATOR_HOST=0.0.0.0`. The units set
 `TZ=Europe/Warsaw`, keep claude from updating itself (`DISABLE_AUTOUPDATER=1`: update it by hand,
 then `check` a bug), give up after 5 failed starts in 10 minutes, and give a stop 30 s (it kills
 the agent run in progress; nothing is lost). The machine must let an unprivileged user make
@@ -441,7 +461,7 @@ database is a first start that skips everything in Created.
    `systemctl --user disable --now bug-validator bug-validator-ui bug-validator-maintain.timer`.
    A clean stop removes `<db>.lock`; one copied over from a machine that did not stop cleanly
    names that machine, and the new one refuses to start until the file is deleted.
-2. Copy `state/` without `webui/` (`.sqlite`, `-wal`, `-shm`), or `node server/cli.ts maintain`
+2. Copy `state/` without `webui/` (`.sqlite`, `-wal`, `-shm`), or `bin/bug-validator maintain`
    and copy the newest file in `state/backups/` as `state/bug-validator.sqlite`.
 3. On the new machine: `.env` (chmod 600, a `claude setup-token` of its own), the units with its
    paths, the same claude version, `bwrap`, `ffmpeg`, `git` and an SSH key that reads WebUI.
