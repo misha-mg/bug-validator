@@ -6,7 +6,7 @@ import { describeError, log } from '../log.ts'
 import type { UiConfig } from './config.ts'
 import { SECURITY_HEADERS, TooLarge, knownHost, loggedIn, loginChallenge, readBody, sameOrigin } from './guard.ts'
 import { type PageContext, bugPage, bugsPage, bugsQuery, errorPage, homePage } from './view.ts'
-import { readBug, readBugs, readPosts, readRequests } from './read.ts'
+import { readBug, readBugs, readHeartbeat, readPosts, readRequests } from './read.ts'
 import { health, ServiceLog } from './service-log.ts'
 
 const STATIC: Record<string, string> = {
@@ -68,7 +68,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
   const url = new URL(req.url ?? '/', 'http://localhost')
   const path = url.pathname
   if (path === '/healthz') {
-    const h = health(serviceLog.read(), new Date())
+    const h = health(serviceLog.read(), new Date(), readHeartbeat(config.dbFile))
     return send(res, h.ok ? 200 : 503, 'application/json', JSON.stringify(h))
   }
   if (config.guard.login && !loggedIn(req.headers.authorization, config.guard.login)) {
@@ -118,6 +118,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
           logPath: config.logFile,
           recent: serviceLog.recent,
           requests: readRequests(config.dbFile),
+          heartbeat: readHeartbeat(config.dbFile),
         },
         ctx,
       ),

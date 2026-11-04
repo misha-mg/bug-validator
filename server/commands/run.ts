@@ -15,6 +15,8 @@ import { Clone } from '../webui/clone.ts'
 
 /** How often the service looks for a check asked for by hand while it waits for the next poll. */
 const REQUEST_TICK_MS = 2000
+/** How often the service says it is alive (store.heartbeat); the UI calls it running within 15 s of the last. */
+const HEARTBEAT_MS = 5000
 
 /**
  * The service: poll, wait, repeat, until SIGINT or SIGTERM. Polls never overlap. While it waits,
@@ -48,6 +50,18 @@ export async function run(): Promise<void> {
     bugs: deps.store.count(),
   })
 
+  // The heartbeat: the UI reads it to say the service is running; a write that fails is logged, not fatal.
+  const startedAt = new Date().toISOString()
+  const beat = (): void => {
+    try {
+      deps.store.heartbeat(process.pid, startedAt)
+    } catch (err) {
+      log.warn('heartbeat_failed', { error: describeError(err) })
+    }
+  }
+  beat()
+  const heartbeat = setInterval(beat, HEARTBEAT_MS)
+
   const stop = new AbortController()
   const onSignal = (signal: string): void => {
     log.info('service_stopping', { signal })
@@ -59,6 +73,7 @@ export async function run(): Promise<void> {
   while (!stop.signal.aborted) {
     const started = Date.now()
     let ok = true
+    beat()
     try {
       const summary = await poll(deps, stop.signal)
       log.info('poll', { ...summary, ms: Date.now() - started })
@@ -83,6 +98,7 @@ export async function run(): Promise<void> {
       await sleep(Math.min(REQUEST_TICK_MS, due - Date.now()), undefined, { signal: stop.signal }).catch(() => undefined)
     }
   }
+  clearInterval(heartbeat)
   deps.store.close()
   await tool.close()
   log.info('service_stopped')

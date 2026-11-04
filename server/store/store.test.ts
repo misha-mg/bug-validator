@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterAll, describe, it } from 'vitest'
+import { readHeartbeat } from '../http/read.ts'
 import { type IssueRef, MAX_PENDING_REQUESTS, requestCheck, requestPost, Store } from './store.ts'
 
 const dirs: string[] = []
@@ -32,6 +33,21 @@ const result = {
 const statusOf = (s: Store, key: string) => s.rows([key]).get(key)?.status
 
 describe('Store', () => {
+  it('writes its heartbeat into meta, where the UI reads it without the Store', () => {
+    const file = join(tempDir(), 'bug-validator.sqlite')
+    const s = new Store(file)
+    assert.equal(readHeartbeat(file), null)
+    s.heartbeat(4242, '2026-11-04T10:00:00.000Z', '2026-11-04T10:00:05.000Z')
+    assert.deepEqual(readHeartbeat(file), {
+      pid: 4242,
+      startedAt: new Date('2026-11-04T10:00:00.000Z'),
+      seenAt: new Date('2026-11-04T10:00:05.000Z'),
+    })
+    s.heartbeat(4242, '2026-11-04T10:00:00.000Z', '2026-11-04T10:00:10.000Z')
+    assert.equal(readHeartbeat(file)?.seenAt.toISOString(), '2026-11-04T10:00:10.000Z', 'one row per key, updated in place')
+    assert.equal(s.isBootstrapped(), false, 'a heartbeat is not a first start')
+    s.close()
+  })
   it('bootstraps once, even when the first query is empty', () => {
     const s = new Store(':memory:')
     assert.equal(s.isBootstrapped(), false)

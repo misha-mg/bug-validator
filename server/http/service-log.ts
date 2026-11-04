@@ -1,13 +1,10 @@
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs'
 import { StringDecoder } from 'node:string_decoder'
 import { parseLogLine } from '../log.ts'
+import type { Heartbeat } from './read.ts'
 
-// config.ts's defaults, for a log that starts after the service did.
-const DEFAULT_INTERVAL_MS = 3 * 60 * 1000
-const DEFAULT_AGENT_TIMEOUT_MS = 3 * 60 * 1000
-// A poll that checks bugs logs nothing while the agent runs, up to its timeout; two more minutes
-// cover the Jira requests around it.
-const AGENT_SLACK_MS = 2 * 60 * 1000
+/** The service writes its heartbeat every 5 s (commands/run.ts); older than this, it is not running. */
+export const HEARTBEAT_FRESH_MS = 15_000
 /** Polls failed in a row before /healthz says so: a quarter of an hour at the default interval. */
 export const UNHEALTHY_POLL_FAILURES = 5
 /** How many of the latest events (other than `poll` and `check_start`) are kept for the Activity block. */
@@ -86,30 +83,35 @@ const EMPTY: ServiceStatus = {
 }
 
 /**
- * Crashed when its latest start ended in `fatal`, stopped or stopping when it said so; silent when
- * it has written nothing for two polls and an agent run.
+ * Crashed when its latest start ended in `fatal`; running (or stopping, when it said so) while
+ * its heartbeat is fresh; with a stale heartbeat, stopped when the log ends in `service_stopped`
+ * and silent when the log says nothing of a stop.
  */
-export function liveness(status: ServiceStatus, now: Date): Liveness {
+export function liveness(status: ServiceStatus, now: Date, heartbeat: Heartbeat | null): Liveness {
   if (status.crashed !== null) return 'crashed'
-  if (status.stopped) return 'stopped'
-  const interval = status.pollIntervalMs ?? DEFAULT_INTERVAL_MS
-  const agent = (status.agentTimeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS) + AGENT_SLACK_MS
-  if (!status.lastSeen || now.getTime() - status.lastSeen.getTime() > 2 * interval + agent) return 'silent'
-  return status.stopping ? 'stopping' : 'running'
+  if (heartbeat && now.getTime() - heartbeat.seenAt.getTime() < HEARTBEAT_FRESH_MS) return status.stopping ? 'stopping' : 'running'
+  return status.stopped ? 'stopped' : 'silent'
 }
+
+/** The heartbeat is fresh: the service process is alive, whatever the log says. */
+export const alive = (heartbeat: Heartbeat | null, now: Date): boolean =>
+  heartbeat !== null && now.getTime() - heartbeat.seenAt.getTime() < HEARTBEAT_FRESH_MS
 
 /** What `/healthz` answers: ok while the service runs and its polls go through. */
 export function health(
   status: ServiceStatus | null,
   now: Date,
+  heartbeat: Heartbeat | null,
 ): { ok: boolean; state: Liveness | 'no_log'; pollFailures: number; lastSeen: string | null } {
-  if (!status) return { ok: false, state: 'no_log', pollFailures: 0, lastSeen: null }
-  const state = liveness(status, now)
+  if (!status) return { ok: false, state: 'no_log', pollFailures: 0, lastSeen: heartbeat?.seenAt.toISOString() ?? null }
+  const state = liveness(status, now, heartbeat)
+  // The latest sign of life, from the log or the heartbeat, whichever is later.
+  const seen = [status.lastSeen, heartbeat?.seenAt].filter((d): d is Date => d instanceof Date).sort((a, b) => b.getTime() - a.getTime())[0]
   return {
     ok: state === 'running' && status.pollFailures < UNHEALTHY_POLL_FAILURES,
     state,
     pollFailures: status.pollFailures,
-    lastSeen: status.lastSeen?.toISOString() ?? null,
+    lastSeen: seen?.toISOString() ?? null,
   }
 }
 

@@ -4,7 +4,7 @@ import { request } from 'node:http'
 import { afterAll, beforeAll, describe, it } from 'vitest'
 import { startUi } from './server.ts'
 import { readBug, readPosts, readRequests } from './read.ts'
-import { appendLog, logLine, sampleState } from './sample.ts'
+import { appendLog, heartbeat, logLine, sampleState } from './sample.ts'
 
 const state = sampleState()
 let base = ''
@@ -135,7 +135,15 @@ describe('server', () => {
   it('answers a monitor on /healthz', async () => {
     const res = await get('/healthz')
     assert.equal(res.type, 'application/json; charset=utf-8')
+    assert.equal(res.status, 200)
     assert.equal(JSON.parse(res.body).state, 'running')
+    heartbeat(state.dbFile, new Date(Date.now() - 60_000))
+    const stale = await get('/healthz')
+    assert.equal(stale.status, 503, 'a stale heartbeat: the service is not running')
+    assert.equal(JSON.parse(stale.body).state, 'silent')
+    assert.match((await get('/')).body, /silent/)
+    heartbeat(state.dbFile, new Date())
+    assert.equal((await get('/healthz')).status, 200)
   })
   it("serves only a host it knows: another site cannot read the pages through a visitor's browser", async () => {
     const as = (host: string) =>

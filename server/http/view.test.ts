@@ -12,7 +12,7 @@ import {
   homePage,
   resultLabel,
 } from './view.ts'
-import { readBug, readBugs, readRequests } from './read.ts'
+import { readBug, readBugs, readHeartbeat, readRequests } from './read.ts'
 import { ServiceLog } from './service-log.ts'
 import { checksPerDay } from './stats.ts'
 import { DAY, sampleState } from './sample.ts'
@@ -38,10 +38,11 @@ const section = (html: string, cls: string): string => {
 }
 
 describe('home', () => {
-  const html = homePage({ bugs, status, logPath: state.logFile, recent: log.recent, requests }, ctx)
+  const html = homePage({ bugs, status, logPath: state.logFile, recent: log.recent, requests, heartbeat: readHeartbeat(state.dbFile) }, ctx)
   it('shows the service, the statistics and the gaps', () => {
     const service = text(section(html, 'service'))
     assert.match(service, /State running/)
+    assert.match(service, /Heartbeat just now · pid 4242 · started \d{4}-\d\d-\d\d \d\d:\d\d/)
     assert.match(service, /Last poll 1m 00s ago/)
     assert.match(service, /Mode dry run/)
     assert.match(service, /In Created 7 · 2 waiting/)
@@ -77,7 +78,10 @@ describe('home', () => {
     assert.match(activity, /service started · dry run · haiku/)
   })
   it('says so when there is no log, no database and no failed check', () => {
-    const empty = homePage({ bugs: [], status: null, logPath: '/x/service.log', recent: [], requests: [] }, { ...ctx, dryRun: null })
+    const empty = homePage(
+      { bugs: [], status: null, logPath: '/x/service.log', recent: [], requests: [], heartbeat: null },
+      { ...ctx, dryRun: null },
+    )
     const page = text(empty)
     assert.match(page, /State no log at \/x\/service.log/)
     assert.match(page, /Database none yet/)

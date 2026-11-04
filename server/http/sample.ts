@@ -191,7 +191,15 @@ export function sampleState(): State {
       logLine('comment_dry_run', ago(HOUR, now), { key: 'KAZ-2', recheck: true, outcome: 'not_understood' }) +
       logLine('poll', ago(60 * 1000, now), { inQuery: 7, waiting: 2, pending: 0, checked: 0, failed: 0 }),
   )
+  heartbeat(dbFile, now)
   return state
+}
+
+/** The service's heartbeat as it writes it (store.ts): seen at `seenAt`, started an hour before. */
+export function heartbeat(dbFile: string, seenAt: Date, pid = 4242): void {
+  const store = new Store(dbFile)
+  store.heartbeat(pid, stamp(ago(HOUR, seenAt)), stamp(seenAt))
+  store.close()
 }
 
 export function appendLog(state: State, text: string): void {

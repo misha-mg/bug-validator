@@ -4,8 +4,8 @@ import { MAX_ATTEMPTS } from '../config.ts'
 import { OUTCOMES, REQUIREMENTS, type Outcome } from '../domain/bug.ts'
 import { ISSUE_KEY } from '../domain/key.ts'
 import { cut, fmtAgo, fmtClock, fmtDate, fmtDay, fmtDuration, fmtShare, fmtTime, plural } from '../format.ts'
-import { type BugView, type Request, type Result, type Run, checked, result } from './read.ts'
-import { type LogEvent, type ServiceStatus, liveness } from './service-log.ts'
+import { type BugView, type Heartbeat, type Request, type Result, type Run, checked, result } from './read.ts'
+import { type LogEvent, type ServiceStatus, alive, liveness } from './service-log.ts'
 import { type Day, checksPerDay, fieldChecksPassedAfterComment, gaps, needsAttention, periodStats, startOfDay } from './stats.ts'
 
 const CHART_DAYS = 30
@@ -78,6 +78,8 @@ export interface HomeModel {
   /** The latest events, oldest first, as the log keeps them. */
   recent: LogEvent[]
   requests: Request[]
+  /** The service's heartbeat from the database; null when it never wrote one. */
+  heartbeat: Heartbeat | null
 }
 
 export function homePage(m: HomeModel, ctx: PageContext): string {
@@ -107,7 +109,7 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
   if (!s) {
     rows.push(['State', `<span class="muted">no log at ${esc(m.logPath)}</span>`])
   } else {
-    const state = liveness(s, now)
+    const state = liveness(s, now, m.heartbeat)
     if (state === 'running') rows.push(['State', '<span class="ok">running</span>'])
     else if (state === 'stopping') rows.push(['State', '<span class="warn">stopping</span>'])
     else if (state === 'stopped')
@@ -120,6 +122,7 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
         'State',
         `<span class="err">silent${s.lastSeen ? ` · ${fmtDuration((now.getTime() - s.lastSeen.getTime()) / 1000)}` : ''}</span>`,
       ])
+    rows.push(['Heartbeat', heartbeatText(m.heartbeat, now)])
     if (s.pollError) {
       rows.push([
         'Last poll',
@@ -149,6 +152,13 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
   }
   if (!m.bugs.length) rows.push(['Database', '<span class="muted">none yet</span>'])
   return rows
+}
+
+/** The heartbeat's age and the pid that wrote it; a stale one in rust, none in grey. */
+function heartbeatText(h: Heartbeat | null, now: Date): string {
+  if (!h) return '<span class="muted">none yet</span>'
+  const text = `${fmtAgo(h.seenAt, now)} · pid ${h.pid} · started ${fmtTime(h.startedAt)}`
+  return alive(h, now) ? text : `<span class="err">${text}</span>`
 }
 
 /** Bugs checked today, in 7 days and all time, by outcome and with the agent's cost; and what arrived after a comment. */

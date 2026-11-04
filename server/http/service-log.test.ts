@@ -2,10 +2,13 @@ import assert from 'node:assert/strict'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it } from 'vitest'
-import { RECENT, ServiceLog, UNHEALTHY_POLL_FAILURES, health, liveness } from './service-log.ts'
+import { HEARTBEAT_FRESH_MS, RECENT, ServiceLog, UNHEALTHY_POLL_FAILURES, health, liveness } from './service-log.ts'
+import { type Heartbeat, readHeartbeat } from './read.ts'
 import { ago, appendLog, emptyState, logLine, sampleState } from './sample.ts'
 
 const MINUTE = 60 * 1000
+/** A heartbeat last written at `seenAt`. */
+const beat = (seenAt: Date): Heartbeat => ({ pid: 1, startedAt: ago(60 * MINUTE, seenAt), seenAt })
 
 describe('ServiceLog', () => {
   it('reads the mode, the settings and the last poll', () => {
@@ -17,7 +20,7 @@ describe('ServiceLog', () => {
       [true, 'haiku', 180_000, '2.0.30', 'b37045e50d974a58f2228325237e49010a887e97'],
     )
     assert.deepEqual([status.inQuery, status.waiting, status.pollError], [7, 2, null])
-    assert.equal(liveness(status, state.now), 'running')
+    assert.equal(liveness(status, state.now, readHeartbeat(state.dbFile)), 'running')
   })
   it('reads only what was added and finishes a line cut in half', () => {
     const state = emptyState()
@@ -60,9 +63,16 @@ describe('ServiceLog', () => {
       state.logFile,
       logLine('service_start', ago(60 * MINUTE, now), { dryRun: true, pollIntervalS: 180 }) + logLine('poll', ago(12 * MINUTE, now)),
     )
-    assert.equal(liveness(new ServiceLog(state.logFile).read()!, now), 'silent')
+    assert.equal(liveness(new ServiceLog(state.logFile).read()!, now, null), 'silent', 'no heartbeat, no stop in the log')
+    assert.equal(liveness(new ServiceLog(state.logFile).read()!, now, beat(ago(HEARTBEAT_FRESH_MS, now))), 'silent', 'a stale heartbeat')
+    assert.equal(liveness(new ServiceLog(state.logFile).read()!, now, beat(ago(HEARTBEAT_FRESH_MS - 1000, now))), 'running')
     appendLog(state, logLine('service_stopped', now))
-    assert.equal(liveness(new ServiceLog(state.logFile).read()!, now), 'stopped')
+    assert.equal(liveness(new ServiceLog(state.logFile).read()!, now, null), 'stopped')
+    assert.equal(
+      liveness(new ServiceLog(state.logFile).read()!, now, beat(now)),
+      'running',
+      'alive again: the heartbeat wins over an old stop',
+    )
     assert.equal(new ServiceLog(join(state.dir, 'missing.log')).read(), null)
   })
   it('keeps the latest events other than polls', () => {
@@ -100,7 +110,7 @@ describe('ServiceLog', () => {
     )
     const log = new ServiceLog(state.logFile)
     const crashed = log.read()!
-    assert.equal(liveness(crashed, now), 'crashed')
+    assert.equal(liveness(crashed, now, beat(now)), 'crashed', 'a fatal counts even while something beats')
     assert.equal(crashed.crashed, 'Bad configuration')
     appendLog(
       state,
@@ -108,10 +118,11 @@ describe('ServiceLog', () => {
         logLine('check_start', now, { key: 'KAZ-1' }) +
         logLine('service_stopping', now, { signal: 'SIGTERM' }),
     )
-    assert.equal(liveness(log.read()!, now), 'stopping')
+    assert.equal(liveness(log.read()!, now, beat(now)), 'stopping')
+    assert.equal(liveness(log.read()!, now, null), 'silent', 'a stop under way with no heartbeat left')
     appendLog(state, logLine('service_stopped', now) + logLine('service_start', now, { dryRun: true }))
     const restarted = log.read()!
-    assert.equal(liveness(restarted, now), 'running')
+    assert.equal(liveness(restarted, now, beat(now)), 'running')
     assert.equal(restarted.checking, null, 'a start ends a check the crash or the stop cut short')
   })
   it('is unhealthy when the service is not running or its polls keep failing', () => {
@@ -119,19 +130,20 @@ describe('ServiceLog', () => {
     const now = state.now
     writeFileSync(state.logFile, logLine('service_start', now, { dryRun: true, pollIntervalS: 180 }))
     const log = new ServiceLog(state.logFile)
-    assert.equal(health(log.read(), now).ok, true)
+    assert.equal(health(log.read(), now, beat(now)).ok, true)
+    assert.deepEqual(health(log.read(), now, null), { ok: false, state: 'silent', pollFailures: 0, lastSeen: now.toISOString() })
     for (let i = 0; i < UNHEALTHY_POLL_FAILURES; i++) appendLog(state, logLine('poll_failed', now, { error: 'fetch failed' }))
-    assert.deepEqual(health(log.read(), now), {
+    assert.deepEqual(health(log.read(), now, beat(now)), {
       ok: false,
       state: 'running',
       pollFailures: UNHEALTHY_POLL_FAILURES,
       lastSeen: now.toISOString(),
     })
     appendLog(state, logLine('poll', now, { inQuery: 1 }))
-    assert.equal(health(log.read(), now).ok, true)
-    assert.equal(health(null, now).state, 'no_log')
+    assert.equal(health(log.read(), now, beat(now)).ok, true)
+    assert.equal(health(null, now, beat(now)).state, 'no_log')
   })
-  it('waits out an agent timeout longer than the default before calling the service silent', () => {
+  it('a long agent run is no silence while the heartbeat goes on; the latest sign of life is the later of the log and the heartbeat', () => {
     const state = emptyState()
     const now = state.now
     writeFileSync(
@@ -139,7 +151,15 @@ describe('ServiceLog', () => {
       logLine('service_start', ago(30 * MINUTE, now), { dryRun: true, pollIntervalS: 180, agentTimeoutS: 900 }) +
         logLine('check_start', ago(14 * MINUTE, now), { key: 'KAZ-1' }),
     )
-    assert.equal(liveness(new ServiceLog(state.logFile).read()!, now), 'running')
+    const status = new ServiceLog(state.logFile).read()!
+    assert.equal(liveness(status, now, beat(ago(3000, now))), 'running')
+    assert.equal(liveness(status, now, beat(ago(16_000, now))), 'silent')
+    assert.equal(health(status, now, beat(ago(3000, now))).lastSeen, ago(3000, now).toISOString())
+    assert.equal(
+      health(status, ago(20 * MINUTE, now), beat(ago(20 * MINUTE, now))).lastSeen,
+      ago(14 * MINUTE, now).toISOString(),
+      'the log is later',
+    )
   })
   it('after the log is cut, reads the cut part first, so the start is still known', () => {
     const state = emptyState()

@@ -309,6 +309,18 @@ export class Store {
     return (this.db.prepare('SELECT COUNT(*) AS n FROM checks').get() as { n: number }).n
   }
 
+  /**
+   * The service is alive: its pid, when it started and when it last said so, in `meta`. Written
+   * every few seconds and at every poll; the UI calls the service running while it is fresh.
+   */
+  heartbeat(pid: number, startedAt: string, seenAt = now()): void {
+    this.transaction(() => {
+      this.setMeta('heartbeat_pid', String(pid))
+      this.setMeta('heartbeat_started_at', startedAt)
+      this.setMeta('heartbeat_seen_at', seenAt)
+    })
+  }
+
   /** True once the first poll has recorded what was already in the query (a lost database starts over). */
   isBootstrapped(): boolean {
     return this.getMeta('bootstrapped_at') !== null

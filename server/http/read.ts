@@ -111,6 +111,28 @@ function read<T>(dbFile: string, none: T, fn: (db: DatabaseSync) => T): T {
   }
 }
 
+/** The service's heartbeat (store.ts): who wrote it last and when. */
+export interface Heartbeat {
+  pid: number
+  startedAt: Date
+  seenAt: Date
+}
+
+/** The heartbeat the service last wrote; none without the database, its `meta` table or the keys. */
+export function readHeartbeat(dbFile: string): Heartbeat | null {
+  return read(dbFile, null, (db) => {
+    const rows = db
+      .prepare("SELECT key, value FROM meta WHERE key IN ('heartbeat_pid', 'heartbeat_started_at', 'heartbeat_seen_at')")
+      .all() as {
+      key: string
+      value: string
+    }[]
+    const meta = Object.fromEntries(rows.map((r) => [r.key, r.value]))
+    if (!meta.heartbeat_pid || !meta.heartbeat_started_at || !meta.heartbeat_seen_at) return null
+    return { pid: Number(meta.heartbeat_pid), startedAt: time(meta.heartbeat_started_at), seenAt: time(meta.heartbeat_seen_at) }
+  })
+}
+
 /** A check or a post asked for by hand, pending or failed, as the pages show it. */
 export interface Request {
   key: string
