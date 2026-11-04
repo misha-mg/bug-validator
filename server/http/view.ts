@@ -3,18 +3,10 @@
 import { MAX_ATTEMPTS } from '../config.ts'
 import { OUTCOMES, REQUIREMENTS, type Outcome } from '../domain/bug.ts'
 import { ISSUE_KEY } from '../domain/key.ts'
+import { cut, fmtAgo, fmtClock, fmtDate, fmtDay, fmtDuration, fmtShare, fmtTime, plural } from '../format.ts'
 import { type BugView, type Request, type Result, type Run, checked, result } from './read.ts'
 import { type LogEvent, type ServiceStatus, liveness } from './service-log.ts'
-import {
-  type Day,
-  type Share,
-  checksPerDay,
-  fieldChecksPassedAfterComment,
-  gaps,
-  needsAttention,
-  periodStats,
-  startOfDay,
-} from './stats.ts'
+import { type Day, checksPerDay, fieldChecksPassedAfterComment, gaps, needsAttention, periodStats, startOfDay } from './stats.ts'
 
 const CHART_DAYS = 30
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -99,7 +91,7 @@ export function homePage(m: HomeModel, ctx: PageContext): string {
 <section class="frame statistics">${frameHead('Bugs checked per day', `${CHART_DAYS} days`)}
 <figure class="chart">${dayChart(checksPerDay(m.bugs, ctx.now, CHART_DAYS))}
 <div class="legend">${OUTCOMES.map((o) => `<span class="sw ${o}"></span>${OUTCOME_TEXT[o]} `).join('')}<span class="sw error"></span>error</div></figure></section>
-<section class="frame problems">${frameHead('Field checks failed most often', total ? `first checks of ${bugsText(total)} · all time` : '')}
+<section class="frame problems">${frameHead('Field checks failed most often', total ? `first checks of ${plural(total, 'bug')} · all time` : '')}
 ${total ? gapsTable(found) : '<p class="muted">No bug has been checked yet.</p>'}</section>
 <section class="frame attention">${frameHead('Needs attention', "failed checks, bugs not the WebUI's")}
 ${attention.length ? attentionTable(attention) : '<p class="muted">Nothing to look at.</p>'}</section>
@@ -118,18 +110,23 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
     const state = liveness(s, now)
     if (state === 'running') rows.push(['State', '<span class="ok">running</span>'])
     else if (state === 'stopping') rows.push(['State', '<span class="warn">stopping</span>'])
-    else if (state === 'stopped') rows.push(['State', `<span class="warn">stopped${s.lastSeen ? ` · ${ago(now, s.lastSeen)}` : ''}</span>`])
+    else if (state === 'stopped')
+      rows.push(['State', `<span class="warn">stopped${s.lastSeen ? ` · ${fmtAgo(s.lastSeen, now)}` : ''}</span>`])
     else if (state === 'crashed') {
-      rows.push(['State', `<span class="err">crashed${s.lastSeen ? ` · ${ago(now, s.lastSeen)}` : ''}</span>`])
+      rows.push(['State', `<span class="err">crashed${s.lastSeen ? ` · ${fmtAgo(s.lastSeen, now)}` : ''}</span>`])
       rows.push(['Error', `<span class="err">${errorText(s.crashed)}</span>`])
-    } else rows.push(['State', `<span class="err">silent${s.lastSeen ? ` · ${span(now.getTime() - s.lastSeen.getTime())}` : ''}</span>`])
+    } else
+      rows.push([
+        'State',
+        `<span class="err">silent${s.lastSeen ? ` · ${fmtDuration((now.getTime() - s.lastSeen.getTime()) / 1000)}` : ''}</span>`,
+      ])
     if (s.pollError) {
       rows.push([
         'Last poll',
-        `<span class="err">failed${s.pollFailures > 1 ? ` ${s.pollFailures} times in a row` : ''} · ${ago(now, s.lastPoll ?? now)}</span>`,
+        `<span class="err">failed${s.pollFailures > 1 ? ` ${s.pollFailures} times in a row` : ''} · ${fmtAgo(s.lastPoll ?? now, now)}</span>`,
       ])
       rows.push(['Error', `<span class="err">${errorText(s.pollError)}</span>`])
-    } else if (s.lastPoll) rows.push(['Last poll', ago(now, s.lastPoll)])
+    } else if (s.lastPoll) rows.push(['Last poll', fmtAgo(s.lastPoll, now)])
     else rows.push(['Last poll', '<span class="muted">none yet</span>'])
     if (s.dryRun !== null) rows.push(['Mode', modePill(s.dryRun)])
     if (s.inQuery !== null && !s.pollError) rows.push(['In Created', `${s.inQuery}${s.waiting ? ` · ${s.waiting} waiting` : ''}`])
@@ -137,12 +134,13 @@ function serviceRows(m: HomeModel, now: Date): [string, string][] {
     if (s.model) rows.push(['Model', esc(s.model)])
     if (s.claudeVersion) rows.push(['Claude', esc(s.claudeVersion)])
     if (s.webuiCommit) rows.push(['WebUI', `<code>${esc(s.webuiCommit.slice(0, 12))}</code> · master`])
-    if (s.pollIntervalMs) rows.push(['Poll every', span(s.pollIntervalMs)])
-    if (s.checking) rows.push(['Checking', `${bugLink(s.checking.key)} · ${span(now.getTime() - s.checking.since.getTime())}`])
+    if (s.pollIntervalMs) rows.push(['Poll every', fmtDuration(s.pollIntervalMs / 1000)])
+    if (s.checking)
+      rows.push(['Checking', `${bugLink(s.checking.key)} · ${fmtDuration((now.getTime() - s.checking.since.getTime()) / 1000)}`])
   }
   // The checks asked for and not yet made; a failed request shows on its bug's page and in the log.
   const pending = m.requests.filter((r) => !r.error)
-  if (pending.length) rows.push(['Requested', pending.map((r) => `${bugLink(r.key)} · ${ago(now, r.at)}`).join('<br>')])
+  if (pending.length) rows.push(['Requested', pending.map((r) => `${bugLink(r.key)} · ${fmtAgo(r.at, now)}`).join('<br>')])
   const skipped = m.bugs.filter((b) => result(b) === 'skipped')
   if (skipped.length) {
     // Bugs already in Created at the first start, never checked.
@@ -169,7 +167,7 @@ function tiles(bugs: BugView[], now: Date): string {
         const failed = s.errors ? ` · <span class="err">${s.errors} failed</span>` : ''
         const cost = s.costUsd ? ` · $${s.costUsd.toFixed(2)}` : ''
         const outcomes = OUTCOMES.filter((o) => s.byOutcome[o].count)
-          .map((o) => `${shareText(s.byOutcome[o])} ${OUTCOME_TEXT[o]}`)
+          .map((o) => `${fmtShare(s.byOutcome[o].count, s.byOutcome[o].total)} ${OUTCOME_TEXT[o]}`)
           .join(' · ')
         return tile(label, String(s.checked), s.checked ? `${outcomes}${failed}${cost}` : `no checks${failed}`)
       })
@@ -188,7 +186,7 @@ function gapsTable(found: ReturnType<typeof gaps>): string {
     .map((p) => {
       const n = p.share.count
       const width = n ? Math.max(Math.round((n * 100) / top), 4) : 0
-      return `<tr class="${n ? '' : 'dim'}"><th>${p.id}</th><td>${esc(p.name)}</td><td class="bar"><div style="width:${width}%"></div></td><td class="num">${shareText(p.share)}</td></tr>`
+      return `<tr class="${n ? '' : 'dim'}"><th>${p.id}</th><td>${esc(p.name)}</td><td class="bar"><div style="width:${width}%"></div></td><td class="num">${fmtShare(p.share.count, p.share.total)}</td></tr>`
     })
     .join('')}</tbody></table>`
 }
@@ -327,7 +325,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
     rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${absentChips(b)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`
   }
   const main = `
-<div class="page-head"><h1>All bugs${narrowed.map((n) => ` · ${esc(n)}`).join('')}</h1><span class="stats">${bugsText(bugs.length)}</span></div>
+<div class="page-head"><h1>All bugs${narrowed.map((n) => ` · ${esc(n)}`).join('')}</h1><span class="stats">${plural(bugs.length, 'bug')}</span></div>
 <form class="toolbar" method="get" action="/bugs">
 <nav class="chips">${chips}</nav>
 <input type="hidden" name="result" value="${query.result}">
@@ -376,9 +374,10 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
   if (request)
     rows.push([
       'Request',
-      request.error ? `<span class="err">failed · ${esc(request.error)}</span>` : `waiting · ${ago(ctx.now, request.at)}`,
+      request.error ? `<span class="err">failed · ${esc(request.error)}</span>` : `waiting · ${fmtAgo(request.at, ctx.now)}`,
     ])
-  if (post) rows.push(['Post', post.error ? `<span class="err">failed · ${esc(post.error)}</span>` : `waiting · ${ago(ctx.now, post.at)}`])
+  if (post)
+    rows.push(['Post', post.error ? `<span class="err">failed · ${esc(post.error)}</span>` : `waiting · ${fmtAgo(post.at, ctx.now)}`])
   rows.push(['Jira', jiraLink(key, ctx, esc(`${ctx.jiraBaseUrl}/browse/${key}`))])
   // A pending request is enough; otherwise one click asks for the next check.
   const check =
@@ -582,40 +581,9 @@ export function dayChart(days: Day[]): string {
 
 // ---- Formatting
 
-const EN = 'en-GB'
-const fmtClock = (d: Date): string => d.toLocaleTimeString(EN, { hour: '2-digit', minute: '2-digit', hour12: false })
-const fmtDate = (d: Date): string => d.toLocaleDateString(EN, { day: '2-digit', month: 'short' })
-const fmtTime = (d: Date): string => `${fmtDate(d)} ${fmtClock(d)}`
-const fmtDay = (d: Date): string => d.toLocaleDateString(EN, { weekday: 'short', day: '2-digit', month: 'short' })
-
-export function span(ms: number): string {
-  const minutes = Math.floor(ms / 60_000)
-  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m` : `${minutes}m`
-}
-
-/** "just now", "5m ago", "2h 05m ago", "3d 04h ago". */
-export function ago(now: Date, then: Date): string {
-  const ms = now.getTime() - then.getTime()
-  if (ms < 60_000) return 'just now'
-  const day = 24 * 60 * 60_000
-  if (ms < day) return `${span(ms)} ago`
-  return `${Math.floor(ms / day)}d ${String(Math.floor((ms % day) / 3_600_000)).padStart(2, '0')}h ago`
-}
-
-const bugsText = (n: number): string => `${n} bug${n === 1 ? '' : 's'}`
-
-/** "85% (11)": the percentage, and how many it is. */
-const shareText = (s: Share): string => (s.total ? `${Math.round((s.count * 100) / s.total)}% (${s.count})` : '–')
-
 /** An error message on one line; the whole of it on hover when it is cut. */
 function errorText(error: unknown): string {
   const text = typeof error === 'string' ? error : error == null ? '' : String(error)
   const line = cut(text, ERROR_WIDTH)
   return line === text ? esc(text) : `<span title="${esc(text)}">${esc(line)}</span>`
-}
-
-/** One line of at most width characters. */
-export function cut(text: string, width: number): string {
-  const line = text.split(/\s+/).join(' ').trim()
-  return line.length <= width ? line : `${line.slice(0, width - 1)}…`
 }

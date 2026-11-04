@@ -37,9 +37,9 @@ describe('config', () => {
   it('the UI listens on this machine only unless told otherwise; a login is a user and a password', () => {
     const ui = loadUiConfig({})
     assert.equal(ui.host, '127.0.0.1')
-    assert.equal(ui.login, null)
-    assert.deepEqual(loadUiConfig({ UI_HOSTNAMES: ' Validator.lan , x ' }).hostnames, ['validator.lan', 'x'])
+    assert.equal(ui.guard.login, null)
+    assert.deepEqual(loadUiConfig({ UI_HOSTNAMES: ' Validator.lan , x ' }).guard.hostnames, ['validator.lan', 'x'])
     assert.throws(() => loadUiConfig({ UI_USER: 'qa' }), /go together/)
-    assert.deepEqual(loadUiConfig({ UI_USER: 'qa', UI_PASSWORD: 'p' }).login, { user: 'qa', password: 'p' })
+    assert.deepEqual(loadUiConfig({ UI_USER: 'qa', UI_PASSWORD: 'p' }).guard.login, { user: 'qa', password: 'p' })
   })
 })

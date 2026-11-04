@@ -1,5 +1,6 @@
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs'
 import { StringDecoder } from 'node:string_decoder'
+import { parseLogLine } from '../log.ts'
 
 // config.ts's defaults, for a log that starts after the service did.
 const DEFAULT_INTERVAL_MS = 3 * 60 * 1000
@@ -218,15 +219,12 @@ export class ServiceLog {
 }
 
 function parse(line: string): LogEvent | null {
-  try {
-    const { ts, level, event, ...fields } = JSON.parse(line) as Record<string, unknown>
-    if (typeof ts !== 'string' || typeof event !== 'string') return null
-    const at = new Date(ts)
-    if (Number.isNaN(at.getTime())) return null
-    return { ts: at, level: typeof level === 'string' ? level : 'info', event, fields }
-  } catch {
-    return null
-  }
+  const parsed = parseLogLine(line)
+  if (!parsed) return null
+  const { ts, level, event, ...fields } = parsed
+  const at = new Date(ts)
+  if (Number.isNaN(at.getTime())) return null
+  return { ts: at, level, event, fields }
 }
 
 const str = (value: unknown): string | null => (typeof value === 'string' ? value : null)

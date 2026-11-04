@@ -23,8 +23,7 @@ describe('server', () => {
       jiraBaseUrl: 'https://jira.example.com',
       host: '127.0.0.1',
       port: 0,
-      hostnames: ['validator.lan'],
-      login: null,
+      guard: { hostnames: ['validator.lan'], login: null, realm: 'Bug validator' },
     })
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   })
@@ -174,8 +173,7 @@ describe('server', () => {
       jiraBaseUrl: 'https://jira.example.com',
       host: '127.0.0.1',
       port: 0,
-      hostnames: [],
-      login: { user: 'qa', password: 'secret' },
+      guard: { hostnames: [], login: { user: 'qa', password: 'secret' }, realm: 'Bug validator' },
     })
     const url = `http://127.0.0.1:${(locked.address() as AddressInfo).port}`
     try {

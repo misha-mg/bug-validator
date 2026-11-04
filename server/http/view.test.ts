@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import {
   type PageContext,
-  ago,
   bugPage,
   bugsPage,
   bugsQuery,
@@ -43,16 +42,16 @@ describe('home', () => {
   it('shows the service, the statistics and the gaps', () => {
     const service = text(section(html, 'service'))
     assert.match(service, /State running/)
-    assert.match(service, /Last poll 1m ago/)
+    assert.match(service, /Last poll 1m 00s ago/)
     assert.match(service, /Mode dry run/)
     assert.match(service, /In Created 7 · 2 waiting/)
     assert.match(service, /Model haiku/)
     assert.match(service, /Claude 2\.0\.30/)
     assert.match(service, /WebUI b37045e50d97 · master/)
-    assert.match(service, /Poll every 3m/)
-    assert.match(service, /Skipped 1 · \d\d \w\w\w/)
-    assert.match(service, /Requested KAZ-1 · 2m ago Skipped/, 'the pending request, not the failed one')
-    assert.match(section(html, 'service'), /<a class="key" href="\/bugs\/KAZ-1">KAZ-1<\/a> · 2m ago/)
+    assert.match(service, /Poll every 3m 00s/)
+    assert.match(service, /Skipped 1 · \d{4}-\d\d-\d\d/)
+    assert.match(service, /Requested KAZ-1 · 2m 00s ago Skipped/, 'the pending request, not the failed one')
+    assert.match(section(html, 'service'), /<a class="key" href="\/bugs\/KAZ-1">KAZ-1<\/a> · 2m 00s ago/)
 
     const tiles = text(html.slice(html.indexOf('<section class="cards">'), html.indexOf('<section class="frame service">')))
     assert.match(
@@ -182,7 +181,7 @@ describe('one bug', () => {
     assert.match(page, /KAZ-2 Ports table is empty after clearing the filter/)
     assert.match(
       page,
-      /Reporter A Tester Result comment · dry run Checked \d\d \w\w\w \d\d:\d\d Checks 3 · first \d\d \w\w\w \d\d:\d\d Jira https:\/\/jira.example.com\/browse\/KAZ-2/,
+      /Reporter A Tester Result comment · dry run Checked \d{4}-\d\d-\d\d \d\d:\d\d Checks 3 · first \d{4}-\d\d-\d\d \d\d:\d\d Jira https:\/\/jira.example.com\/browse\/KAZ-2/,
     )
     assert.match(html, /href="https:\/\/jira.example.com\/browse\/KAZ-2"/)
     assert.match(page, /Field checks R1 Steps to reproduce ✓ detail of R1 .* R6 HAR file ✗ detail of R6/)
@@ -205,7 +204,7 @@ describe('one bug', () => {
   })
   it('shows the check asked for: pending, failed, or for a bug not checked yet', () => {
     const pending = bugPage(bugModel('KAZ-1'), ctx)
-    assert.match(text(pending), /Request waiting · 2m ago/)
+    assert.match(text(pending), /Request waiting · 2m 00s ago/)
     assert.doesNotMatch(pending, /name="key" value="KAZ-1"/, 'already asked: no button')
     const unknown = bugPage(bugModel('KAZ-77'), ctx)
     assert.match(text(unknown), /KAZ-77 Request failed · JiraError: HTTP 404 on GET \/issue\/KAZ-77 Jira .* Not checked yet\./)
@@ -276,12 +275,5 @@ describe('one bug', () => {
     assert.equal(resultLabel(retry), 'retrying · 1 of 3 failed')
     assert.equal(resultLabel({ ...retry, status: 'posting' }), 'interrupted while posting')
     assert.equal(resultLabel({ ...retry, status: 'commented' }), 'commented')
-  })
-  it('writes a time ago in short words', () => {
-    const now = state.now
-    assert.equal(ago(now, now), 'just now')
-    assert.equal(ago(now, new Date(now.getTime() - 5 * 60_000)), '5m ago')
-    assert.equal(ago(now, new Date(now.getTime() - 125 * 60_000)), '2h 05m ago')
-    assert.equal(ago(now, new Date(now.getTime() - 3 * DAY - 4 * 3_600_000)), '3d 04h ago')
   })
 })
