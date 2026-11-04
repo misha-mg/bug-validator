@@ -16,10 +16,7 @@ td.absent {
 }
 
 /* Cockpit: the cards across, the state sources and the requests left of what needs attention and
-   the activity; one column on a narrow window. The service's state in moss while it runs. */
-.cards .card .value.live {
-  color: var(--moss);
-}
+   the activity; one column on a narrow window. */
 .cockpit {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
@@ -104,10 +101,6 @@ td.absent {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
-}
-/* The confirmation opened without JavaScript (?post): in the flow, under the buttons. */
-.bug-head dialog.confirm[open]:not(:modal) {
-  margin: 18px 0 0;
 }
 .two {
   display: grid;
