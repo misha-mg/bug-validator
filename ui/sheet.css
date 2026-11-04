@@ -1,13 +1,56 @@
-/* The drafting sheet: the design system pipeline-ui and bug-validator share. This file is the same
-   in both repositories (pipeline-ui ui/src/sheet.css, bug-validator ui/sheet.css); an
-   edit to one is copied to the other. It holds the tokens and the parts: the masthead, the page,
-   frames, headings, labels, cards, controls, pills, chips, tables, notices. Each app loads the
-   Barlow faces itself, and its own stylesheet lays out its pages with the colours named here.
+/* The drafting sheet: the design system pipeline-ui and bug-validator share. This file, with
+   ui/public/theme.js and the Barlow faces in ui/public/fonts/, is the source of truth, in
+   pipeline-ui (ui/src/sheet.css); bug-validator copies the three with its `npm run sheet:sync`,
+   and a test there fails when its copy falls behind. An edit is made here, never in the copy.
 
-   One light surface, hairline frames with a cross at each corner, Barlow Condensed for titles and
-   values, letter-spaced capitals for labels, and colour only where it says something: slate for
-   the one thing to press, moss for ok, rust for an error. Dark by data-theme on <html>, set by
-   theme.js before the page paints. */
+   It holds the tokens and every part both consoles draw: the fonts, the masthead, the page,
+   frames, headings, labels, cards, the strip, controls (buttons, fields, the switch), filters,
+   pills, chips, tables, facts, notices, the confirmation dialog, lamps and the pulse, bars, the
+   column chart, toasts. Each app's own stylesheet only lays out its pages with the colours
+   named here.
+
+   One light surface, hairline frames, Barlow Condensed for titles and values, letter-spaced
+   capitals for labels, and colour only where it says something: slate for the one thing to
+   press, moss for ok, rust for an error. Dark by data-theme on <html>, set by theme.js before
+   the page paints. */
+
+/* The faces, served by each app from /fonts/ (the files are in ui/public/fonts/, OFL licensed). */
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/barlow-latin-400-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/barlow-latin-500-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonts/barlow-latin-600-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/barlow-condensed-latin-500-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonts/barlow-condensed-latin-600-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 700;
+  font-display: swap;
+  src: url(/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2');
+}
 
 :root {
   --bg: #f3f3f1;
@@ -17,7 +60,6 @@
   --line: #d6d8d3;
   --line-soft: #e5e6e2;
   --field: #ebebe9;
-  --cross: #9aa0a8;
   --slate: #6f89aa;
   --slate-ink: #5b759a;
   --rust: #a8583c;
@@ -26,6 +68,16 @@
   --sans: 'Barlow', system-ui, sans-serif;
   --cond: 'Barlow Condensed', 'Barlow', sans-serif;
   --mono: ui-monospace, Menlo, Consolas, monospace;
+  /* Chart colours say how a thing ended, from the sheet's own: moss done, its lighter step done
+     another way, rust stopped, slate a plain count, faint not known (a light step's contrast is
+     low, so every chart has a legend and a tooltip). */
+  --chart-ok: var(--moss);
+  --chart-ok-soft: color-mix(in srgb, var(--moss) 50%, var(--bg));
+  --chart-bad: var(--rust);
+  --chart-count: var(--slate);
+  --chart-none: var(--faint);
+  /* One corner for everything boxed: buttons, fields, pills, chips, toasts. */
+  --radius: 3px;
   /* The page: as wide as the sheet gets, the space at its sides, the space between frames. */
   --page: 1480px;
   --gutter: 28px;
@@ -39,11 +91,11 @@
   --line: #3d4046;
   --line-soft: #2e3136;
   --field: #292b2f;
-  --cross: #6b7078;
   --slate: #7893b4;
   --slate-ink: #95abc9;
   --rust: #c98066;
   --moss: #85a67f;
+  --chart-ok-soft: color-mix(in srgb, var(--moss) 58%, var(--bg));
 }
 
 * {
@@ -162,35 +214,13 @@ button {
   gap: var(--gap);
   min-width: 0;
 }
-.cards {
-  display: grid;
-  gap: var(--gap);
-  margin-bottom: 34px;
-}
 
-/* Frames: a hairline border, a cross at each corner, no fill. */
+/* Frames: a hairline border, no fill. */
 .frame {
   position: relative;
   border: 1px solid var(--line);
   padding: 20px 22px 22px;
   min-width: 0;
-}
-.frame::before {
-  content: '';
-  position: absolute;
-  inset: -7px;
-  pointer-events: none;
-  --arm: linear-gradient(var(--cross), var(--cross));
-  background:
-    var(--arm) left 0 top 6px / 13px 1px,
-    var(--arm) left 6px top 0 / 1px 13px,
-    var(--arm) right 0 top 6px / 13px 1px,
-    var(--arm) right 6px top 0 / 1px 13px,
-    var(--arm) left 0 bottom 6px / 13px 1px,
-    var(--arm) left 6px bottom 0 / 1px 13px,
-    var(--arm) right 0 bottom 6px / 13px 1px,
-    var(--arm) right 6px bottom 0 / 1px 13px;
-  background-repeat: no-repeat;
 }
 /* A frame's title line: the name, a count, a note, something on the right. */
 .frame-head {
@@ -265,9 +295,23 @@ h3 {
   margin: 24px 0 10px;
 }
 
-/* Cards: a label, a value in the condensed face, a note under it. */
+/* Cards: a row of compact frames over a page, four across; each a label, a value in the
+   condensed face with a small word beside it, a note under it cut to one line, and a row of
+   small actions when the thing has any. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+  margin-bottom: 30px;
+}
+.cards .card {
+  padding: 16px 20px 18px;
+}
+.cards .label {
+  margin-bottom: 8px;
+}
 .card .value {
-  font: 500 38px/1 var(--cond);
+  font: 500 30px/1 var(--cond);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   display: flex;
@@ -284,7 +328,110 @@ h3 {
 .card .note {
   font-size: 12px;
   color: var(--muted);
-  margin-top: 12px;
+  margin-top: 6px;
+}
+.card .note.one {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card .note.err {
+  color: var(--rust);
+}
+.card .acts {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+@media (max-width: 1100px) {
+  .cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The strip: one frame of cells parted by hairlines, each a label, a number and a note, for
+   what a list adds up to. Six across, eight with `.eight`; fewer as the page narrows, the cells
+   that start a row losing their left line and the rows under the first getting a top one. */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  padding: 0;
+  margin: -6px 0 22px;
+}
+.strip .cell {
+  padding: 16px 20px 15px;
+  min-width: 0;
+  border-left: 1px solid var(--line-soft);
+}
+.strip .cell:first-child {
+  border-left: 0;
+}
+.strip .label {
+  margin-bottom: 8px;
+}
+.strip .value {
+  font: 500 30px/1 var(--cond);
+  letter-spacing: 0.02em;
+}
+.strip .value.ok {
+  color: var(--moss);
+}
+.strip .value.bad {
+  color: var(--rust);
+}
+.strip .note {
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strip.eight {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+@media (max-width: 1300px) and (min-width: 641px) {
+  .strip.eight {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .strip.eight .cell:nth-child(4n + 1) {
+    border-left: 0;
+  }
+  .strip.eight .cell:nth-child(n + 5) {
+    border-top: 1px solid var(--line-soft);
+  }
+}
+@media (max-width: 1100px) and (min-width: 641px) {
+  .strip:not(.eight) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .strip:not(.eight) .cell:nth-child(3n + 1) {
+    border-left: 0;
+  }
+  .strip:not(.eight) .cell:nth-child(n + 4) {
+    border-top: 1px solid var(--line-soft);
+  }
+}
+@media (max-width: 640px) {
+  .strip,
+  .strip.eight {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .strip .cell {
+    border-left: 1px solid var(--line-soft);
+    border-top: 1px solid var(--line-soft);
+  }
+  .strip .cell:nth-child(odd) {
+    border-left: 0;
+  }
+  .strip .cell:nth-child(-n + 2) {
+    border-top: 0;
+  }
 }
 
 /* Controls. */
@@ -302,7 +449,7 @@ h3 {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: var(--radius);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -350,7 +497,7 @@ h3 {
   background: var(--field);
   color: var(--text);
   font: 14px var(--sans);
-  border-radius: 2px;
+  border-radius: var(--radius);
 }
 .field::placeholder {
   color: var(--faint);
@@ -390,13 +537,95 @@ h3 {
   background: var(--line-soft);
   margin: 22px 0;
 }
+/* The switch: a word and a small track whose knob slides right and fills slate when on, so
+   the state shows at a glance; a button with role="switch" and aria-checked. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 600 11px/1 var(--cond);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.switch:hover {
+  color: var(--text);
+}
+.switch .track {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform 0.15s,
+    background 0.15s;
+}
+.switch[aria-checked='true'] {
+  color: var(--slate-ink);
+}
+.switch[aria-checked='true'] .track {
+  background: var(--slate);
+  border-color: var(--slate);
+}
+.switch[aria-checked='true'] .knob {
+  transform: translateX(12px);
+  background: var(--on-slate);
+}
+.switch:focus-visible {
+  outline: none;
+}
+.switch:focus-visible .track {
+  outline: 2px solid var(--slate);
+  outline-offset: 2px;
+}
+
+/* A block inside a frame: something under the frame's first thing, with its own label line
+   that may carry a control at its right (a switch, a small button). */
+.block {
+  margin-top: 24px;
+}
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.block-head .label {
+  margin: 0;
+}
+/* The button under a list that asks for its next page. */
+.more {
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+}
 
 /* Pills: a state in a hairline box, coloured by what it says. */
 .pill {
   display: inline-block;
   padding: 3px 9px;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: var(--radius);
   font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -434,7 +663,7 @@ h3 {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: var(--radius);
   background: transparent;
   font: 600 11px/1 var(--cond);
   letter-spacing: 0.16em;
@@ -455,6 +684,69 @@ h3 {
 .chip b {
   font-weight: 500;
   color: var(--faint);
+}
+
+/* Filters: labelled rows of chips; chips of one family boxed together in a group, the
+   family's own chip (`.fam`) first, its members (`.sub`) after it in plain words. A group's
+   tone colours its family chip: `.ok` moss, `.bad` rust. A Clear button sits at the row's end. */
+.filters {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+.filters .row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.filters .row > .label {
+  flex: 0 0 64px;
+  margin: 0;
+  line-height: 30px;
+}
+.filters .opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.filters .group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+.filters .group .chip {
+  height: 24px;
+  border-color: transparent;
+}
+.filters .group .chip:hover {
+  border-color: var(--line);
+}
+.filters .group .chip.on {
+  border-color: var(--slate-ink);
+}
+.filters .group .chip.fam {
+  letter-spacing: 0.18em;
+}
+.filters .group.ok .chip.fam {
+  color: var(--moss);
+}
+.filters .group.bad .chip.fam {
+  color: var(--rust);
+}
+.filters .group .chip.sub {
+  text-transform: none;
+  letter-spacing: 0.04em;
+  font: 500 12px/1 var(--sans);
+}
+.filters .clear {
+  flex: none;
+  margin-top: 3px;
 }
 
 /* Tables: capitals over a line, rows parted by a softer one. */
@@ -498,6 +790,66 @@ td.summary {
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+/* A wide table whose cells hold pills side by side: the columns get more air than 10px. */
+table.wide th,
+table.wide td {
+  padding-right: 22px;
+}
+table.wide th:last-child,
+table.wide td:last-child {
+  padding-right: 0;
+}
+/* A cell cut to one line with an ellipsis: max-width 0 lets the table give it the room left. */
+td.one-line {
+  max-width: 0;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The arrow that opens a ticket in Jira. */
+td.jira a {
+  text-decoration: none;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+}
+td.jira a:hover {
+  color: var(--slate-ink);
+}
+/* The row of what is going on now: a tinted band and a pulsing dot. The table stops at the
+   frame's padding (22px a side); a strip on each end cell carries the band out to the frame's
+   edges (a cell's box-shadow is not drawn there), and the dot sits in the left one, out of the
+   text's way. */
+tr.live td {
+  background: color-mix(in srgb, var(--slate) 10%, transparent);
+}
+tr.live td:first-child,
+tr.live td:last-child {
+  position: relative;
+}
+tr.live td:first-child::before,
+tr.live td:last-child::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  background: inherit;
+}
+tr.live td:first-child::before {
+  left: -22px;
+}
+tr.live td:last-child::after {
+  right: -22px;
+}
+tr.live td:first-child .pulse {
+  position: absolute;
+  z-index: 1;
+  left: -15px;
+  top: 50%;
+  margin: -3.5px 0 0;
+}
 
 /* Facts: a name and its value per line. */
 dl.kv {
@@ -540,6 +892,443 @@ dl.kv dd {
 }
 .notice .btn {
   margin-left: auto;
+}
+
+/* Why something stopped (or how it ended), whole and wrapped, under its pills: a label at the
+   left and the text, a rust edge for a bad end, moss for a good one. */
+.reason {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  margin: -12px 0 22px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--line);
+  background: var(--field);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.reason .label {
+  flex: none;
+  margin: 0;
+}
+.reason.bad {
+  border-left-color: var(--rust);
+}
+.reason.ok {
+  border-left-color: var(--moss);
+}
+
+/* The confirmation dialog, for an action that cannot be taken back: a frame over the dimmed
+   page (<dialog class="frame confirm">, opened with showModal), its title line, what the action
+   does, then the buttons in a form, the one that does it first. */
+dialog.confirm {
+  width: min(560px, calc(100vw - 32px));
+  background: var(--bg);
+  color: var(--text);
+}
+dialog.confirm::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
+dialog.confirm p {
+  margin: 0 0 14px;
+}
+dialog.confirm form {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* Lamps: a dot that says ok (moss) or not (rust) with a soft halo; grey while unknown. The
+   pulse is a smaller dot that breathes while something goes on. */
+.lamp {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--faint);
+}
+.lamp.ok {
+  background: var(--moss);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--moss) 22%, transparent);
+}
+.lamp.bad {
+  background: var(--rust);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rust) 22%, transparent);
+}
+.pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--moss);
+  vertical-align: 1px;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* State sources: a frame folded to a lamp and a word, opened to one line per source (`.dep`):
+   its name and detail, cut to the width, and a pill. A click anywhere on the frame folds it. */
+.sources {
+  padding-block: 16px;
+  cursor: pointer;
+}
+.sources:hover .chevron,
+.sources:hover .fold .label {
+  color: var(--text);
+}
+.fold {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.fold .label {
+  margin: 0;
+}
+.fold .state {
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+}
+.fold .state.err {
+  color: var(--rust);
+}
+.fold .chevron {
+  font: 500 18px/1 var(--cond);
+  color: var(--muted);
+}
+.sources .deps {
+  margin-top: 12px;
+}
+.dep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-soft);
+  min-width: 0;
+}
+.dep:last-of-type {
+  border-bottom: 0;
+}
+.dep .text {
+  flex: 1;
+  min-width: 0;
+}
+.dep .name {
+  font-weight: 500;
+}
+.dep .detail {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dep .pill {
+  flex: none;
+}
+
+/* Bars: a row per thing, its name, a thin bar in a track, the count, its share. The fill is a
+   plain count by default; `.bad` for a stop, `.soft` for done another way, `.none` for unknown. */
+.bars {
+  display: grid;
+  gap: 10px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) 3rem 3rem;
+  align-items: center;
+  gap: 12px;
+}
+.bar-row .name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-row .track {
+  height: 8px;
+  background: var(--line-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar-row .track i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--chart-count);
+  min-width: 2px;
+}
+.bar-row .track i.bad {
+  background: var(--chart-bad);
+}
+.bar-row .track i.soft {
+  background: var(--chart-ok-soft);
+}
+.bar-row .track i.none {
+  background: var(--chart-none);
+}
+.bar-row b {
+  font: 500 18px/1 var(--cond);
+  text-align: right;
+}
+.bar-row .share {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+@media (max-width: 640px) {
+  .bar-row {
+    grid-template-columns: 7.5rem minmax(0, 1fr) 2.2rem 2.2rem;
+    gap: 8px;
+  }
+}
+
+/* The column chart: stacked columns over time, one per day or week, as SVG. pipeline-ui draws
+   it in the browser (Columns.vue), bug-validator on the server; both write the same markup, so
+   this is its contract:
+     div.columns
+       ul.legend > li (i with the series' colour as its background, then the name); only with
+         two or more series, the frame's title names a single one
+       div.plot (position: relative, tabindex=0, the tooltip's anchor)
+         svg (width, height; overflow visible)
+           g.grid > line (one per round count) + text (its number, text-anchor end, left of the plot)
+           rect.band (the hovered column's slot, under the columns; absent while none is hovered)
+           g per column > path or rect per series part, bottom up, filled with the series' colour
+             (the top part's upper corners rounded, 2px between parts, a part under 2px drawn at 2px)
+           g.dates > text (a date under every column there is room for, text-anchor middle)
+           rect.hit per column (transparent, full height, catches the pointer)
+         div.tip (absolute, centred on the column: div.when with the date and the total, then a
+           div.row per series: i with its colour, span its name, b its count)
+   Colours come from the chart tokens (--chart-ok, --chart-ok-soft, --chart-bad, --chart-count,
+   --chart-none), set on each part as its fill. */
+.columns .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  list-style: none;
+  margin: -4px 0 12px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.columns .legend li,
+.columns .tip .row {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.columns .legend i,
+.columns .tip i {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius);
+  flex: none;
+}
+.columns .plot {
+  position: relative;
+  outline: none;
+}
+.columns .plot:focus-visible {
+  box-shadow: 0 0 0 1px var(--slate);
+}
+.columns svg {
+  display: block;
+  overflow: visible;
+}
+.columns .grid line {
+  stroke: var(--line-soft);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.columns text {
+  font: 11px var(--sans);
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.columns .band {
+  fill: var(--field);
+}
+.columns .hit {
+  fill: transparent;
+}
+.columns .tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  font-size: 12px;
+  min-width: 150px;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.08);
+}
+.columns .tip .when {
+  font-weight: 600;
+}
+.columns .tip .row span {
+  flex: 1;
+  color: var(--muted);
+}
+.columns .tip .row b {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Toasts: notifications in a stack at the bottom right, the newest lowest, each a hairline card
+   with its kind's colour at the left edge (slate info, moss success, rust error), an icon, the
+   message, and a bar that runs down while it stays (--life, its time; the pointer over it holds
+   it). The transition classes are Vue's (toast-enter, toast-leave, toast-move); a page without
+   them simply shows the stack. */
+.toasts {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 50;
+  width: min(380px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  overflow: hidden;
+  padding: 13px 12px 15px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tone);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--text) 70%, transparent);
+  pointer-events: auto;
+  --tone: var(--slate);
+}
+.toast.success {
+  --tone: var(--moss);
+}
+.toast.error {
+  --tone: var(--rust);
+}
+.toast .icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 13px/1 var(--sans);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+.toast .title {
+  font: 600 15px/1.2 var(--cond);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.toast .detail {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.toast .small-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--tone);
+}
+.toast .close {
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.toast .close:hover {
+  color: var(--text);
+}
+.toast .life {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--tone);
+  opacity: 0.55;
+  transform-origin: left;
+  animation: life var(--life) linear forwards;
+}
+.toast:hover .life {
+  animation-play-state: paused;
+}
+@keyframes life {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.toast-enter-active {
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.15);
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(24px) scale(0.97);
+}
+.toast-leave-active {
+  position: absolute;
+  width: 100%;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(40px);
+}
+.toast-move {
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  .toast .life {
+    animation: none;
+  }
+  .toast-enter-active,
+  .toast-leave-active,
+  .toast-move {
+    transition: none;
+    animation: none;
+  }
 }
 
 @media (max-width: 800px) {

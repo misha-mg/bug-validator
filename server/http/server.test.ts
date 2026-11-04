@@ -58,8 +58,10 @@ describe('server', () => {
     const css = await get('/app.css')
     assert.equal(css.status, 200)
     assert.equal(css.type, 'text/css; charset=utf-8')
-    assert.match(css.body, /@font-face/)
-    assert.match((await get('/sheet.css')).body, /--slate/)
+    assert.doesNotMatch(css.body, /@font-face/, "the faces are the sheet's")
+    const sheet = (await get('/sheet.css')).body
+    assert.match(sheet, /--slate/)
+    assert.match(sheet, /@font-face/)
     const font = await fetch(`${base}/fonts/barlow-latin-400-normal.woff2`)
     assert.equal(font.status, 200)
     assert.equal(font.headers.get('content-type'), 'font/woff2')

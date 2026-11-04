@@ -1,42 +1,5 @@
-/* The UI's own stylesheet, on the drafting sheet (sheet.css, shared with pipeline-ui): the
-   Barlow faces it names, and the layout of the three pages. */
-@font-face {
-  font-family: 'Barlow';
-  font-weight: 400;
-  font-display: swap;
-  src: url(/fonts/barlow-latin-400-normal.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Barlow';
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/barlow-latin-500-normal.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Barlow';
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/barlow-latin-600-normal.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Condensed';
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/barlow-condensed-latin-500-normal.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Condensed';
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/barlow-condensed-latin-600-normal.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Condensed';
-  font-weight: 700;
-  font-display: swap;
-  src: url(/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2');
-}
-
+/* The UI's own stylesheet, on the drafting sheet (sheet.css, shared with pipeline-ui, which
+   names the faces): the layout of the three pages. */
 .time {
   white-space: nowrap;
   color: var(--muted);

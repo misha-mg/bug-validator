@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "ui": "node server/cli.ts ui",
     "request": "node server/cli.ts request",
-    "maintain": "node server/cli.ts maintain"
+    "maintain": "node server/cli.ts maintain",
+    "sheet:sync": "scripts/sheet-sync.sh"
   },
   "dependencies": {
     "zod": "^4.1.12"
