@@ -1,3 +1,4 @@
+// A hash of the report: what a re-check watches for a change.
 import { createHash } from 'node:crypto'
 import type { Bug } from './bug.ts'
 

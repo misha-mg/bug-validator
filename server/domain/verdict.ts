@@ -1,3 +1,4 @@
+// The agent's JSON verdict: its schema and the guardrails the program keeps.
 import { z } from 'zod'
 import { OUTCOMES, type Outcome } from './bug.ts'
 

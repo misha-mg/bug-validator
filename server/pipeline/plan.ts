@@ -1,3 +1,4 @@
+// Which bugs of a poll are due: first checks, re-checks, the waiting ones.
 import type { BugRow, CheckStatus, IssueRef } from '../store/store.ts'
 
 /** A bug in the query, as one poll sees it. */

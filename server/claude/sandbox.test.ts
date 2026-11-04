@@ -1,3 +1,4 @@
+// Tests of sandbox.ts: what the bwrap arguments let the agent see.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import { bwrapArgs, HOME, MCP_CONFIG, WORK_BUG, WORK_WEBUI } from './sandbox.ts'

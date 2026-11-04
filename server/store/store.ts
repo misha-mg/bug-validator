@@ -1,3 +1,4 @@
+// SQLite (node:sqlite): one row per bug, one per check, meta (the first start, the heartbeat), requests and posts; the schema's migrations; a backup.
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'

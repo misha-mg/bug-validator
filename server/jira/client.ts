@@ -1,3 +1,4 @@
+// Jira REST v2 through api.atlassian.com: search, issues, attachments, myself, changelog; add and edit comment, the only writes.
 import type { JiraConfig } from '../config.ts'
 
 /**

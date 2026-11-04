@@ -1,3 +1,4 @@
+// Tests of key.ts: a key from text or a link.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import { issueKey } from './key.ts'

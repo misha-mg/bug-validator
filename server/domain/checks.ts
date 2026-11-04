@@ -1,3 +1,4 @@
+// The field checks: what the report has and lacks (section headings, Affects versions, Devices, a HAR), hints for the agent and numbers for the console.
 import type { Bug, RequirementId } from './bug.ts'
 
 export interface FieldCheck {

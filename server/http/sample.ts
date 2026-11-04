@@ -1,3 +1,4 @@
+// A sample state for the tests: the service's tables made by the real Store and filled by hand, a log, a heartbeat.
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

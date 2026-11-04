@@ -1,3 +1,4 @@
+// The service's clone of WebUI: cloned when missing, fetched to master, checked out detached; its commit.
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { promisify } from 'node:util'

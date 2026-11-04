@@ -1,3 +1,4 @@
+// One poll: query → first-start bootstrap → moved bugs → plan → checks, requests first.
 import { fingerprint } from '../domain/fingerprint.ts'
 import { REPORT_FIELDS, type RawIssue } from '../jira/client.ts'
 import { jiraTime, MappingError, toBug } from '../jira/mapping.ts'

@@ -1,3 +1,4 @@
+// The console's HTTP server (node:http): the pages, the static files under ui/, /healthz; guard.ts on every request.
 import { existsSync, readFileSync } from 'node:fs'
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http'
 import { requestCheck, requestPost } from '../store/store.ts'

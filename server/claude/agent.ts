@@ -1,3 +1,4 @@
+// Runs `claude -p` inside bwrap with the file tools and the Jira tool, and reads its result.
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'

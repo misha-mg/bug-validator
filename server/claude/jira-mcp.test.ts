@@ -1,3 +1,4 @@
+// Tests of jira-mcp.ts: the agent's Jira tool over HTTP, its secret and its scope.
 import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, it } from 'vitest'
 import { JiraTool } from './jira-mcp.ts'

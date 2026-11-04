@@ -1,3 +1,4 @@
+// The Bug model: the report's fields, the run's files, the outcomes and the requirement ids R1–R7.
 export type Project = 'KAZ' | 'RPG'
 
 export interface Attachment {

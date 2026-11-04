@@ -1,3 +1,4 @@
+// Tests of stats.ts: the numbers the home page shows.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import { readBugs } from './read.ts'

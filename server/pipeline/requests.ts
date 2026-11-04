@@ -1,3 +1,4 @@
+// The posts and the checks asked for by hand, served before each check of a poll and while the service waits.
 import { JiraError } from '../jira/client.ts'
 import { describeError, log } from '../log.ts'
 import type { Deps } from './deps.ts'

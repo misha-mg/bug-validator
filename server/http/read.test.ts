@@ -1,3 +1,4 @@
+// Tests of read.ts: the views read from the sample database.
 import assert from 'node:assert/strict'
 import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

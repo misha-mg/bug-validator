@@ -1,3 +1,4 @@
+// What the pipeline needs: config, Jira, the agent, the clone, the store; interfaces, so tests use fakes.
 import type { Agent } from '../claude/agent.ts'
 import type { Config } from '../config.ts'
 import type { Store } from '../store/store.ts'

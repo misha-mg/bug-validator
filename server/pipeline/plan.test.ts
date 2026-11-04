@@ -1,3 +1,4 @@
+// Tests of plan.ts: which bugs a poll checks, re-checks or leaves waiting.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import type { BugRow } from '../store/store.ts'

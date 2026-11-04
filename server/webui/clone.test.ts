@@ -1,3 +1,4 @@
+// Tests of clone.ts against a local bare repository.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'

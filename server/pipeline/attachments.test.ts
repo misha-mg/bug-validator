@@ -1,3 +1,4 @@
+// Tests of attachments.ts: the run's files from a bug's attachments, with a fake Jira and ffmpeg.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'

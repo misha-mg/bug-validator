@@ -1,3 +1,4 @@
+// `maintain`: a backup of the database and the log cut down to size, daily from a systemd timer.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, truncateSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { z } from 'zod'

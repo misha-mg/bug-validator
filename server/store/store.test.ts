@@ -1,3 +1,4 @@
+// Tests of store.ts: the rows, the migrations and their backup copy, the requests, the posts, the heartbeat.
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

@@ -1,3 +1,4 @@
+// `check`: one bug checked and everything printed, the agent's reasoning included; nothing written to Jira or the database.
 import { ClaudeAgent } from '../claude/agent.ts'
 import { JiraTool } from '../claude/jira-mcp.ts'
 import { loadConfig } from '../config.ts'

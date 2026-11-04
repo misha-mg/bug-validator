@@ -1,3 +1,4 @@
+// The agent's prompt from the bug, the field checks, the run's files and the clone's commit (and the previous comment on a re-check).
 import { createHash } from 'node:crypto'
 import { WORK_BUG, WORK_WEBUI } from '../claude/sandbox.ts'
 import { PROJECT_NAMES, REQUIREMENTS, type Bug, type FileKind, type RunFile } from './bug.ts'

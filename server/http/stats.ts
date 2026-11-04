@@ -1,3 +1,4 @@
+// Counts by period and outcome, the field checks failed most often, bugs per day, field checks passed after a comment.
 import { OUTCOMES, REQUIREMENT_IDS, REQUIREMENTS, type Outcome, type RequirementId } from '../domain/bug.ts'
 import { type BugView, type Result, checked, firstRun, result } from './read.ts'
 

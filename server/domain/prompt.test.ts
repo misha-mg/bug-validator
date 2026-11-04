@@ -1,3 +1,4 @@
+// Tests of prompt.ts: what the agent's prompt holds and how the reporter's text is fenced.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import type { RunFile } from './bug.ts'

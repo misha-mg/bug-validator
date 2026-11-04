@@ -1,3 +1,4 @@
+// The database, read-only → one view per bug with its runs, the requests, the posts, the heartbeat; never creates the file.
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import type { CheckRequest, CheckStatus } from '../store/store.ts'

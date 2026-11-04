@@ -1,3 +1,4 @@
+// `request`: asks the running service to check a bug next.
 import { loadConfig } from '../config.ts'
 import { requestCheck } from '../store/store.ts'
 

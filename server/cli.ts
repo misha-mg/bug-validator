@@ -1,3 +1,4 @@
+// The command line: run | check <KEY> [--recheck] | request <KEY|URL> | ui | maintain; bin/bug-validator execs it.
 import { check } from './commands/check.ts'
 import { maintain } from './commands/maintain.ts'
 import { request } from './commands/request.ts'

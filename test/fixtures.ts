@@ -1,3 +1,4 @@
+// The fixtures: real bugs saved from Jira (test/fixtures/<KEY>.json) as a RawIssue or a Bug.
 import { readFileSync } from 'node:fs'
 import type { Bug } from '../server/domain/bug.ts'
 import type { RawIssue } from '../server/jira/client.ts'

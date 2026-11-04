@@ -1,3 +1,4 @@
+// Tests of fingerprint.ts: what changes the hash and what does not.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import type { Comment } from './bug.ts'

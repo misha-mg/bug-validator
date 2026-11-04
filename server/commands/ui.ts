@@ -1,3 +1,4 @@
+// `ui`: the web console, until SIGINT or SIGTERM.
 import { log } from '../log.ts'
 import { loadUiConfig } from '../http/config.ts'
 import { startUi } from '../http/server.ts'

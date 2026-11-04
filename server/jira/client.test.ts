@@ -1,3 +1,4 @@
+// Tests of client.ts and queries.ts: the errors' kinds, the cloud id lookup, the requests; and the agent's JQL scope.
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'vitest'
 import { ISSUE_FIELDS, JiraClient, JiraError } from './client.ts'

@@ -1,3 +1,4 @@
+// `run`: the service's loop: poll, serve requests, wait, repeat; the lock on the database, the heartbeat, the stop.
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { resolve } from 'node:path'

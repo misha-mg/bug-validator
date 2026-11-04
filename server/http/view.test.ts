@@ -1,3 +1,4 @@
+// Tests of view.ts: the three pages rendered from the sample state.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import {

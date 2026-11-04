@@ -1,3 +1,4 @@
+// Tests of agent.ts: the result parsing, the kinds of trouble, and a run with a stand-in bwrap and claude.
 import assert from 'node:assert/strict'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'

@@ -1,3 +1,4 @@
+// service.log → the service's state and its latest events, read as it grows; the liveness from the heartbeat; /healthz's answer.
 import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs'
 import { StringDecoder } from 'node:string_decoder'
 import { parseLogLine } from '../log.ts'

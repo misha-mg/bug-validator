@@ -1,3 +1,4 @@
+// Raw issue JSON → Bug; Jira's times.
 import { z } from 'zod'
 import type { Bug, Project } from '../domain/bug.ts'
 import type { RawIssue } from './client.ts'

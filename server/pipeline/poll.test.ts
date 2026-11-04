@@ -1,3 +1,4 @@
+// Tests of poll.ts, handle.ts and requests.ts: whole polls against a fake Jira, agent and clone, with the real Store.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import { AgentError, type Agent, type AgentRun } from '../claude/agent.ts'

@@ -1,3 +1,4 @@
+// Tests of verdict.ts: the schema and the guardrails.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import { parseVerdict, VerdictError, verdictJsonSchema } from './verdict.ts'

@@ -1,3 +1,4 @@
+// Tests of checks.ts on the fixtures: which field checks a report passes.
 import assert from 'node:assert/strict'
 import { describe, it } from 'vitest'
 import { hasSection, checkFields } from './checks.ts'

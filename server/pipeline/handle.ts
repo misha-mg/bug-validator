@@ -1,3 +1,4 @@
+// One check and its record, post or edit; the service's comment found in Jira; which failures are the surroundings'.
 import { AgentError } from '../claude/agent.ts'
 import type { BugRow, IssueRef } from '../store/store.ts'
 import { type Jira, JiraError, type RawIssue } from '../jira/client.ts'

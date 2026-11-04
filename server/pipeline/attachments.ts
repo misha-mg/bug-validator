@@ -1,3 +1,4 @@
+// The bug's attachments → the run's files: downloaded, a HAR cleaned, a video cut to frames.
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'

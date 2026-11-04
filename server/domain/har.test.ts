@@ -1,3 +1,4 @@
+// Tests of har.ts: what the cleaner removes from a HAR and what it keeps.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'vitest'

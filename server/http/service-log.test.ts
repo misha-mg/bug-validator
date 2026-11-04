@@ -1,3 +1,4 @@
+// Tests of service-log.ts: the log read as it grows, the liveness, /healthz's answer.
 import assert from 'node:assert/strict'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

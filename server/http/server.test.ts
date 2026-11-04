@@ -1,3 +1,4 @@
+// Tests of server.ts: the pages, the static files, the requests and posts, the guards, /healthz.
 import assert from 'node:assert/strict'
 import type { AddressInfo } from 'node:net'
 import { request } from 'node:http'
