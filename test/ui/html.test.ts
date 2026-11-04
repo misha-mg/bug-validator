@@ -120,7 +120,7 @@ describe('bugs', () => {
     const page = text(html);
     assert.match(page, /All bugs 6 bugs/);
     assert.match(page, /KAZ-2 Jira Ports table is empty after clearing the filter \d\d:\d\d comment · dry run R1 R4 R6 1 3/, 'absent at the first check');
-    assert.match(page, /KAZ-3 Jira Login page freezes \d\d:\d\d understood/);
+    assert.match(page, /KAZ-3 Jira Login page freezes \d\d:\d\d understood 1 /, 'one check is counted');
     assert.match(page, /RPG-6 Jira Port counter lags behind the CLI \d\d:\d\d not a WebUI bug R6/);
     assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 Jira \d\d:\d\d skipped$/);
     assert.match(html, /<span class="req" title="HAR file">R6<\/span>/);
@@ -153,8 +153,9 @@ describe('one bug', () => {
     assert.match(html, /href="https:\/\/jira.example.com\/browse\/KAZ-2"/);
     assert.match(page, /Field checks R1 Steps to reproduce ✓ detail of R1 .* R6 HAR file ✗ detail of R6/);
     assert.doesNotMatch(page, /R7 Project/, 'no field check for R7');
-    assert.match(page, /Related bugs KAZ-1 History/);
-    assert.match(page, /first check not understood · abc123def456 · table\.png \(image\) · \$0\.03 comment .* re-check VerdictError: not_understood without a comment .* re-check not understood · abc123def456 · \$0\.03 comment/);
+    assert.match(page, /Related bugs KAZ-1 Reasoning The answer names the page; the request is still missing\. History/, 'the latest finished check\'s reasoning');
+    assert.match(page, /first check not understood · abc123def456 · table\.png \(image\) · \$0\.03 reasoning Looked at Ports\.vue: .* comment .* re-check VerdictError: not_understood without a comment .* re-check not understood · abc123def456 · \$0\.03 reasoning The answer names the page; .* comment/);
+    assert.match(html, /<details><summary>reasoning<\/summary><p class="reasoning">Looked at Ports\.vue: the filter is cleared, but the request that fills the table is not in the report\.<\/p><\/details>/);
     assert.match(page, /Comment dry run · not posted @A Tester Which page shows the table\? Please attach a HAR of the page load\. Possibly related: KAZ-1 — the same empty table/);
     assert.match(html, /<p><s>Which page shows the table\?<\/s><\/p><p>Please attach a HAR/);
     assert.match(html, /<form class="request" method="post" action="\/requests"><input type="hidden" name="key" value="KAZ-2"><button class="btn primary">Check again<\/button>/);
@@ -199,7 +200,8 @@ describe('one bug', () => {
     const understood = text(bugPage(bugModel('KAZ-3'), ctx));
     assert.match(understood, /Result understood/);
     assert.match(understood, /The agent found the cause and understood the report: no comment\./);
-    assert.doesNotMatch(understood, /Related bugs|Checks \d/);
+    assert.match(understood, /Checks 1 Jira/, 'one check is said, not left blank');
+    assert.doesNotMatch(understood, /Related bugs|Checks \d · first/);
     const notWebui = text(bugPage(bugModel('RPG-6'), ctx));
     assert.match(notWebui, /Result not a WebUI bug Why The UI shows the counter ConfD returns\./);
     assert.match(notWebui, /History .* first check not a WebUI bug · The UI shows the counter ConfD returns\. · abc123def456/);

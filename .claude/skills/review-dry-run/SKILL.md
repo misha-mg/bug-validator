@@ -37,12 +37,13 @@ holds the comment, `b.history[i]` each check with its `outcome`, `webuiCommit`, 
   home tiles have them; the PRD's metric counts the first check of each bug.
 - **Comments to approve:** for each `not_understood` bug with a `dry_run` row, whether the
   questions are ones a QA engineer would answer in a minute, name the page and the control, and
-  ask for nothing the report already has. A good one is posted from the bug's page (Post to
+  ask for nothing the report already has; whether it reads warm and plain, and opens differently
+  from the last one (prd.md, Comment). A good one is posted from the bug's page (Post to
   Jira, a confirmation shows the text). A bad one is a prompt problem: the `tune-agent` skill.
 - **Not a WebUI bug:** the agent's reason, and whether it holds; the decision (move the bug,
   reassign, leave it) is made in Jira by a person, not by the service.
-- **Understood:** nothing is kept of the cause (prd.md, 2026-11-03), so a spot check means
-  running `npm run check -- KEY` and reading the reasoning.
+- **Understood:** the bug's page shows the agent's reasoning (the file, the cause); a spot check
+  is reading it against the code, and running `npm run check -- KEY` when it does not convince.
 - **Failed checks:** the error on the bug's page. A `VerdictError` is the agent breaking the
   contract (tune), a timeout or budget is the caps (measure), the surroundings' failures
   (`check_deferred`, `poll_failed` in the log) are not the bug's.

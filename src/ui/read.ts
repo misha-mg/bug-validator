@@ -37,6 +37,8 @@ export interface Run {
   /** 1: the check against the list (before 2026-11-03); 2: the check by code. */
   version: number;
   costUsd: number | null;
+  /** Where the agent looked, what it found, why it decided; empty for runs before 2026-11-04 and failed ones. */
+  reasoning: string;
 }
 
 /** A bug's row (`checks`) with its history (`runs`), as the pages show it. */
@@ -165,6 +167,7 @@ function readRuns(db: DatabaseSync, key?: string): Map<string, Run[]> {
       files: (json(row.files) as RunFile[] | null) ?? [],
       version: typeof row.version === 'number' ? row.version : 1,
       costUsd: typeof row.cost_usd === 'number' ? row.cost_usd : null,
+      reasoning: text(row.reasoning) ?? '',
     };
     const list = runs.get(row.key as string);
     if (list) list.push(run);

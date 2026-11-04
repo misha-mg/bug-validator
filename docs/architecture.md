@@ -96,10 +96,12 @@ pipeline: it never loads the agent, the clone or the Jira client.
      the Claude token.
 
    The wording is the agent's: no line format, until the PRD's wording rules. The agent's
-   reasoning, part of its JSON, stops here: `check` prints it, the service keeps nothing of it.
+   reasoning, part of its JSON, goes no further than the run's row: `check` prints it, the bug's
+   page shows it, Jira never sees it.
 5. Every check adds a row to `runs`: the verdict (outcome, reason, comment, related), the field
-   checks, the WebUI commit, the files (name, kind, note), the agent's model, cost, turns, time
-   and a hash of its instructions, and the check's version (1 the list, 2 the code). The bug's
+   checks, the WebUI commit, the files (name, kind, note), the agent's reasoning, its model,
+   cost, turns, time and a hash of its instructions, and the check's version (1 the list, 2 the
+   code). The bug's
    row takes the new state and fingerprint:
    - `understood` or `not_webui` → that status, no comment. A row with a comment id keeps the
      id and the text, and the comment in Jira is left as it is (prd.md, Open questions);
@@ -160,7 +162,8 @@ The schema's version is `PRAGMA user_version`; `Store` (the service, at start) r
 migrations it lacks, after a copy of the file (`<db>.before-v<N>-<time>`). The UI and `check`
 never migrate. Version 4 (the check by code) renames `complete` to `understood`, keeps the
 list's verdicts in the new shape (a comment means not understood), and adds the commit, the
-files and the version to `runs`; the runs before it are version 1.
+files and the version to `runs`; the runs before it are version 1. Version 5 adds the agent's
+reasoning to `runs`; the runs before it have none.
 
 ## Attachments
 
@@ -382,8 +385,9 @@ framing.
   absent at the first check, related bugs, how many checks. `?result=` narrows by outcome, error
   or skipped (chips), `?q=` searches keys, summaries and reporters (the form; Enter submits).
 - `/bugs/<KEY>` — the outcome, the reason (not a WebUI bug), the field checks, the related
-  bugs, every check with its outcome, commit, files, cost and the comment it recorded (a
-  version 1 check marked "list check"), and the comment as it is (or would be) in Jira, the
+  bugs, the latest check's reasoning (where the agent looked, what it found, why it decided),
+  every check with its outcome, commit, files, cost, its reasoning and the comment it recorded
+  (a version 1 check marked "list check"), and the comment as it is (or would be) in Jira, the
   mention by name, answered questions struck through. A comment Jira does not have gets Post to
   Jira: a confirmation with the comment, the check it came from and the reporter it notifies,
   then a post request (`?post` opens the confirmation without JavaScript). For a bug asked for

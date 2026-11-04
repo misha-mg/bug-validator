@@ -20,7 +20,8 @@ AGENT_MODEL=haiku npm run check -- KAZ-1234   # another model, same bug
 ```
 
 Read in this order: the **outcome**, then the **reasoning** (where it looked, what it found,
-why it decided), then the **comment**. The reasoning is for you; it is never recorded or posted.
+why it decided), then the **comment**. The reasoning is for you: the service records it with
+the check and the bug's page shows it; it is never posted.
 Two runs of the same bug can differ: run a doubtful one twice before changing anything.
 
 ## Many bugs: the agreement

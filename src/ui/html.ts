@@ -285,7 +285,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
       day = d;
       rows += `<tr class="day"><th class="label" colspan="7">${d}</th></tr>`;
     }
-    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${absentChips(b)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length > 1 ? b.history.length : ''}</td></tr>`;
+    rows += `<tr><td>${bugLink(b.key)} ${jiraLink(b.key, ctx)}</td><td class="summary"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="time">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td>${absentChips(b)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length || ''}</td></tr>`;
   }
   const main = `
 <div class="page-head"><h1>All bugs${narrowed.map((n) => ` · ${esc(n)}`).join('')}</h1><span class="stats">${bugsText(bugs.length)}</span></div>
@@ -331,7 +331,9 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
     rows.push(['Result', resultPill(b)]);
     if (result(b) === 'not_webui') rows.push(['Why', esc(b.reason)]);
     rows.push(['Checked', fmtTime(b.checkedAt)]);
+    // A bug with runs says how many, one included: a blank would read as none. Rows from before the service kept runs have none.
     if (b.history.length > 1) rows.push(['Checks', `${b.history.length} · first ${fmtTime(b.history[0]!.at)}`]);
+    else if (b.history.length === 1) rows.push(['Checks', '1']);
     if (b.error) rows.push(['Error', `<span class="err">${esc(b.error)}</span>`]);
   }
   if (request) rows.push(['Request', request.error ? `<span class="err">failed · ${esc(request.error)}</span>` : `waiting · ${ago(ctx.now, request.at)}`]);
@@ -377,14 +379,19 @@ function checks(b: BugView, ctx: PageContext): string {
     .map((c) => `<tr><th>${c.id}</th><td>${esc(REQUIREMENTS[c.id])}</td><td><span class="${c.passed ? 'ok' : 'err'}">${c.passed ? '✓' : '✗'}</span> <span class="muted">${esc(c.detail)}</span></td></tr>`)
     .join('')}</tbody></table>`;
   if (b.related.length) html += `<h3>Related bugs</h3><p>${b.related.map((k) => jiraLink(k, ctx, esc(k))).join(', ')}</p>`;
+  // The latest check's reasoning: where the agent looked, what it found, why it decided. For the
+  // person who reviews the dry run and tunes the instructions; never posted. Earlier checks keep
+  // theirs in the history.
+  const latest = b.history.findLast((run) => run.error === null);
+  if (latest?.reasoning) html += `<h3>Reasoning</h3><p class="reasoning">${esc(latest.reasoning)}</p>`;
   if (b.history.length) {
-    // Every check of the bug, oldest first: its outcome, what the agent read, and the comment it wrote.
+    // Every check of the bug, oldest first: its outcome, what the agent read, its reasoning and the comment it wrote.
     html += `<h3>History</h3><table class="history"><tbody>${b.history.map((run, i) => `<tr><td class="time">${fmtTime(run.at)}</td><td class="muted">${i === 0 ? 'first check' : 're-check'}</td><td>${runText(run, b.reporter)}</td></tr>`).join('')}</tbody></table>`;
   }
   return html;
 }
 
-/** One check of the history: its outcome or error, the commit and the files it read, its comment. */
+/** One check of the history: its outcome or error, the commit and the files it read, its reasoning, its comment. */
 function runText(run: Run, reporter: string | null): string {
   if (run.error) return `<span class="err">${esc(run.error)}</span>`;
   const parts = [run.outcome ? OUTCOME_TEXT[run.outcome] : 'no outcome'];
@@ -393,8 +400,9 @@ function runText(run: Run, reporter: string | null): string {
   if (run.webuiCommit) parts.push(`<code>${esc(run.webuiCommit.slice(0, 12))}</code>`);
   if (run.files.length) parts.push(run.files.map((f) => `${esc(f.filename)} (${f.kind === 'unread' ? `not read: ${esc(f.note)}` : esc(f.kind)})`).join(', '));
   if (run.costUsd) parts.push(`$${run.costUsd.toFixed(2)}`);
+  const reasoning = run.reasoning ? `<details><summary>reasoning</summary><p class="reasoning">${esc(run.reasoning)}</p></details>` : '';
   const comment = run.comment ? `<details><summary>comment</summary><div class="jira-comment">${commentHtml(run.comment, reporter)}</div></details>` : '';
-  return `<span class="muted">${parts.join(' · ')}</span>${comment}`;
+  return `<span class="muted">${parts.join(' · ')}</span>${reasoning}${comment}`;
 }
 
 function commentBlock(b: BugView): string {

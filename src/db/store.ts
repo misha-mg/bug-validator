@@ -40,6 +40,8 @@ export interface CheckResultRow {
   /** The WebUI commit the agent read, and the files it got of the attachments. */
   webuiCommit: string;
   files: unknown;
+  /** The agent's reasoning: where it looked, what it found, why it decided. Shown in the UI, never posted. */
+  reasoning: string;
   agent?: RunFigures;
 }
 
@@ -117,6 +119,10 @@ const MIGRATIONS: ((db: DatabaseSync) => void)[] = [
       const update = db.prepare(`UPDATE ${table} SET verdict = ? WHERE rowid = ?`);
       for (const row of rows) update.run(JSON.stringify(listVerdict(row.verdict)), row.rowid);
     }
+  },
+  // 5: a run keeps the agent's reasoning (prd.md, 2026-11-04); the runs before it have none.
+  (db) => {
+    db.exec('ALTER TABLE runs ADD COLUMN reasoning TEXT');
   },
 ];
 
@@ -387,7 +393,7 @@ export class Store {
   recordResult(issue: IssueRef, r: CheckResultRow): void {
     this.transaction(() => {
       const at = now();
-      this.addRun(issue.key, at, { fingerprint: r.fingerprint, fieldChecks: r.fieldChecks, verdict: r.verdict, comment: r.comment, webuiCommit: r.webuiCommit, files: r.files, agent: r.agent });
+      this.addRun(issue.key, at, { fingerprint: r.fingerprint, fieldChecks: r.fieldChecks, verdict: r.verdict, comment: r.comment, webuiCommit: r.webuiCommit, files: r.files, reasoning: r.reasoning, agent: r.agent });
       this.db
         .prepare(
           `INSERT INTO checks (key, issue_id, status, attempts, checked_at, summary, reporter, fingerprint, base_checks, verdict, comment, comment_id, error)
@@ -404,7 +410,7 @@ export class Store {
    * A check recorded in the history only, the bug's row left as it is: a dry run's check of a bug
    * whose comment is (or may be) in Jira, so the record of that comment stays true to Jira.
    */
-  recordRun(key: string, r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'webuiCommit' | 'files' | 'agent'>): void {
+  recordRun(key: string, r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'webuiCommit' | 'files' | 'reasoning' | 'agent'>): void {
     this.addRun(key, now(), r);
   }
 
@@ -510,15 +516,15 @@ export class Store {
   private addRun(
     key: string,
     at: string,
-    run: { fingerprint?: string; fieldChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string; webuiCommit?: string; files?: unknown; agent?: RunFigures | undefined },
+    run: { fingerprint?: string; fieldChecks?: unknown; verdict?: unknown; comment?: string | null; error?: string; webuiCommit?: string; files?: unknown; reasoning?: string; agent?: RunFigures | undefined },
   ): void {
     const json = (value: unknown): string | null => (value === undefined ? null : JSON.stringify(value));
     const a = run.agent;
     this.db
       .prepare(
-        'INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms, webui_commit, files, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (key, at, fingerprint, base_checks, verdict, comment, error, model, instructions, cost_usd, turns, agent_ms, webui_commit, files, version, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run(key, at, run.fingerprint ?? null, json(run.fieldChecks), json(run.verdict), run.comment ?? null, run.error ?? null, a?.model ?? null, a?.instructions ?? null, a?.costUsd ?? null, a?.turns ?? null, a?.durationMs ?? null, run.webuiCommit ?? null, json(run.files), CHECK_VERSION);
+      .run(key, at, run.fingerprint ?? null, json(run.fieldChecks), json(run.verdict), run.comment ?? null, run.error ?? null, a?.model ?? null, a?.instructions ?? null, a?.costUsd ?? null, a?.turns ?? null, a?.durationMs ?? null, run.webuiCommit ?? null, json(run.files), CHECK_VERSION, run.reasoning ?? null);
   }
 
   private transaction<T>(fn: () => T): T {

@@ -59,8 +59,9 @@ The check has to come to the bug, as a Jira comment.
 
 Non-goals: linking issues, changing fields, labels, assignee or status (the service only
 comments, and edits only its own comment); new Jira fields; any UI outside Jira for reporters
-(the web UI is for whoever runs the service); pointing a developer to the cause, or fixing the
-bug: the cause the agent finds is not kept; other projects or issue types; running on server 236
+(the web UI is for whoever runs the service); fixing the bug, or telling a developer the cause:
+the agent's reasoning is kept for whoever runs the service and never reaches Jira; other
+projects or issue types; running on server 236
 (the network monitor host): Claude must not run there.
 
 ## The check
@@ -103,6 +104,10 @@ Board types and products: `jira-reference.md`.
 - Only on a bug the agent does not understand. English, addressed to the reporter with an
   @mention, in the agent's own words: what it needs to understand the bug, as short questions.
   Short enough to read in ten seconds: long questions go unanswered (research report).
+- Warm and plain, the way a colleague writes: a greeting, a sentence that something is missing
+  to fix the bug, the questions as polite requests, worded differently from one comment to the
+  next so that no two open alike. No praise, no retelling of the bug, no filler: the warmth is
+  in the wording, not in the length.
 - A person approves every comment before it is posted (Post on request, Trigger). Posting
   without a person is rollout step 5.
 - The program enforces only that the reporter is mentioned and nobody else, and that every
@@ -185,7 +190,7 @@ Every WebUI bug counts, whoever reported it.
 3. **Offline measurement** of the new check: `check` on about 20 past bugs a developer has marked
    understandable or not. It measures the agreement (AC7), the cost and the time of a check, and
    sets the budget cap per check. `check` prints the agent's reasoning for tuning; the service
-   keeps none.
+   records it with every check, and the web UI shows it on the bug's page.
 4. **Dry run** with the new check, the process of step 2 unchanged: every comment posted by a
    person. Going on is a judgement call, no formal exit criterion.
 5. **Comments live** (`DRY_RUN=false`), from the personal account, once the comment's wording
@@ -343,6 +348,17 @@ Every WebUI bug counts, whoever reported it.
     does not give without privileges.
   - The budget per check is set after measuring on real bugs; the outcome is trusted once it
     agrees with a developer on about 20 past bugs (AC7).
+- 2026-11-04 — The agent's reasoning is recorded with every check and shown on the bug's page
+  (the owner, reviewing the first checks by code in the web UI). The page showed the outcome
+  and nothing of why, so reviewing the dry run and marking the bugs for AC7 meant running
+  `check` again by hand. The reasoning is for whoever runs the service: it never reaches Jira,
+  and no developer is pointed to the cause. Reversed: "nothing of an understood bug is kept but
+  the outcome" (2026-11-03).
+- 2026-11-04 — The comment is warm and plain (the owner): a greeting, a sentence that something
+  is missing to fix the bug, the questions as polite requests, worded differently each time so
+  that no two comments open alike; still no praise, no retelling of the bug, ten seconds to
+  read. A bare list of questions reads as a bot, and a bot is ignored. Reversed: "no greeting,
+  no closing line" in the agent's instructions (2026-11-04, the rework).
 
 ## Sources
 
