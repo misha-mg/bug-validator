@@ -98,8 +98,8 @@ export class JiraClient implements Jira {
 
   /**
    * Jira answers with a redirect to a signed media URL, which fetch follows; the Authorization
-   * header does not go along to the other origin, and the signed URL needs none. Read as a stream:
-   * the caller stops at its size limit.
+   * header does not go along to the other origin, and the signed URL needs none. Read as a stream;
+   * the caller checks Jira's declared size before asking.
    */
   async attachment(id: string): Promise<ReadableStream<Uint8Array>> {
     const path = `/attachment/content/${encodeURIComponent(id)}`;

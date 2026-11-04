@@ -18,7 +18,9 @@ const LOG_MAX_BYTES = 5 * 1024 * 1024;
  * `maintain`: a consistent copy of the database into BACKUP_DIR, the oldest beyond KEEP removed,
  * and the service's log cut down when it is too big. Safe while the service runs; a systemd timer
  * runs it daily (deploy/). The log is copied, then emptied in place: the unit appends to the same
- * file and never notices.
+ * file and never notices. A line appended between the copy and the cut would be in neither
+ * file, so the cut is made only when the file is still the size that was copied; otherwise the
+ * next day's run tries again.
  */
 export function maintain(): void {
   const e = parseEnv(MaintainEnv, process.env);
@@ -35,6 +37,10 @@ export function maintain(): void {
   if (existsSync(e.LOG_FILE) && statSync(e.LOG_FILE).size > LOG_MAX_BYTES) {
     const bytes = statSync(e.LOG_FILE).size;
     copyFileSync(e.LOG_FILE, `${e.LOG_FILE}.1`);
+    if (statSync(e.LOG_FILE).size !== bytes) {
+      log.warn('log_cut_skipped', { file: e.LOG_FILE, bytes, reason: 'the service wrote to it meanwhile' });
+      return;
+    }
     truncateSync(e.LOG_FILE, 0);
     log.info('log_cut', { file: e.LOG_FILE, bytes, keptAs: `${e.LOG_FILE}.1` });
   }

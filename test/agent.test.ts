@@ -29,7 +29,7 @@ describe('parseClaudeResult', () => {
     for (const m of ['Claude AI usage limit reached|1761000000', 'rate_limit_error', 'Invalid API key · Please run /login', 'OAuth token has expired', 'API Error: 500', 'connect ETIMEDOUT']) {
       assert.equal(troubleKind(m), 'service', m);
     }
-    for (const m of ['Prompt is too long', 'Reached max turns (25)', 'exceeded --max-budget-usd', 'claude exited with 1: unknown option']) {
+    for (const m of ['Prompt is too long', 'Reached max turns (25)', 'exceeded --max-budget-usd', 'claude exited with 1: unknown option', 'claude returned no structured output: see the network page, /login, bug RPG-6503 at line 503']) {
       assert.equal(troubleKind(m), 'run', m);
     }
   });

@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Attachment, Bug, RunFile } from '../domain/bug.ts';
 import { cleanHar } from '../domain/har.ts';
-import type { Jira } from '../jira/client.ts';
+import { type Jira, JiraError } from '../jira/client.ts';
 
 /** Over this nothing is downloaded: a dump or a recording the agent would not get through. */
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
@@ -41,7 +41,13 @@ export async function prepareFiles(jira: Pick<Jira, 'attachment'>, bug: Bug, dir
     }
     const name = `${a.id}-${a.filename.replace(/[^\w.-]+/g, '_')}`;
     const path = join(dir, name);
-    await pipeline(Readable.fromWeb(await jira.attachment(a.id)), createWriteStream(path));
+    try {
+      await pipeline(Readable.fromWeb(await jira.attachment(a.id)), createWriteStream(path));
+    } catch (err) {
+      // A stream cut short (a reset, the download's timeout) is a read that failed, like one Jira refused.
+      if (err instanceof JiraError) throw err;
+      throw new JiraError(`download of ${a.filename} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
     if (kind === 'image' || kind === 'text') {
       files.push({ filename: a.filename, path: name, kind, note: `${kb(a.size)} KB` });
     } else if (kind === 'har') {

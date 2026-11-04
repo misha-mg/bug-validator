@@ -24,6 +24,8 @@ const REQUEST_TICK_MS = 2000;
  */
 export async function run(): Promise<void> {
   const config = loadConfig();
+  // The lock first: the start checks fetch the clone, which two services must not do at once.
+  lock(`${config.dbFile}.lock`);
   const jira = new JiraClient(config.jira);
   const tool = new JiraTool(jira);
   await tool.listen();
@@ -31,7 +33,6 @@ export async function run(): Promise<void> {
   const claudeVersion = await agent.version();
   const clone = new Clone(config.webui.dir, config.webui.repoUrl);
   const webuiCommit = await clone.update(0);
-  lock(`${config.dbFile}.lock`);
   const deps: Deps = { config, jira, agent, clone, store: new Store(config.dbFile) };
   log.info('service_start', {
     dryRun: config.dryRun,
@@ -107,11 +108,11 @@ function lock(file: string): void {
   process.once('exit', () => rmSync(file, { force: true }));
 }
 
-/** The pid is a live process of this service's (a pid is reused after a reboot). */
+/** The pid is a live `run` of this service's (a pid is reused after a reboot: the UI or a check may have it). */
 function running(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
   try {
-    return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('main.ts');
+    return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('main.ts\0run');
   } catch {
     return false;
   }

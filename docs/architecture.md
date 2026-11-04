@@ -290,7 +290,9 @@ The UI calls the service *crashed* when its latest start ended in `fatal` (syste
 it), *silent* when nothing has been logged for two poll intervals plus the agent's timeout and two
 minutes. `/healthz` answers 200 while it runs and fewer than 5 polls in a row have failed, 503
 otherwise. The UI's own log (`ui_start`, `ui_stopping`, `ui_stopped`, `ui_error`) goes to
-`state/ui.log` under systemd; `maintain` logs `backup` and `log_cut` to the journal.
+`state/ui.log` under systemd; `maintain` logs `backup` and `log_cut` (or `log_cut_skipped`, when
+the service wrote to the log between the copy and the cut: the next day's run tries again) to
+the journal.
 
 ## Configuration
 

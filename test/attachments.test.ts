@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import type { Attachment } from '../src/domain/bug.ts';
+import { JiraError } from '../src/jira/client.ts';
 import { MAX_ATTACHMENT_BYTES, prepareFiles } from '../src/pipeline/attachments.ts';
 import { bug } from './fixtures.ts';
 
@@ -55,9 +56,11 @@ describe('prepareFiles', () => {
     assert.match(files[3]!.note, /over the 50 MB limit/);
     assert.deepEqual(readdirSync(dir), [], 'nothing unread is left behind');
   });
-  it('a download Jira fails is a failed read', async () => {
+  it('a download Jira fails, or one cut short, is a failed read of the surroundings\' kind', async () => {
     const dir = mkdtempSync(join(work, 'run-'));
-    const jira = { attachment: async () => Promise.reject(new Error('HTTP 503')) };
-    await assert.rejects(prepareFiles(jira, bug('KAZ-9025', { attachments: [att('9', 'x.png', 'image/png')] }), dir), /HTTP 503/);
+    const refused = { attachment: async () => Promise.reject(new JiraError('HTTP 503', 503)) };
+    await assert.rejects(prepareFiles(refused, bug('KAZ-9025', { attachments: [att('9', 'x.png', 'image/png')] }), dir), (err: JiraError) => err.status === 503);
+    const cut = { attachment: async () => new ReadableStream<Uint8Array>({ start: (c) => (c.enqueue(new Uint8Array([1])), c.error(new Error('The operation was aborted'))) }) };
+    await assert.rejects(prepareFiles(cut, bug('KAZ-9025', { attachments: [att('9', 'x.png', 'image/png')] }), dir), (err: JiraError) => err.name === 'JiraError' && err.environmental && /download of x\.png failed: The operation was aborted/.test(err.message));
   });
 });

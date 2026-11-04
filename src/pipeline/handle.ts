@@ -96,7 +96,7 @@ export async function handle(deps: Deps, bug: IssueRef, row: BugRow | null, sign
     if (outcome !== 'not_understood') {
       // Done: no comment, never checked again. A comment already in Jira is left as it is, and
       // the row keeps its text and id, so the record of Jira stays true.
-      deps.store.recordResult(bug, { ...record, status: outcome, comment: commentId === null ? null : previousComment, commentId: null });
+      deps.store.recordResult(bug, { ...record, status: outcome, comment: commentId === null ? null : previousComment, commentId });
       log.info(`bug_${outcome}`, { ...fields, reason: out.verdict.reason, commentId });
       return true;
     }

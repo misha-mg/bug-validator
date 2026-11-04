@@ -329,6 +329,19 @@ describe('a re-check', () => {
     d.jira.changes[KEY] = { ...d.jira.changes[KEY], description: 'changed again' };
     assert.deepEqual(await poll(d), summary({}), 'done');
   });
+  it('a bug understood after its comment was found in Jira records that comment and its id', async () => {
+    const d = deps(new FakeAgent(needsHar, understood), false);
+    const addComment = d.jira.addComment.bind(d.jira);
+    d.jira.addComment = async (key, body) => {
+      await addComment(key, body); // it reached Jira, the answer did not come back
+      throw new JiraError('request failed: fetch failed (socket hang up)');
+    };
+    await assert.rejects(poll(d), JiraError);
+    d.jira.addComment = addComment;
+    assert.equal((await poll(d)).checked, 1);
+    assert.deepEqual({ ...row(d), fingerprint: undefined }, { status: 'understood', fingerprint: undefined, comment: needsHar.comment, commentId: '1', runs: 2 });
+    assert.deepEqual(d.jira.edited, []);
+  });
   it('a failed re-check leaves the comment and its fingerprint as they were and is tried again, up to 5 checks', async () => {
     const d = deps(new FakeAgent(needsHar, { ...needsHar, comment: '' }));
     await poll(d);

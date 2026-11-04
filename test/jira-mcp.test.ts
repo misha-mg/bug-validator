@@ -36,6 +36,10 @@ describe('JiraTool', () => {
     assert.deepEqual(await call('ping'), { jsonrpc: '2.0', id: 1, result: {} });
     assert.equal((await fetch(tool.url, { headers: { Authorization: `Bearer ${secret}` } })).status, 405, 'no server-sent stream');
     assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
+    assert.equal((await post(null)).status, 400, 'a body that is not a request');
+    const cyrillic = await call('tools/call', { name: 'search_issues', arguments: { jql: 'summary ~ "Статистика фильтров"' } });
+    assert.ok(cyrillic.result, 'a non-ASCII query arrives whole');
+    assert.equal(jqls.at(-1), 'project IN (KAZ, RPG) AND (summary ~ "Статистика фильтров")');
   });
   it('speaks MCP: initialize, the two tools, a call', async () => {
     const init = await call('initialize', { protocolVersion: '2025-06-18' });

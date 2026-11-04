@@ -59,7 +59,14 @@ export class JiraTool {
 
   constructor(jira: Pick<Jira, 'search' | 'getIssue'>) {
     this.jira = jira;
-    this.server = createServer((req, res) => void this.handle(req, res));
+    this.server = createServer((req, res) => {
+      // A body cut short (the run killed mid-request) or a surprise must not become an unhandled
+      // rejection that ends the service.
+      this.handle(req, res).catch((err: unknown) => {
+        if (!res.headersSent) end(res, 500, err instanceof Error ? err.message.slice(0, 200) : 'error');
+        else res.destroy();
+      });
+    });
   }
 
   /** Listens on loopback at a port of its own. */
@@ -103,7 +110,8 @@ export class JiraTool {
     if (req.method === 'DELETE') return end(res, 200, '');
     if (req.method !== 'POST') return end(res, 405, 'POST only');
     let body = '';
-    for await (const chunk of req) {
+    req.setEncoding('utf8');
+    for await (const chunk of req as AsyncIterable<string>) {
       body += chunk;
       if (body.length > MAX_BODY) return end(res, 413, 'too large');
     }
@@ -113,6 +121,7 @@ export class JiraTool {
     } catch {
       return end(res, 400, 'not JSON');
     }
+    if (typeof message !== 'object' || message === null || typeof message.method !== 'string') return end(res, 400, 'not a request');
     if (message.id === undefined) return end(res, 202, ''); // a notification (notifications/initialized) needs no answer
     const answer = await this.answer(message, run);
     res.writeHead(200, { 'Content-Type': 'application/json' });
