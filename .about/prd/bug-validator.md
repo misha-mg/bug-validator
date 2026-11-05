@@ -383,6 +383,14 @@ Every WebUI bug counts, whoever reported it.
   the other outcomes ask nothing of anyone. A webhook over a bot token: one message to one
   channel needs no scopes, no channel id and no app to keep; buttons in Slack, if ever wanted,
   would need the token.
+- 2026-11-05 — A bug's row follows its report while the bug is in Created: every poll brings the
+  summary, the reporter and the field checks up to date, whatever the row's status, and the
+  console shows those (the owner, after setting Affects versions on twenty understood bugs and
+  finding the console still calling it empty). A bug understood is never checked again, so the
+  row kept the field checks of its last check for good, and the Bugs list showed the first
+  check's. The first check's field checks stay in the history and are what the metric counts; a
+  re-check is still planned against the fingerprint of the last check. The poll reads every
+  report anyway, so this costs no request and no agent run.
 
 ## Sources
 

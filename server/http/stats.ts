@@ -135,18 +135,18 @@ export function needsAttention(bugs: BugView[]): BugView[] {
 }
 
 /**
- * Over bugs re-checked after their comment: the field checks the first check found failed, and
- * how many of them the last check found passed — what arrived while the bug was still in Created.
+ * Over bugs with a comment: the field checks the first check found failed, and how many of them
+ * the report passes now — what arrived while the bug was still in Created.
  */
 export function fieldChecksPassedAfterComment(bugs: BugView[]): Share {
   const share = { count: 0, total: 0 }
   for (const bug of bugs) {
-    const finished = bug.history.filter((run) => run.error === null)
-    if (!bug.comment || finished.length < 2) continue
-    const last = finished.at(-1)!
-    for (const check of finished[0]!.fieldChecks.filter((c) => !c.passed)) {
+    const first = firstRun(bug)
+    if (!bug.comment || !first) continue
+    // The row follows the report while the bug is in Created, whether or not it was checked again.
+    for (const check of first.fieldChecks.filter((c) => !c.passed)) {
       share.total += 1
-      if (last.fieldChecks.some((c) => c.id === check.id && c.passed)) share.count += 1
+      if (bug.fieldChecks.some((c) => c.id === check.id && c.passed)) share.count += 1
     }
   }
   return share

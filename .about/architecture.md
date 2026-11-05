@@ -76,7 +76,11 @@ pipeline: it never loads the agent, the clone or the Jira client.
 
 1. `poll` runs the trigger JQL and reads every bug's report fields, reporter, comments and times
    in the same request. A row whose issue id comes back under another key (the bug moved between
-   KAZ and RPG) takes the new key.
+   KAZ and RPG) takes the new key. Then the row of every bug checked before follows its report:
+   the summary, the reporter and the field checks are brought up to date, whatever the row's
+   status, so the console shows the report as it is; a field check that passes or fails anew is
+   `report_changed` in the log. The fingerprint stays (a re-check is planned against it), and
+   each check keeps the field checks it got in the history.
 2. `plan` picks the bugs due (constants in `plan.ts`):
    - a first check for a bug with no row once it is 30 minutes old, and for a `retry` row;
    - live, a first check for a `posting` row at once (step 5 finds its comment in Jira);
@@ -294,6 +298,7 @@ its Activity frame from every event but `poll` and `check_start`, one line each.
 | `poll_failed` | error, ms, requests (when the waiting loop's requests failed) | last poll failed, error, failures in a row |
 | `first_start` | skipped (the keys) | |
 | `key_changed` | from, to | |
+| `report_changed` | key, passed, failed (requirement ids that changed since the row last saw the report) | |
 | `webui_fetched` | from, to (commits) | WebUI commit |
 | `check_start` | key, recheck, requested | liveness, checking |
 | `bug_understood`, `bug_not_webui`, `comment_dry_run`, `comment_posted`, `comment_edited` | key, recheck, requested, outcome, failedFields, related, webuiCommit, files, agentMs, turns, costUsd, reason, comment, commentId; `kept` (dry run, a comment in Jira left as recorded), `changed` (edit); a post by hand: key, `byHand`, commentId, comment | |
@@ -426,18 +431,20 @@ The masthead names the three pages as pipeline-ui's does: Cockpit, Bugs, Statist
   understood and not a WebUI bug together, error in rust, skipped apart), the search field (keys,
   summaries, reporters; Enter submits, the form is a GET: `?result=`, `?q=`), Clear once narrowed.
   Then every bug by the day of its last check, latest first: the Jira arrow, the summary on one
-  line, the clock, the result as a pill, the field checks absent at the first check, related bugs,
+  line, the clock, the result as a pill, the field checks the report fails now, related bugs,
   how many checks.
 - `/stats` **Statistics** — a period (`?period=today|7d|30d|all`, 30 days by default), counted by
   the bugs first checked in it: a strip of six (checked, understood, not understood, not a WebUI
   bug, failed, the agent's cost with the median per check); the field checks failed most often at
-  first checks as bars; the field checks passed after the comment (over bugs re-checked after it);
+  first checks as bars; the field checks passed after the comment (the first check's failures the
+  report passes now, over bugs with a comment);
   bugs checked per day as stacked columns by their result now, over the period's days (all time:
   since the first check, 90 days at most), with a tooltip per day.
 - `/bugs/<KEY>` — the facts (reporter, result, checked, checks, related bugs as pills, the
   request or the post waiting or failed, Jira), a reason block under them when the check failed,
   the post was interrupted, or the bug is not the WebUI's; the actions, the one to press in slate
-  (Post to Jira when a comment waits, else Check again); the field checks; the latest check's
+  (Post to Jira when a comment waits, else Check again); the field checks of the report as last
+  read; the latest check's
   reasoning (where the agent looked, what it found, why it decided; never posted); every check with
   its outcome, commit, files, cost, its reasoning and the comment it recorded (a version 1 check
   marked "list check");

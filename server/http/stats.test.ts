@@ -119,8 +119,8 @@ describe('stats', () => {
       ['KAZ-9'],
     )
   })
-  it('field checks passed after the comment: failed at the first check, passed at the last, over re-checked bugs', () => {
-    // KAZ-2 was re-checked and one of its three failed field checks passed since; KAZ-5 was checked once.
-    assert.deepEqual(fieldChecksPassedAfterComment(bugs), { count: 1, total: 3 })
+  it('field checks passed after the comment: failed at the first check, passed by the report now, over commented bugs', () => {
+    // KAZ-2: one of the three failed at its first check passes now; KAZ-5: its one still fails.
+    assert.deepEqual(fieldChecksPassedAfterComment(bugs), { count: 1, total: 4 })
   })
 })

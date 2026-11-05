@@ -166,6 +166,52 @@ describe('Store', () => {
     s.recordResult(ref('KAZ-6'), { ...result, status: 'commented', fingerprint: 'f2', comment: 'v2', commentId: '42' })
     assert.deepEqual(s.rows(['KAZ-6']).get('KAZ-6'), { status: 'commented', fingerprint: 'f2', comment: 'v2', commentId: '42', runs: 3 })
   })
+  it('refresh: the row follows the report (summary, reporter, field checks), the state and the fingerprint stay', () => {
+    const file = join(tempDir(), 'refresh.sqlite')
+    const s = new Store(file)
+    const r4 = (passed: boolean) => ({ id: 'R4', passed, detail: passed ? 'Affects versions: 5.11' : 'Affects versions is empty' })
+    const r6 = (passed: boolean) => ({ id: 'R6', passed, detail: passed ? 'HAR attached' : 'no .har attachment' })
+    s.recordResult(ref('KAZ-7'), { ...result, fieldChecks: [r4(false), r6(true)] })
+    s.recordFailure(ref('KAZ-8'), 'agent run timed out', 3)
+    s.bootstrap([ref('KAZ-9')])
+    const seen = (key: string, checks: ReturnType<typeof r4>[], summary = 'Ports table is empty') => ({
+      key,
+      summary,
+      reporter: 'A Tester',
+      fieldChecks: checks,
+    })
+    assert.deepEqual(
+      s.refresh([seen('KAZ-7', [r4(false), r6(true)]), seen('KAZ-8', [r4(true)]), seen('KAZ-9', [r4(true)])]),
+      [],
+      'nothing changed',
+    )
+    assert.deepEqual(s.refresh([seen('KAZ-7', [r4(true), r6(false)], 'Ports table is empty (5.11)')]), [
+      { key: 'KAZ-7', passed: ['R4'], failed: ['R6'] },
+    ])
+    assert.deepEqual(
+      s.refresh([seen('KAZ-7', [r4(true), r6(false)], 'Ports table stays empty')]),
+      [],
+      'a new summary alone is written in silence',
+    )
+    s.close()
+    const db = new DatabaseSync(file)
+    const row = db.prepare('SELECT status, summary, fingerprint, base_checks AS checks FROM checks WHERE key = ?').get('KAZ-7')
+    assert.deepEqual(
+      { ...row },
+      { status: 'understood', summary: 'Ports table stays empty', fingerprint: 'f1', checks: JSON.stringify([r4(true), r6(false)]) },
+    )
+    const never = db
+      .prepare('SELECT status, summary, base_checks AS checks FROM checks WHERE key IN (?, ?) ORDER BY key')
+      .all('KAZ-8', 'KAZ-9')
+    assert.deepEqual(
+      never.map((n) => ({ ...n })),
+      [
+        { status: 'retry', summary: null, checks: null },
+        { status: 'skipped', summary: null, checks: null },
+      ],
+      'a row never checked has nothing to follow',
+    )
+  })
   it('a bug moved to the other project keeps its row and history under the new key; an old row gets its id', () => {
     const s = new Store(':memory:')
     s.recordResult(ref('RPG-6223'), result)

@@ -63,9 +63,10 @@ const FILE_TOOLS = ['Read', 'Grep', 'Glob']
 // What claude says when the trouble is the Claude service, not the run: auth, limits, overload,
 // the API or the network — in the forms its own messages take, since a message may quote the
 // bug's text, and "network" or "/login" in a report must not spare the bug. A prompt too long
-// for the model is the bug's.
+// for the model is the bug's. "bwrap: execvp" is claude gone from the machine (an update in
+// progress): the sandbox's, not the bug's.
 const SERVICE_TROUBLE =
-  /rate.?limit|usage limit|limit reached|overloaded|api error|(?:status|error)[: ]+5\d\d\b|\b5\d\d (?:internal|bad gateway|service unavailable|gateway)|authenticat|unauthori[sz]ed|invalid api key|oauth token|token.{0,20}(?:expired|invalid|revoked)|run \/login|credit balance|quota exceeded|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|network error/i
+  /rate.?limit|usage limit|limit reached|overloaded|api error|(?:status|error)[: ]+5\d\d\b|\b5\d\d (?:internal|bad gateway|service unavailable|gateway)|authenticat|unauthori[sz]ed|invalid api key|oauth token|token.{0,20}(?:expired|invalid|revoked)|run \/login|credit balance|quota exceeded|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|network error|bwrap: execvp/i
 const RUN_TROUBLE = /prompt is too long|max.?tokens|max.?turns|budget/i
 
 /** Which kind of failure claude's message describes. */

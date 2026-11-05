@@ -27,9 +27,24 @@ export interface BugRow {
   runs: number
 }
 
+/** The report as a poll read it: what a checked bug's row follows while the bug is in Created. */
+export interface ReportSeen {
+  key: string
+  summary: string
+  reporter: string | null
+  fieldChecks: { id: string; passed: boolean }[]
+}
+
+/** A report whose field checks changed since the row last saw it: the ids now passing and now failing. */
+export interface ReportChange {
+  key: string
+  passed: string[]
+  failed: string[]
+}
+
 export interface CheckResultRow {
   status: Extract<CheckStatus, 'understood' | 'not_webui' | 'dry_run' | 'posting' | 'commented'>
-  /** The bug's summary and reporter at the check, for the UI. */
+  /** The bug's summary and reporter at the check, for the UI; `refresh` keeps them current afterwards. */
   summary: string
   reporter: string | null
   fingerprint: string
@@ -145,6 +160,16 @@ function listVerdict(text: string): unknown {
 }
 
 const now = (): string => new Date().toISOString()
+
+/** The field checks a row holds; a broken value reads as none, so nothing is reported changed against it. */
+function parseChecks(text: string): { id: string; passed: boolean }[] {
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return Array.isArray(parsed) ? parsed.filter((c) => typeof c?.id === 'string' && typeof c?.passed === 'boolean') : []
+  } catch {
+    return []
+  }
+}
 
 /** What the agent spent on a check: stored with its run. */
 export interface RunFigures {
@@ -446,14 +471,51 @@ export class Store {
   }
 
   /**
-   * A check recorded in the history only, the bug's row left as it is: a dry run's check of a bug
-   * whose comment is (or may be) in Jira, so the record of that comment stays true to Jira.
+   * A check recorded in the history only, the bug's state left as it is: a dry run's check of a
+   * bug whose comment is (or may be) in Jira, so the record of that comment stays true to Jira.
+   * The row's summary, reporter and field checks follow the report, as `refresh` keeps them.
    */
   recordRun(
     key: string,
-    r: Pick<CheckResultRow, 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'webuiCommit' | 'files' | 'reasoning' | 'agent'>,
+    r: Pick<
+      CheckResultRow,
+      'summary' | 'reporter' | 'fingerprint' | 'fieldChecks' | 'verdict' | 'comment' | 'webuiCommit' | 'files' | 'reasoning' | 'agent'
+    >,
   ): void {
-    this.addRun(key, now(), r)
+    this.transaction(() => {
+      this.addRun(key, now(), r)
+      this.db
+        .prepare('UPDATE checks SET summary = ?, reporter = ?, base_checks = ? WHERE key = ?')
+        .run(r.summary, r.reporter, JSON.stringify(r.fieldChecks), key)
+    })
+  }
+
+  /**
+   * Brings the rows of checked bugs up to date with their reports as a poll read them: the
+   * summary, the reporter and the field checks, so the console shows the report as it is, not as
+   * the last check saw it. The fingerprint stays: it is what a re-check is planned against, and
+   * each check keeps the field checks it got in the history. A row never checked (`skipped`,
+   * `retry`, `failed`) has nothing to follow. Returns the bugs whose field checks changed.
+   */
+  refresh(reports: ReportSeen[]): ReportChange[] {
+    const changes: ReportChange[] = []
+    if (reports.length === 0) return changes
+    const read = this.db.prepare('SELECT summary, reporter, base_checks AS checks FROM checks WHERE key = ? AND base_checks IS NOT NULL')
+    const write = this.db.prepare('UPDATE checks SET summary = ?, reporter = ?, base_checks = ? WHERE key = ?')
+    this.transaction(() => {
+      for (const report of reports) {
+        const row = read.get(report.key) as { summary: string | null; reporter: string | null; checks: string } | undefined
+        if (!row) continue
+        const checks = JSON.stringify(report.fieldChecks)
+        if (row.summary === report.summary && row.reporter === report.reporter && row.checks === checks) continue
+        write.run(report.summary, report.reporter, checks, report.key)
+        const before = new Map(parseChecks(row.checks).map((c) => [c.id, c.passed]))
+        const passed = report.fieldChecks.filter((c) => c.passed && before.get(c.id) === false).map((c) => c.id)
+        const failed = report.fieldChecks.filter((c) => !c.passed && before.get(c.id) === true).map((c) => c.id)
+        if (passed.length > 0 || failed.length > 0) changes.push({ key: report.key, passed, failed })
+      }
+    })
+    return changes
   }
 
   /** The comment is in Jira: `posting` → `commented`. `comment`: the text found there, when it was adopted. */
