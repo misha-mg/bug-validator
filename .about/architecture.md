@@ -504,6 +504,16 @@ once past 5 MB, copied to `service.log.1` and emptied in place (the UI reads bot
 again when missing.
 
 Claude auth: `claude setup-token` once (opens the browser), paste the token into `.env`, restart.
+
+**Slack.** At api.slack.com/apps: Create New App, Pick features, the bot scope `incoming-webhook`
+(nothing else), install it to the workspace (an admin may have to approve). Then Features →
+Incoming Webhooks → Add New Webhook to Workspace, pick the channel, copy the URL into `.env` as
+`VALIDATOR_SLACK_WEBHOOK_URL` with `VALIDATOR_CONSOLE_URL` (the console as a person opens it),
+restart. `service_start` then says `slack: true`; a message comes with the next check that ends
+not understood, or on a request from the console. `VALIDATOR_SLACK_NOTIFICATIONS=false` turns the
+messages off, the URL kept. The URL is a secret: anyone holding it can post to the channel; to
+replace it, delete the webhook on that page and add a new one.
+
 **Going live:** `VALIDATOR_DRY_RUN=false` in `.env`, `systemctl --user restart bug-validator`.
 
 **Moving to another machine.** The rows are what keeps a bug from being checked as new; a missing
