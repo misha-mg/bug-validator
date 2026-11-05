@@ -23,6 +23,27 @@ const FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/
 /** A posted form is small; anything bigger is not one. */
 const MAX_BODY = 4096
 
+/**
+ * Where a POST sends the browser: the page its form was on (the Referer, when it is a page of
+ * this UI), without the one-off parameters that page may carry (an old toast, the post
+ * confirmation); the Cockpit when there is none. A check asked for from the Bugs list or the
+ * masthead leaves the person where they were.
+ */
+export function backTo(req: Pick<IncomingMessage, 'headers'>): string {
+  const referer = req.headers.referer
+  if (!referer) return '/'
+  let url: URL
+  try {
+    url = new URL(referer)
+  } catch {
+    return '/'
+  }
+  if (url.host !== req.headers.host) return '/'
+  url.searchParams.delete('toast')
+  url.searchParams.delete('post')
+  return url.pathname + url.search
+}
+
 /** What a person can ask the service for: the form's path → the request it writes; returns the bug's key and what the toast says. */
 const ACTIONS: Record<string, (dbFile: string, form: URLSearchParams) => { key: string; done: string }> = {
   '/requests': (dbFile, form) => {
@@ -111,12 +132,12 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
       return send(res, 403, 'text/html', errorPage(403, 'A check or a post can be asked for from the UI’s own pages only.', ctx))
     const form = new URLSearchParams(await readBody(req, MAX_BODY))
     try {
-      const { key, done } = action(config.dbFile, form)
-      // The bug's page, with the notification in the URL: app.js shows it as a toast, a page without JavaScript as a notice.
-      res.writeHead(303, {
-        ...SECURITY_HEADERS,
-        Location: `/bugs/${key}?${new URLSearchParams({ toast: toastParam({ kind: 'success', text: done }) })}`,
-      })
+      const { done } = action(config.dbFile, form)
+      // Back to the page the form was on, with the notification in the URL: app.js shows it as a
+      // toast, a page without JavaScript as a notice.
+      const back = new URL(backTo(req), 'http://x')
+      back.searchParams.set('toast', toastParam({ kind: 'success', text: done }))
+      res.writeHead(303, { ...SECURITY_HEADERS, Location: back.pathname + back.search })
       res.end()
     } catch (err) {
       send(res, 400, 'text/html', errorPage(400, err instanceof Error ? err.message : String(err), ctx))

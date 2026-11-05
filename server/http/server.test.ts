@@ -82,17 +82,17 @@ describe('server', () => {
     assert.equal(home.headers.get('x-content-type-options'), 'nosniff')
   })
   it('takes a check request and shows it on the bug page', async () => {
-    const post = (key: string) =>
+    const post = (key: string, referer?: string) =>
       fetch(`${base}/requests`, {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        headers: { 'content-type': 'application/x-www-form-urlencoded', ...(referer ? { referer } : {}) },
         body: new URLSearchParams({ key }),
         redirect: 'manual',
       })
-    const res = await post('https://jira.example.com/browse/RPG-4')
+    const res = await post('https://jira.example.com/browse/RPG-4', `${base}/bugs?result=all&toast=success%3Aold`)
     assert.equal(res.status, 303)
     const location = res.headers.get('location') ?? ''
-    assert.match(location, /^\/bugs\/RPG-4\?toast=success%3ACheck\+of\+RPG-4\+requested/, 'the bug’s page, with the toast')
+    assert.match(location, /^\/bugs\?result=all&toast=success%3ACheck\+of\+RPG-4\+requested/, 'the page asked from, with the toast')
     assert.match(
       (await get(location)).body,
       /<div class="notice calm" data-toast="success">Check of RPG-4 requested: the service takes it before its next poll<\/div>/,
@@ -103,7 +103,12 @@ describe('server', () => {
     )
     assert.match((await get('/bugs/RPG-4')).body, /Request<\/dt><dd>waiting · just now/)
     assert.match((await get('/')).body, /RPG-4<\/a><\/td><td class="num dim">just now/)
-    assert.match((await post('KAZ-9')).headers.get('location') ?? '', /^\/bugs\/KAZ-9\?toast=/)
+    assert.match((await post('KAZ-9')).headers.get('location') ?? '', /^\/\?toast=/, 'no referer: the Cockpit')
+    assert.match(
+      (await post('KAZ-9', 'https://evil.example/bugs')).headers.get('location') ?? '',
+      /^\/\?toast=/,
+      'another site: the Cockpit',
+    )
     const page = await get('/bugs/KAZ-9')
     assert.equal(page.status, 200, 'a page for a bug not checked yet')
     assert.match(page.body, /Not checked yet/)
@@ -115,7 +120,7 @@ describe('server', () => {
     const post = (key: string, checked: string) =>
       fetch(`${base}/posts`, {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        headers: { 'content-type': 'application/x-www-form-urlencoded', referer: `${base}/bugs/${key}?post` },
         body: new URLSearchParams({ key, checked }),
         redirect: 'manual',
       })
@@ -126,7 +131,11 @@ describe('server', () => {
     assert.equal((await post('KAZ-3', readBug(state.dbFile, 'KAZ-3')!.checkedAt.toISOString())).status, 400, 'no comment to post')
     const res = await post('KAZ-5', readBug(state.dbFile, 'KAZ-5')!.checkedAt.toISOString())
     assert.equal(res.status, 303)
-    assert.match(res.headers.get('location') ?? '', /^\/bugs\/KAZ-5\?toast=success%3APost\+of\+the\+comment\+on\+KAZ-5\+requested/)
+    assert.match(
+      res.headers.get('location') ?? '',
+      /^\/bugs\/KAZ-5\?toast=success%3APost\+of\+the\+comment\+on\+KAZ-5\+requested/,
+      'the bug’s page without the confirmation it was asked from',
+    )
     assert.deepEqual(
       readPosts(state.dbFile).map((p) => [p.key, p.error]),
       [['KAZ-5', null]],

@@ -260,6 +260,15 @@ describe('bugs', () => {
     assert.deepEqual(keys(html), ['KAZ-2', 'RPG-4', 'KAZ-3', 'RPG-6', 'KAZ-5', 'KAZ-1'])
     assert.equal((html.match(/<tr class="day">/g) ?? []).length, 6)
     assert.match(html, /<table class="wide bugs">/)
+    assert.equal(
+      (html.match(/<form class="inline" method="post" action="\/requests">/g) ?? []).length,
+      6,
+      'a Run again button on every row',
+    )
+    assert.match(
+      html,
+      /<input type="hidden" name="key" value="KAZ-2"><button class="btn tiny icon" title="Run again" aria-label="Run KAZ-2 again">↻<\/button>/,
+    )
     const page = text(html)
     assert.match(page, /All bugs 6 bugs/)
     assert.match(
@@ -269,7 +278,7 @@ describe('bugs', () => {
     )
     assert.match(page, /KAZ-3 ↗ Login page freezes \d\d:\d\d understood 1 /, 'one check is counted')
     assert.match(page, /RPG-6 ↗ Port counter lags behind the CLI \d\d:\d\d not a WebUI bug R6/)
-    assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 ↗ \d\d:\d\d skipped$/)
+    assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 ↗ \d\d:\d\d skipped ↻$/)
     assert.match(
       html,
       /<td class="jira"><a href="https:\/\/jira.example.com\/browse\/KAZ-2" target="_blank" rel="noopener" title="KAZ-2 in Jira">↗<\/a><\/td>/,
