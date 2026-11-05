@@ -111,8 +111,9 @@ Board types and products: `jira-reference.md`.
 - A person approves every comment before it is posted (Post on request, Trigger). Posting
   without a person is rollout step 5.
 - Every check that ends not understood is told to Slack, when the service has a webhook: the
-  bug, what became of the comment (waiting for approval in a dry run; posted, edited or
-  unchanged live), links to the console and Jira, the comment quoted. An understood bug, one
+  bug linked to Jira, what became of the comment (waiting for approval in a dry run; posted,
+  edited or unchanged live), what the report lacks by the field checks, the comment proposed,
+  a link to the bug's page in the console. An understood bug, one
   that is not a WebUI bug, a failed check and a post by hand send nothing. A message that
   fails costs the check nothing. A switch (`VALIDATOR_SLACK_NOTIFICATIONS=false`) turns the
   messages off.

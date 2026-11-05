@@ -625,6 +625,7 @@ describe('the notifier', () => {
         recheck: false,
         requested: false,
         comment: 'waiting',
+        missing: ['R1', 'R2', 'R3', 'R6'],
         text: needsHar.comment,
       },
     ])

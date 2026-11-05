@@ -13,25 +13,36 @@ const notice: Notice = {
   recheck: false,
   requested: false,
   comment: 'waiting',
+  missing: ['R1', 'R6'],
   text: '[~accountid:712020:abc]\nHi Ann,\nCould you attach a HAR of the page load?',
 }
 
 describe('message', () => {
-  it('names the bug, what happened, who reported it, where to look, and quotes the comment without its mention line', () => {
+  it('the bug linked to Jira and its reporter, a blank line, the outcome and what the report lacks, then the comment proposed', () => {
     assert.equal(
       message(notice, links),
       [
-        '*KAZ-9021* Ports page &lt;empty&gt; &amp; slow',
-        'check: not understood, the comment waits for your approval',
-        'reported by Ann Reporter · <http://validator.lan:8081/bugs/KAZ-9021|console> · <https://jira.example.com/browse/KAZ-9021|Jira>',
+        '*<https://jira.example.com/browse/KAZ-9021|KAZ-9021>* Ports page &lt;empty&gt; &amp; slow',
+        'reported by Ann Reporter · <http://validator.lan:8081/bugs/KAZ-9021|console>',
+        '',
+        '— *not understood* · check · the comment waits for your approval',
+        'Not in the report: Steps to reproduce, HAR file',
+        '',
+        'Proposed comment:',
         '> Hi Ann,',
         '> Could you attach a HAR of the page load?',
       ].join('\n'),
     )
   })
-  it('says a re-check, a request and each state of the comment; links to Jira alone without a console address', () => {
-    const live = message({ ...notice, recheck: true, requested: true, comment: 'edited', reporter: null }, { ...links, consoleUrl: null })
-    assert.match(live, /\nrequested re-check: not understood, comment edited\n<https:\/\/jira.example.com\/browse\/KAZ-9021\|Jira>\n/)
+  it('says a re-check, a request and each state of the comment; no reporter line without a console address or a reporter', () => {
+    const live = message(
+      { ...notice, recheck: true, requested: true, comment: 'edited', reporter: null, missing: [] },
+      { ...links, consoleUrl: null },
+    )
+    assert.match(
+      live,
+      /^\*<[^>]+\|KAZ-9021>\* Ports[^\n]*\n\n— \*not understood\* · requested re-check · comment edited\n\nProposed comment:\n> Hi Ann,/,
+    )
     assert.match(message({ ...notice, comment: 'kept' }, links), /a new comment recorded, the one in Jira kept/)
     assert.match(message({ ...notice, comment: 'posted' }, links), /comment posted/)
     assert.match(message({ ...notice, comment: 'unchanged' }, links), /comment unchanged/)
@@ -39,7 +50,7 @@ describe('message', () => {
   it('cuts a long comment and leaves out an empty one', () => {
     const long = message({ ...notice, text: `[~accountid:x]\n${'a'.repeat(2000)}` }, links)
     assert.ok(long.endsWith(`> ${'a'.repeat(1200)}…`))
-    assert.ok(!message({ ...notice, text: '[~accountid:x]\n' }, links).includes('\n> '))
+    assert.ok(!message({ ...notice, text: '[~accountid:x]\n' }, links).includes('Proposed comment'))
   })
 })
 

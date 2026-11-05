@@ -1,6 +1,7 @@
 // Slack: one message per check that ends not understood, through an incoming webhook. Off without
 // one. A message that fails is logged and costs the check nothing: the record in the database is
 // what matters, the message only points a person at it.
+import { REQUIREMENTS, type RequirementId } from '../domain/bug.ts'
 import { describeError, log } from '../log.ts'
 
 /** What became of the comment of a check that ended not understood. */
@@ -22,6 +23,8 @@ export interface Notice {
   recheck: boolean
   requested: boolean
   comment: CommentState
+  /** What the report lacks by the field checks: the requirements that failed. */
+  missing: RequirementId[]
   /** The comment's text, as the agent wrote it (its first line is the reporter's mention). */
   text: string
 }
@@ -58,19 +61,31 @@ const escape = (s: string): string => s.replaceAll('&', '&amp;').replaceAll('<',
 const link = (url: string, text: string): string => `<${url}|${escape(text)}>`
 
 /**
- * The message, in Slack's mrkdwn: the bug and what happened on one line, who reported it and
- * where to look on the next, then the comment quoted without its mention line.
+ * The message, in Slack's mrkdwn: the bug (its key the link to Jira) and who reported it; a
+ * blank line; the outcome with what became of the comment, and what the report lacks by the
+ * field checks; then the comment proposed, quoted without its mention line.
  */
 export function message(n: Notice, links: Links): string {
-  const what = `${n.requested ? 'requested ' : ''}${n.recheck ? 're-check' : 'check'}: not understood, ${STATE_TEXT[n.comment]}`
-  const where = [
+  const key = link(`${links.jiraBaseUrl}/browse/${encodeURIComponent(n.key)}`, n.key)
+  const who = [
     n.reporter ? `reported by ${escape(n.reporter)}` : null,
     links.consoleUrl ? link(`${links.consoleUrl}/bugs/${encodeURIComponent(n.key)}`, 'console') : null,
-    link(`${links.jiraBaseUrl}/browse/${encodeURIComponent(n.key)}`, 'Jira'),
   ]
     .filter((s): s is string => s !== null)
     .join(' · ')
-  return [`*${escape(n.key)}* ${escape(n.summary.trim())}\n${what}`, where, quote(n.text)].filter((s) => s !== '').join('\n')
+  const what = [`${n.requested ? 'requested ' : ''}${n.recheck ? 're-check' : 'check'}`, STATE_TEXT[n.comment]].join(' · ')
+  const missing = n.missing.length > 0 ? `Not in the report: ${n.missing.map((id) => REQUIREMENTS[id]).join(', ')}` : null
+  const proposed = quote(n.text)
+  return [
+    `*${key}* ${escape(n.summary.trim())}`,
+    who === '' ? null : who,
+    '',
+    `— *not understood* · ${what}`,
+    missing,
+    proposed === '' ? null : `\nProposed comment:\n${proposed}`,
+  ]
+    .filter((s): s is string => s !== null)
+    .join('\n')
 }
 
 /** The comment as a quote: the mention line dropped (it is Jira's), the rest cut when long. */

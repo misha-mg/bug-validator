@@ -109,6 +109,7 @@ export async function handle(deps: Deps, bug: IssueRef, row: BugRow | null, sign
         recheck,
         requested,
         comment: state,
+        missing: failedFields,
         text: out.verdict.comment,
       })
     if (dryRun && inJira) {

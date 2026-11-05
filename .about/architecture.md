@@ -125,8 +125,10 @@ pipeline: it never loads the agent, the clone or the Jira client.
      it, and step "with a comment id" follows. None → `posting` with the comment, the post, then
      `commented` with the comment id. A comment id, once recorded, is never forgotten.
    After the record, a check that ended `not_understood` is told to Slack when the service has a
-   webhook (Configuration): the bug, what became of the comment (waiting for a person, kept,
-   posted, edited, unchanged), links to the console and Jira, the comment quoted. A message that
+   webhook (Configuration): the bug, its key the link to Jira, and its reporter; a blank line;
+   the outcome with what became of the comment (waiting for a person, kept, posted, edited,
+   unchanged) and what the report lacks by the field checks; the comment proposed, quoted
+   without its mention line, and a link to the bug's page in the console. A message that
    fails is `slack_failed` in the log and nothing else: the record is what matters.
 6. A failure of this bug's first check → row `retry` with the error; the third in a row →
    `failed` (`attempts` counts failed first checks since the last result). A failed re-check, or
