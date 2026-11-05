@@ -38,6 +38,10 @@ the bug's age, status or row.
 **Post**: a comment a person sends to Jira from the console after a confirmation, one row in
 `posts`; the one write to Jira in a dry run.
 
+**Message**: what the service sends to Slack after a check that ends not understood, through an
+incoming webhook: the bug, what became of the comment, where to look. Off without a webhook or
+by its switch; a message that fails costs the check nothing.
+
 **Dry run**: the service's mode until the rollout reaches "comments live" (`VALIDATOR_DRY_RUN`,
 true by default): everything is checked and recorded, nothing is written to Jira but a post.
 

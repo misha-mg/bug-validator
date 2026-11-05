@@ -192,6 +192,7 @@ export function sampleState(): State {
       model: 'haiku',
       claudeVersion: '2.0.30',
       webuiCommit: 'b37045e50d974a58f2228325237e49010a887e97',
+      slack: true,
     }) +
       logLine('comment_dry_run', ago(HOUR, now), { key: 'KAZ-2', recheck: true, outcome: 'not_understood' }) +
       logLine('poll', ago(60 * 1000, now), { inQuery: 7, waiting: 2, pending: 0, checked: 0, failed: 0 }),

@@ -26,9 +26,10 @@ describe('ServiceLog', () => {
   it('reads only what was added and finishes a line cut in half', () => {
     const state = emptyState()
     const now = state.now
-    writeFileSync(state.logFile, logLine('service_start', now, { dryRun: false, pollIntervalS: 60, model: 'sonnet' }))
+    writeFileSync(state.logFile, logLine('service_start', now, { dryRun: false, pollIntervalS: 60, model: 'sonnet', slack: false }))
     const log = new ServiceLog(state.logFile)
     assert.equal(log.read()?.dryRun, false)
+    assert.equal(log.read()?.slack, false)
 
     const failed = logLine('poll_failed', now, { error: 'Jira answered 503' })
     appendLog(state, `a stack trace, not JSON\n${failed.slice(0, 20)}`)

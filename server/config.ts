@@ -30,6 +30,12 @@ export const Env = z.object({
   // credentials; no default: the repository is the deployment's.
   VALIDATOR_WEBUI_REPO_URL: z.string().min(1),
   VALIDATOR_WEBUI_DIR: z.string().min(1).default('state/webui'),
+  // Slack: an incoming webhook's URL, a secret; unset, no messages are sent. The switch keeps the
+  // URL in place while the messages are off.
+  VALIDATOR_SLACK_WEBHOOK_URL: z.url().optional(),
+  VALIDATOR_SLACK_NOTIFICATIONS: z.enum(['true', 'false']).default('true'),
+  // The console's address as a person opens it, for the link in a message; unset, the message links to Jira alone.
+  VALIDATOR_CONSOLE_URL: z.url().optional(),
 })
 
 /** A bug's first check is tried this many times, then the bug is recorded as failed. */
@@ -65,6 +71,8 @@ export interface Config {
   dbFile: string
   agent: { model: string; timeoutMs: number; maxTurns: number; maxBudgetUsd: number; token: string }
   webui: { repoUrl: string; dir: string }
+  /** Null: no Slack, by the switch or for want of a webhook. */
+  slack: { webhookUrl: string; consoleUrl: string | null } | null
   maxAttempts: number
 }
 
@@ -111,6 +119,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       token: e.CLAUDE_CODE_OAUTH_TOKEN,
     },
     webui: { repoUrl: e.VALIDATOR_WEBUI_REPO_URL, dir: e.VALIDATOR_WEBUI_DIR },
+    slack:
+      e.VALIDATOR_SLACK_NOTIFICATIONS === 'true' && e.VALIDATOR_SLACK_WEBHOOK_URL !== undefined
+        ? { webhookUrl: e.VALIDATOR_SLACK_WEBHOOK_URL, consoleUrl: e.VALIDATOR_CONSOLE_URL?.replace(/\/+$/, '') ?? null }
+        : null,
     maxAttempts: MAX_ATTEMPTS,
   }
 }

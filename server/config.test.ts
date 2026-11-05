@@ -43,6 +43,18 @@ describe('config', () => {
     assert.deepEqual(loadConfig(env()).webui, { repoUrl: 'git@example.com:org/webui.git', dir: 'state/webui' })
     assert.equal(loadConfig(env({ VALIDATOR_WEBUI_DIR: '/srv/webui' })).webui.dir, '/srv/webui')
   })
+  it('Slack is a webhook, with the console address for the link; the switch turns it off without losing the URL', () => {
+    const hook = 'https://hooks.slack.com/services/T1/B2/x'
+    assert.equal(loadConfig(env()).slack, null, 'no webhook, no Slack')
+    assert.deepEqual(loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: hook })).slack, { webhookUrl: hook, consoleUrl: null })
+    assert.deepEqual(loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: hook, VALIDATOR_CONSOLE_URL: 'http://validator.lan:8081/' })).slack, {
+      webhookUrl: hook,
+      consoleUrl: 'http://validator.lan:8081',
+    })
+    assert.equal(loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: hook, VALIDATOR_SLACK_NOTIFICATIONS: 'false' })).slack, null)
+    assert.throws(() => loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: 'hooks.slack.com/x' })), /VALIDATOR_SLACK_WEBHOOK_URL/)
+    assert.throws(() => loadConfig(env({ VALIDATOR_SLACK_NOTIFICATIONS: 'off' })), /VALIDATOR_SLACK_NOTIFICATIONS/)
+  })
   it('refuses a variable under its old name, so a deployment cannot fall back to a default unnoticed', () => {
     assert.throws(() => loadConfig(env({ DB_FILE: 'x.sqlite' })), /DB_FILE is now VALIDATOR_DB_FILE/)
     assert.throws(

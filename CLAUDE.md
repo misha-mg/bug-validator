@@ -9,7 +9,7 @@ changed goes there, dated, in the same change), [.about/adr/](.about/adr/) (why 
 way) and [.about/architecture.md](.about/architecture.md) (modules, data flow, row statuses, log
 events, configuration, running and deploying). Words follow
 [.about/glossary.md](.about/glossary.md): bug, report, check, re-check, outcome, field check,
-comment, request, post, dry run, the agent, the sandbox, the clone, the console. Jira ids, fields
+comment, request, post, message, dry run, the agent, the sandbox, the clone, the console. Jira ids, fields
 and workflow: [.about/jira-reference.md](.about/jira-reference.md). Ideas discussed but not
 decided: `.about/open-ideas/`, one file each. Stage: the check by code built on 2026-11-04, its
 measurement on past bugs next (PRD rollout step 3).

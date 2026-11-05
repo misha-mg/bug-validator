@@ -110,6 +110,12 @@ Board types and products: `jira-reference.md`.
   in the wording, not in the length.
 - A person approves every comment before it is posted (Post on request, Trigger). Posting
   without a person is rollout step 5.
+- Every check that ends not understood is told to Slack, when the service has a webhook: the
+  bug, what became of the comment (waiting for approval in a dry run; posted, edited or
+  unchanged live), links to the console and Jira, the comment quoted. An understood bug, one
+  that is not a WebUI bug, a failed check and a post by hand send nothing. A message that
+  fails costs the check nothing. A switch (`VALIDATOR_SLACK_NOTIFICATIONS=false`) turns the
+  messages off.
 - The program enforces only that the reporter is mentioned and nobody else, and that every
   issue key named is a real KAZ or RPG issue. Rules for the wording come later (Open
   questions); until then the person who approves is the guard.
@@ -359,6 +365,13 @@ Every WebUI bug counts, whoever reported it.
   that no two comments open alike; still no praise, no retelling of the bug, ten seconds to
   read. A bare list of questions reads as a bot, and a bot is ignored. Reversed: "no greeting,
   no closing line" in the agent's instructions (2026-11-04, the rework).
+- 2026-11-05 — A Slack message for every check that ends not understood, through an incoming
+  webhook, with a switch to turn the messages off (the owner). In the dry run every comment
+  waits for a person, and nobody keeps the console open: a message is what gets the comment
+  read and posted the same day instead of at the next look. Only "not understood" sends one:
+  the other outcomes ask nothing of anyone. A webhook over a bot token: one message to one
+  channel needs no scopes, no channel id and no app to keep; buttons in Slack, if ever wanted,
+  would need the token.
 
 ## Sources
 

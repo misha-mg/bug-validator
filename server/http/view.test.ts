@@ -118,7 +118,7 @@ describe('cockpit', () => {
     assert.match(card(html, 'service'), /^Service running last poll 1m 00s ago$/)
     assert.match(card(html, 'checking'), /^Checking — nothing running$/)
     assert.match(card(html, 'created'), /^In Created 7 2 waiting as of \d\d:\d\d · poll every 3m 00s$/)
-    assert.match(card(html, 'mode'), /^Mode dry run model haiku · claude 2\.0\.30$/)
+    assert.match(card(html, 'mode'), /^Mode dry run model haiku · claude 2\.0\.30 · Slack on$/)
   })
   it('the cards say when the service is silent, crashed, polling badly or checking', () => {
     const stale = { ...home, heartbeat: { pid: 1, startedAt: state.now, seenAt: new Date(state.now.getTime() - 60_000) } }
@@ -238,6 +238,10 @@ describe('cockpit', () => {
     assert.ok(line.startsWith(`poll failed · <span title="${long}">HTTP 403 on GET /search?xxx`) && line.endsWith('…</span>'))
     assert.equal(line.length, long.length + 'poll failed · <span title="">'.length + 120 + '</span>'.length)
     assert.equal(at('first_start', { skipped: ['KAZ-1', 'RPG-2'] }), 'first start · 2 bugs already in Created skipped')
+    assert.equal(at('service_start', { dryRun: true, model: 'sonnet', slack: true }), 'service started · dry run · sonnet · Slack on')
+    assert.equal(at('service_start', { dryRun: false, model: 'sonnet', slack: false }), 'service started · live · sonnet')
+    assert.equal(at('slack_notified', { key: 'KAZ-1', comment: 'waiting' }), 'Slack message sent')
+    assert.equal(at('slack_failed', { key: 'KAZ-1', error: 'HTTP 404: no_service' }), 'Slack message failed · HTTP 404: no_service')
     assert.equal(at('check_deferred', { key: 'KAZ-1', error: 'HTTP 500' }), 'check put off · HTTP 500')
     assert.equal(at('request_failed', { key: 'KAZ-1', error: 'HTTP 503', gaveUp: true }), 'request failed, gave up · HTTP 503')
     assert.match(at('comment_adopted', { key: 'KAZ-1', commentId: '7' }), /found the service&#39;s comment in Jira \(7\)/)

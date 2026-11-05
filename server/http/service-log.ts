@@ -35,6 +35,8 @@ export interface ServiceStatus {
   claudeVersion: string | null
   /** The WebUI commit the service started on; master moves on with `webui_fetched`. */
   webuiCommit: string | null
+  /** Whether the service sends a Slack message for a bug not understood; null when the start did not say. */
+  slack: boolean | null
   stopped: boolean
   /** Asked to stop, not stopped yet (a check is being cut short). */
   stopping: boolean
@@ -71,6 +73,7 @@ const EMPTY: ServiceStatus = {
   agentTimeoutMs: null,
   claudeVersion: null,
   webuiCommit: null,
+  slack: null,
   stopped: false,
   stopping: false,
   crashed: null,
@@ -190,6 +193,7 @@ export class ServiceLog {
         agentTimeoutMs: typeof f.agentTimeoutS === 'number' ? f.agentTimeoutS * 1000 : null,
         claudeVersion: str(f.claudeVersion),
         webuiCommit: str(f.webuiCommit),
+        slack: typeof f.slack === 'boolean' ? f.slack : null,
         stopped: false,
         stopping: false,
         crashed: null,

@@ -4,6 +4,7 @@ import { describe, it } from 'vitest'
 import { AgentError, type Agent, type AgentRun } from '../claude/agent.ts'
 import { Store } from '../store/store.ts'
 import { JiraError, type Jira, type RawIssue } from '../jira/client.ts'
+import type { Notice, Notifier } from '../notify/slack.ts'
 import type { Deps } from './deps.ts'
 import { poll } from './poll.ts'
 import { servePosts, serveRequests } from './requests.ts'
@@ -116,17 +117,29 @@ class FakeAgent implements Agent {
   }
 }
 
-function deps(agent: FakeAgent, dryRun = true): Deps & { jira: FakeJira; agent: FakeAgent } {
+/** Keeps every notice; the real one never throws either. */
+class FakeNotifier implements Notifier {
+  notices: Notice[] = []
+  async notify(notice: Notice): Promise<void> {
+    this.notices.push(notice)
+  }
+}
+
+function deps(agent: FakeAgent, dryRun = true): Deps & { jira: FakeJira; agent: FakeAgent; notifier: FakeNotifier } {
   const d = {
     config: { dryRun, maxAttempts: 3, pollIntervalMs: 180_000 },
     jira: new FakeJira(),
     agent,
     clone: { update: async () => 'abc123def456' },
     store: new Store(':memory:'),
+    notifier: new FakeNotifier(),
   }
   d.store.bootstrap([])
   return d
 }
+
+/** What a notifier was told, in short: the comment's state and whether it was a re-check. */
+const told = (d: { notifier: FakeNotifier }) => d.notifier.notices.map((n) => [n.key, n.comment, n.recheck])
 
 const row = (d: Deps, key = KEY) => d.store.rows([key]).get(key)
 const summary = (s: Partial<Awaited<ReturnType<typeof poll>>>) => ({
@@ -590,5 +603,56 @@ describe('a post by hand', () => {
     assert.equal(lost.jira.posted.length, 1, 'never a second comment')
     assert.equal(row(lost)?.status, 'commented')
     assert.deepEqual(posts(lost), [])
+  })
+})
+
+describe('the notifier', () => {
+  it('is told of a check that ends not understood, after its record, and of no other outcome or failure', async () => {
+    const d = deps(new FakeAgent(needsHar, understood, notWebui, { ...needsHar, comment: '' }))
+    d.jira.inQuery = [KEY, 'RPG-6192', 'KAZ-9025', 'KAZ-8996']
+    let recorded: string | null = null
+    d.notifier.notify = async (n) => {
+      recorded = d.store.status(n.key)
+      d.notifier.notices.push(n)
+    }
+    assert.deepEqual(await poll(d), summary({ inQuery: 4, pending: 4, checked: 3, failed: 1 }))
+    assert.equal(recorded, 'dry_run', 'the row was written first')
+    assert.deepEqual(d.notifier.notices, [
+      {
+        key: KEY,
+        summary: 'Web UI 2.0: clearing filter statistics clears filters as well until refresh ',
+        reporter: 'Shimon Korenman',
+        recheck: false,
+        requested: false,
+        comment: 'waiting',
+        text: needsHar.comment,
+      },
+    ])
+  })
+  it('says what became of the comment: posted or edited live, unchanged on a re-check that agrees, kept in a dry run over a comment in Jira', async () => {
+    const d = deps(new FakeAgent(needsHar, harArrived, harArrived, needsHar), false)
+    await poll(d)
+    d.jira.attachHar(KEY)
+    await poll(d)
+    d.jira.changes[KEY] = { ...d.jira.changes[KEY], description: 'Steps:\n1. open Ports' }
+    await poll(d)
+    d.config = { ...d.config, dryRun: true }
+    d.store.request(KEY)
+    await serveRequests(d)
+    assert.deepEqual(told(d), [
+      [KEY, 'posted', false],
+      [KEY, 'edited', true],
+      [KEY, 'unchanged', true],
+      [KEY, 'kept', true],
+    ])
+    assert.equal(d.notifier.notices[3]?.requested, true)
+  })
+  it("a post by hand is the person's own doing: nothing is said", async () => {
+    const d = deps(new FakeAgent(needsHar))
+    await poll(d)
+    d.store.post(KEY, needsHar.comment)
+    await serveRequests(d)
+    assert.equal(d.store.status(KEY), 'commented')
+    assert.deepEqual(told(d), [[KEY, 'waiting', false]])
   })
 })
