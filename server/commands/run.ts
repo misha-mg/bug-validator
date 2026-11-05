@@ -9,6 +9,7 @@ import { loadConfig } from '../config.ts'
 import { Store } from '../store/store.ts'
 import { JiraClient } from '../jira/client.ts'
 import { describeError, log } from '../log.ts'
+import { SlackNotifier, silent } from '../notify/slack.ts'
 import type { Deps } from '../pipeline/deps.ts'
 import { poll } from '../pipeline/poll.ts'
 import { serveRequests } from '../pipeline/requests.ts'
@@ -36,9 +37,13 @@ export async function run(): Promise<void> {
   const claudeVersion = await agent.version()
   const clone = new Clone(config.webui.dir, config.webui.repoUrl)
   const webuiCommit = await clone.update(0)
-  const deps: Deps = { config, jira, agent, clone, store: new Store(config.dbFile) }
+  const notifier = config.slack
+    ? new SlackNotifier(config.slack.webhookUrl, { jiraBaseUrl: config.jira.baseUrl, consoleUrl: config.slack.consoleUrl })
+    : silent
+  const deps: Deps = { config, jira, agent, clone, store: new Store(config.dbFile), notifier }
   log.info('service_start', {
     dryRun: config.dryRun,
+    slack: config.slack !== null,
     pollIntervalS: config.pollIntervalMs / 1000,
     maxAttempts: config.maxAttempts,
     model: config.agent.model,

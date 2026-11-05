@@ -34,8 +34,10 @@ server/
     jira-mcp.ts        the agent's Jira tool: search_issues, get_issue — read-only, KAZ and RPG only, served over HTTP by the service itself
   store/
     store.ts           SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta` (the first start, the heartbeat), `requests` (checks asked for by hand) and `posts` (comments a person posts from the UI); the schema's migrations; a request written by the UI or the CLI, a post by the UI; a backup
+  notify/
+    slack.ts           one Slack message per check that ends not understood, through an incoming webhook; a failure is logged, never a check's
   pipeline/
-    deps.ts            what the pipeline needs: config, Jira, agent, clone, store (Jira, the agent and the clone are interfaces)
+    deps.ts            what the pipeline needs: config, Jira, agent, clone, store, notifier (Jira, the agent, the clone and the notifier are interfaces)
     attachments.ts     the bug's attachments → the run's files: downloaded, HAR cleaned, video cut to frames (ffmpeg)
     checkBug.ts        one bug: fetch → field checks → clone → files → agent → verdict → guardrails
     plan.ts            which bugs of a poll are due: first checks, re-checks, the waiting ones
@@ -122,6 +124,10 @@ pipeline: it never loads the agent, the clone or the Jira client.
      returns, opening with the reporter's mention). Found → adopted: the check is a re-check of
      it, and step "with a comment id" follows. None → `posting` with the comment, the post, then
      `commented` with the comment id. A comment id, once recorded, is never forgotten.
+   After the record, a check that ended `not_understood` is told to Slack when the service has a
+   webhook (Configuration): the bug, what became of the comment (waiting for a person, kept,
+   posted, edited, unchanged), links to the console and Jira, the comment quoted. A message that
+   fails is `slack_failed` in the log and nothing else: the record is what matters.
 6. A failure of this bug's first check → row `retry` with the error; the third in a row →
    `failed` (`attempts` counts failed first checks since the last result). A failed re-check, or
    any failed check of a row with a comment in Jira, sets the row's error and leaves the rest. A
@@ -279,7 +285,7 @@ its Activity frame from every event but `poll` and `check_start`, one line each.
 
 | event | fields | UI |
 |---|---|---|
-| `service_start` | dryRun, pollIntervalS, maxAttempts, model, agentTimeoutS, claudeVersion, webuiCommit, host, dbFile (absolute), bugs (rows) | mode, model, claude, WebUI commit, interval, started; ends a check cut short |
+| `service_start` | dryRun, slack, pollIntervalS, maxAttempts, model, agentTimeoutS, claudeVersion, webuiCommit, host, dbFile (absolute), bugs (rows) | mode, Slack on or off, model, claude, WebUI commit, interval, started; ends a check cut short |
 | `service_stopping` | signal | stopping |
 | `service_stopped` | | stopped |
 | `poll` | inQuery, waiting, pending, checked, failed, deferred, ms | last poll, in Created, waiting |
@@ -295,6 +301,8 @@ its Activity frame from every event but `poll` and `check_start`, one line each.
 | `request_failed` | key, error, gaveUp | |
 | `post_failed` | key, error, gaveUp | |
 | `mentions_stripped` | key, stripped | |
+| `slack_notified` | key, comment (waiting, kept, posted, edited, unchanged) | |
+| `slack_failed` | key, error (the webhook URL never in it) | |
 | `heartbeat_failed` | error | |
 | `fatal` | error | crashed, error |
 
@@ -335,6 +343,9 @@ measures them.
 | `VALIDATOR_AGENT_MAX_TURNS` | `100` | one agent run |
 | `VALIDATOR_AGENT_MAX_BUDGET_USD` | `2` | one agent run; a sonnet check of a clear bug costs about $0.04 |
 | `VALIDATOR_WEBUI_DIR` | `state/webui` | the service's clone |
+| `VALIDATOR_SLACK_WEBHOOK_URL` | — | a Slack incoming webhook: one message per check that ends not understood; unset, no messages. A secret, like the tokens |
+| `VALIDATOR_SLACK_NOTIFICATIONS` | `true` | `false` turns the messages off with the URL left in place; anything else is refused |
+| `VALIDATOR_CONSOLE_URL` | — | the console as a person opens it, for the link in a message; unset, the message links to Jira alone |
 | `VALIDATOR_DB_FILE` | `state/bug-validator.sqlite` | |
 | `VALIDATOR_LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
 | `VALIDATOR_BACKUP_DIR` | `state/backups` | `maintain`'s copies of the database, the latest 14 kept |
@@ -397,7 +408,8 @@ The masthead names the three pages as pipeline-ui's does: Cockpit, Bugs, Statist
 - `/` **Cockpit** — four cards: **Service** (running, stopping, stopped, crashed or silent, from
   the heartbeat and the log; the last poll, and its error when it failed), **Checking** (the bug
   the agent is on, for how long, a link to it), **In Created** (the count of the last poll, how
-  many wait, the poll interval), **Mode** (dry run or live, the model, the claude version). Under
+  many wait, the poll interval), **Mode** (dry run or live, the model, the claude version, Slack
+  on or off). Under
   them, left: **State sources** folded to a lamp and a word — the service log (found, its last
   line's age), the database (found, its rows), Jira (the last poll went through), claude and the
   WebUI clone (known from `service_start`) — each with an OK / not OK pill, and the facts under

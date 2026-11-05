@@ -249,7 +249,15 @@ function cards(m: HomeModel, now: Date): string {
           'mode',
           'Mode',
           `<div class="value">${s.dryRun ? 'dry run' : 'live'}</div>`,
-          note([s.model ? `model ${s.model}` : '', s.claudeVersion ? `claude ${s.claudeVersion}` : ''].filter(Boolean).join(' · ') || '—'),
+          note(
+            [
+              s.model ? `model ${s.model}` : '',
+              s.claudeVersion ? `claude ${s.claudeVersion}` : '',
+              s.slack === true ? 'Slack on' : s.slack === false ? 'Slack off' : '',
+            ]
+              .filter(Boolean)
+              .join(' · ') || '—',
+          ),
         )
       : card('mode', 'Mode', '<div class="value">—</div>', note('not known: no service start in the log'))
 
@@ -356,7 +364,14 @@ export function eventText(e: LogEvent): string {
   switch (e.event) {
     case 'service_start':
       return esc(
-        ['service started', f.dryRun === true ? 'dry run' : f.dryRun === false ? 'live' : null, f.model].filter(Boolean).join(' · '),
+        [
+          'service started',
+          f.dryRun === true ? 'dry run' : f.dryRun === false ? 'live' : null,
+          f.model,
+          f.slack === true ? 'Slack on' : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
       )
     case 'service_stopping':
       return esc(`stopping · ${f.signal ?? ''}`)
@@ -394,6 +409,10 @@ export function eventText(e: LogEvent): string {
       return `${by}${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${esc(f.attempts)}` : ''} · ${errorText(f.error)}`
     case 'mentions_stripped':
       return esc(`mentions stripped: ${Array.isArray(f.stripped) ? f.stripped.join(', ') : ''}`)
+    case 'slack_notified':
+      return 'Slack message sent'
+    case 'slack_failed':
+      return `Slack message failed · ${errorText(f.error)}`
     case 'fatal':
       return `fatal · ${errorText(f.error)}`
     default:
