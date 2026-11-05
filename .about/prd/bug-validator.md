@@ -102,12 +102,13 @@ Board types and products: `jira-reference.md`.
 ## Comment
 
 - Only on a bug the agent does not understand. English, addressed to the reporter with an
-  @mention, in the agent's own words: what it needs to understand the bug, as short questions.
+  @mention, in the agent's own words: what it needs to understand the bug, as a request.
   Short enough to read in ten seconds: long questions go unanswered (research report).
-- Warm and plain, the way a colleague writes: a greeting, a sentence that something is missing
-  to fix the bug, the questions as polite requests, worded differently from one comment to the
-  next so that no two open alike. No praise, no retelling of the bug, no filler: the warmth is
-  in the wording, not in the length.
+- The way a developer on the team asks in Jira: one to three short sentences, about forty
+  words at most, what is needed and in a few words why it helps, nothing about the
+  investigation. Plain punctuation, no colons, no dashes, no list. A greeting or the reporter's
+  first name may open it, a thanks may close it, and the wording varies from one comment to
+  the next so that no two read alike. No praise, no retelling of the bug, no filler.
 - A person approves every comment before it is posted (Post on request, Trigger). Posting
   without a person is rollout step 5.
 - Every check that ends not understood is told to Slack, when the service has a webhook: the
@@ -366,6 +367,15 @@ Every WebUI bug counts, whoever reported it.
   that no two comments open alike; still no praise, no retelling of the bug, ten seconds to
   read. A bare list of questions reads as a bot, and a bot is ignored. Reversed: "no greeting,
   no closing line" in the agent's instructions (2026-11-04, the rework).
+- 2026-11-05 — The comment is a request the way the team writes one: one to three sentences,
+  about forty words at most, plain punctuation without colons or dashes, nothing about the
+  investigation (the owner, after the first Slack messages, from reading the team's own
+  requests in Jira). A developer's request on a bug reads "Hey, could you please add a HAR
+  file - it will be very helpful for us." or "What are the steps to reproduce?"; QA answers
+  "new har file attached". The agent's comments of 2026-11-04 ran to six or eight lines, a
+  greeting, a sentence on what was looked at, then questions one per line, twice the length of
+  anything a person on the team writes. Reversed: the shape of 2026-11-04 (a greeting, a
+  sentence that something is missing, the questions each on a line); warm and varied stays.
 - 2026-11-05 — A Slack message for every check that ends not understood, through an incoming
   webhook, with a switch to turn the messages off (the owner). In the dry run every comment
   waits for a person, and nobody keeps the console open: a message is what gets the comment
