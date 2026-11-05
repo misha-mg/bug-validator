@@ -22,7 +22,8 @@ reason).
 
 **Field check**: one of the program's own looks at the report's fields — section headings,
 Affects versions, Devices, a HAR — passed or failed, with a detail. Hints for the agent and
-numbers for the console, never the verdict.
+numbers for the console, never the verdict. A bug's row carries the report's as the service last
+read them (every poll, while the bug is in Created); each check keeps its own in the history.
 
 **Requirement**: one of the items R1–R7 a report may hold (steps, expected and actual result,
 versions, device, HAR, project), the id a field check carries. The list is a hint, not a rule.

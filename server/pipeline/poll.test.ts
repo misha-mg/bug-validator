@@ -1,7 +1,12 @@
 // Tests of poll.ts, handle.ts and requests.ts: whole polls against a fake Jira, agent and clone, with the real Store.
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { describe, it } from 'vitest'
 import { AgentError, type Agent, type AgentRun } from '../claude/agent.ts'
+import { readBug } from '../http/read.ts'
+import { setLogSink } from '../log.ts'
 import { Store } from '../store/store.ts'
 import { JiraError, type Jira, type RawIssue } from '../jira/client.ts'
 import type { Notice, Notifier } from '../notify/slack.ts'
@@ -184,6 +189,37 @@ describe('poll', () => {
     d.jira.attachHar('KAZ-9025')
     assert.deepEqual(await poll(d), summary({ inQuery: 2 }), 'a change brings no re-check')
     assert.deepEqual(d.jira.posted, [])
+  })
+  it('the row follows the report: a field check that changes is logged and shown, without a check', async () => {
+    const d = deps(new FakeAgent(understood))
+    const file = join(mkdtempSync(join(tmpdir(), 'poll-')), 'state.sqlite')
+    d.store = new Store(file)
+    d.store.bootstrap([])
+    const lines: string[] = []
+    setLogSink((line) => lines.push(line))
+    try {
+      await poll(d)
+      assert.equal(readBug(file, KEY)?.fieldChecks.find((c) => c.id === 'R6')?.passed, false, 'no HAR at the check')
+      d.jira.attachHar(KEY)
+      d.jira.changes[KEY] = { ...d.jira.changes[KEY], summary: 'Statistics page: the counters stay at 0' }
+      assert.deepEqual(await poll(d), summary({}), 'understood: no re-check')
+      const bug = readBug(file, KEY)
+      assert.equal(bug?.fieldChecks.find((c) => c.id === 'R6')?.passed, true, 'the row shows the HAR')
+      assert.equal(bug?.summary, 'Statistics page: the counters stay at 0')
+      assert.equal(bug?.history.length, 1)
+      assert.equal(bug?.history[0]?.fieldChecks.find((c) => c.id === 'R6')?.passed, false, 'the check keeps what it got')
+      const changed = lines.map((l) => JSON.parse(l) as Record<string, unknown>).filter((e) => e.event === 'report_changed')
+      assert.deepEqual(
+        changed.map(({ ts: _ts, ...e }) => e),
+        [{ level: 'info', event: 'report_changed', key: KEY, passed: ['R6'], failed: [] }],
+      )
+      assert.deepEqual(await poll(d), summary({}))
+      assert.equal(lines.filter((l) => l.includes('report_changed')).length, 1, 'said once')
+    } finally {
+      setLogSink((line) => process.stdout.write(`${line}\n`))
+      d.store.close()
+      rmSync(dirname(file), { recursive: true, force: true })
+    }
   })
   it('dry run: the comment is recorded, nothing is posted, an unchanged bug is not checked again', async () => {
     const d = deps(new FakeAgent(needsHar))

@@ -34,6 +34,7 @@ describe('parseClaudeResult', () => {
       'OAuth token has expired',
       'API Error: 500',
       'connect ETIMEDOUT',
+      'claude exited with 1: bwrap: execvp /usr/lib/node/bin/claude: No such file or directory',
     ]) {
       assert.equal(troubleKind(m), 'service', m)
     }

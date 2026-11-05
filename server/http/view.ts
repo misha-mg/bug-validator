@@ -1,7 +1,7 @@
 /** The pages, as pure functions of what was read: a model in, an HTML string out. */
 
 import { MAX_ATTEMPTS } from '../config.ts'
-import { OUTCOMES, REQUIREMENTS, type Outcome } from '../domain/bug.ts'
+import { OUTCOMES, REQUIREMENTS, type Outcome, type RequirementId } from '../domain/bug.ts'
 import { ISSUE_KEY } from '../domain/key.ts'
 import { cut, fmtAgo, fmtClock, fmtDate, fmtDay, fmtDuration, fmtTime, plural } from '../format.ts'
 import { type BugView, type Heartbeat, type Request, type Result, type Run, checked, result } from './read.ts'
@@ -391,6 +391,16 @@ export function eventText(e: LogEvent): string {
       return esc(`found the service's comment in Jira (${f.commentId}); keeps it, posts none`)
     case 'key_changed':
       return esc(`moved: ${f.from} → ${f.to}`)
+    case 'report_changed': {
+      const names = (ids: unknown): string =>
+        Array.isArray(ids)
+          ? ids.map((id) => (typeof id === 'string' && id in REQUIREMENTS ? REQUIREMENTS[id as RequirementId] : String(id))).join(', ')
+          : ''
+      const now = [names(f.passed) && `now present: ${names(f.passed)}`, names(f.failed) && `now absent: ${names(f.failed)}`].filter(
+        Boolean,
+      )
+      return esc(`report changed · ${now.join(' · ')}`)
+    }
     case 'webui_fetched':
       return esc(`WebUI master moved: ${f.from} → ${f.to}`)
     case 'bug_understood':
@@ -488,9 +498,9 @@ ${bugs.length ? `<table class="wide bugs"><thead><tr><th>Bug</th><th>Jira</th><t
   return layout(`Bugs · Bug validator`, main, ctx, 'bugs')
 }
 
-/** The field checks the first check found failed: what the report lacked as it arrived. */
+/** The field checks the report fails now (the row follows the report while the bug is in Created); what it lacked as it arrived is in the history. */
 const absentChips = (b: BugView): string =>
-  (b.history.find((run) => run.error === null)?.fieldChecks ?? b.fieldChecks)
+  b.fieldChecks
     .filter((c) => !c.passed)
     .map((c) => `<span class="req" title="${esc(REQUIREMENTS[c.id])}">${esc(c.id)}</span>`)
     .join(' ')
@@ -745,7 +755,8 @@ function confirmPost(b: BugView, open: boolean, ctx: PageContext): string {
 function checks(b: BugView): string {
   if (!checked(b) && b.status !== 'posting')
     return `<p class="empty">${result(b) === 'error' ? 'The check did not finish.' : 'Never checked.'}</p>`
-  // The field checks are hints the agent got, not the verdict: steps without a heading are still steps.
+  // The report as the service last read it (every poll, while the bug is in Created); each check
+  // keeps the field checks it got in the history. Hints, not the verdict: steps without a heading are still steps.
   let html = `<h3>Field checks</h3><table class="wide requirements"><tbody>${b.fieldChecks
     .map(
       (c) =>

@@ -227,6 +227,11 @@ describe('cockpit', () => {
     assert.equal(at('check_failed', { key: 'KAZ-1', attempts: 2, error: 'x <y>' }), 'check failed · attempt 2 · x &lt;y&gt;')
     assert.equal(at('check_failed', { key: 'KAZ-1', recheck: true, error: 'x' }), 're-check failed · x')
     assert.equal(at('key_changed', { from: 'RPG-1', to: 'KAZ-2' }), 'moved: RPG-1 → KAZ-2')
+    assert.equal(
+      at('report_changed', { key: 'KAZ-1', passed: ['R4', 'R6'], failed: [] }),
+      'report changed · now present: Affects versions, HAR file',
+    )
+    assert.equal(at('report_changed', { key: 'KAZ-1', passed: [], failed: ['R2'] }), 'report changed · now absent: Expected result')
     assert.equal(at('poll_failed', { error: 'HTTP 503' }), 'poll failed · HTTP 503')
     assert.equal(at('request_failed', { key: 'KAZ-1', error: 'HTTP 404' }), 'request failed · HTTP 404')
     assert.equal(
@@ -273,8 +278,8 @@ describe('bugs', () => {
     assert.match(page, /All bugs 6 bugs/)
     assert.match(
       page,
-      /KAZ-2 ↗ Ports table is empty after clearing the filter \d\d:\d\d comment · dry run R1 R4 R6 1 3/,
-      'absent at the first check',
+      /KAZ-2 ↗ Ports table is empty after clearing the filter \d\d:\d\d comment · dry run R4 R6 1 3/,
+      'absent now: the row follows the report, R1 arrived after the first check',
     )
     assert.match(page, /KAZ-3 ↗ Login page freezes \d\d:\d\d understood 1 /, 'one check is counted')
     assert.match(page, /RPG-6 ↗ Port counter lags behind the CLI \d\d:\d\d not a WebUI bug R6/)
@@ -398,9 +403,9 @@ describe('statistics', () => {
     const after = section(html, 'after')
     assert.match(
       text(after),
-      /^Field checks passed after the comment 1 of 3 what arrived while a commented bug was still in Created passed later 1 33% still absent 2 67%$/,
+      /^Field checks passed after the comment 1 of 4 what arrived while a commented bug was still in Created passed later 1 25% still absent 3 75%$/,
     )
-    assert.match(after, /<i class="none" style="width:66.7%">/)
+    assert.match(after, /<i class="none" style="width:75.0%">/)
     assert.match(section(statsPage([], '7d', ctx), 'gaps'), /<p class="empty">No bug checked to the end in this period\.<\/p>/)
     assert.match(section(statsPage(bugs, 'today', ctx), 'after'), /^.*1 of 3/, 'KAZ-2 was re-checked today')
     assert.match(section(statsPage([], '7d', ctx), 'after'), /<p class="empty">No bug re-checked after its comment yet\.<\/p>/)
