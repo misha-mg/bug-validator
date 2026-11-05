@@ -393,9 +393,10 @@ takes the ids and names from `bug.ts`.
 `npm start` logs to stdout, so the Service card says "no log"). It opens the database read-only,
 never creates it, and writes nothing but requests: the form in the masthead (a key or a link to
 the bug) and the button on a bug's page ask the service to check that bug next; Post to Jira on a
-bug's page, once confirmed, asks it to post the comment shown. The page then shows the request
-waiting and fills in with the result. No external resources: the pages work on a network without
-internet access.
+bug's page, once confirmed, asks it to post the comment shown; so does the Run again button on
+each row of Bugs. After a request the browser stays on the page it was asked from, with a toast;
+the bug's page shows the request waiting and fills in with the result. No external resources:
+the pages work on a network without internet access.
 
 The UI is opened from the office network as `http://<server-ip>:8081/`; no TLS, no proxy, nothing
 outside the LAN (firewall the port to it). It serves only a Host it knows (an IP address,

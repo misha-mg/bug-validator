@@ -53,6 +53,19 @@ td.absent {
   padding: 22px 0 8px;
   border-bottom: 1px solid var(--line);
 }
+/* The Run again button at the row's end: the form adds no box, the button is just its icon. */
+.bugs td.again {
+  width: 1px;
+  padding-right: 8px;
+}
+.bugs td.again form {
+  margin: 0;
+}
+.btn.icon {
+  padding: 0 6px;
+  font-size: 14px;
+  letter-spacing: 0;
+}
 .bugs td.summary a {
   color: var(--text);
   text-decoration: none;

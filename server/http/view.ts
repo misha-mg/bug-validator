@@ -471,9 +471,9 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
     const d = fmtDay(b.checkedAt)
     if (d !== day) {
       day = d
-      rows += `<tr class="day"><th class="label" colspan="8">${d}</th></tr>`
+      rows += `<tr class="day"><th class="label" colspan="9">${d}</th></tr>`
     }
-    rows += `<tr><td class="key">${bugLink(b.key)}</td><td class="jira">${jiraArrow(b.key, ctx)}</td><td class="summary one-line"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="num dim">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td class="absent">${absentChips(b)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length || ''}</td></tr>`
+    rows += `<tr><td class="key">${bugLink(b.key)}</td><td class="jira">${jiraArrow(b.key, ctx)}</td><td class="summary one-line"><a href="/bugs/${esc(b.key)}" title="${esc(b.summary ?? '')}">${esc(cut(b.summary ?? '', SUMMARY_WIDTH))}</a></td><td class="num dim">${fmtClock(b.checkedAt)}</td><td>${resultPill(b)}</td><td class="absent">${absentChips(b)}</td><td class="num">${b.related.length || ''}</td><td class="num">${b.history.length || ''}</td><td class="again">${runAgain(b.key)}</td></tr>`
   }
   const main = `
 <div class="page-head"><h1>All bugs</h1><span class="stats">${narrowed ? `${bugs.length} of ${plural(all.length, 'bug')} shown` : plural(all.length, 'bug')}</span></div>
@@ -483,7 +483,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
 <input type="hidden" name="result" value="${query.result}">
 </form>
 <section class="frame">
-${bugs.length ? `<table class="wide bugs"><thead><tr><th>Bug</th><th>Jira</th><th>Summary</th><th>Checked</th><th>Result</th><th>Absent</th><th class="num">Related</th><th class="num">Checks</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty">No bug matches.</p>'}
+${bugs.length ? `<table class="wide bugs"><thead><tr><th>Bug</th><th>Jira</th><th>Summary</th><th>Checked</th><th>Result</th><th>Absent</th><th class="num">Related</th><th class="num">Checks</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty">No bug matches.</p>'}
 </section>`
   return layout(`Bugs · Bug validator`, main, ctx, 'bugs')
 }
@@ -869,6 +869,12 @@ function jiraLink(key: string, ctx: PageContext, text = 'Jira'): string {
 }
 
 /** The arrow that opens the bug in Jira, as the sheet draws it in a `td.jira`. */
+/** The Bugs list's button that asks for one more check of the bug; the person stays on the list. */
+const runAgain = (key: string): string =>
+  ISSUE_KEY.test(key)
+    ? `<form class="inline" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button class="btn tiny icon" title="Run again" aria-label="Run ${key} again">↻</button></form>`
+    : ''
+
 const jiraArrow = (key: string, ctx: PageContext): string =>
   ISSUE_KEY.test(key) ? `<a href="${esc(ctx.jiraBaseUrl)}/browse/${key}" target="_blank" rel="noopener" title="${key} in Jira">↗</a>` : ''
 
