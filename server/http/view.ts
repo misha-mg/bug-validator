@@ -67,7 +67,7 @@ const esc = (value: unknown): string =>
 export type Tone = 'ok' | 'bad' | 'live' | 'strong' | ''
 export const toneClass = (tone: Tone): string => (tone === 'live' ? 'slate' : tone)
 
-/** A bug's result: moss for understood, slate for a comment, strong for not the WebUI's, rust for an error, plain for skipped. */
+/** A bug's result: green for understood, the data blue for a comment, strong for not the WebUI's, red for an error, plain for skipped. */
 export const RESULT_TONE: Record<Result, Tone> = {
   understood: 'ok',
   not_understood: 'live',
@@ -80,6 +80,9 @@ export const RESULT_TONE: Record<Result, Tone> = {
 
 /** The pages the masthead lists; a bug's page is under Bugs. */
 export type Section = 'cockpit' | 'bugs' | 'stats'
+
+/** The theme switch's two icons, as the sheet expects them: the sun while the page is dark, the moon while it is light. */
+const THEME_ICONS = `<svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>`
 
 function layout(title: string, main: string, ctx: PageContext, section: Section | null = null): string {
   const nav = (s: Section, href: string, name: string): string =>
@@ -107,7 +110,7 @@ ${modePill(ctx.dryRun)}
 <span class="spacer"></span>
 <form class="request" method="post" action="/requests"><input class="field" name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button class="btn">Check</button></form>
 <nav>${nav('cockpit', '/', 'Cockpit')}${nav('bugs', '/bugs', 'Bugs')}${nav('stats', '/stats', 'Statistics')}</nav>
-<button class="btn theme" type="button" aria-label="Switch between light and dark"></button>
+<button class="btn theme" type="button" aria-label="Switch between light and dark">${THEME_ICONS}</button>
 </header>
 <main class="sheet">
 ${toast}${main}
@@ -180,7 +183,7 @@ export function homePage(m: HomeModel, ctx: PageContext): string {
 </div>
 </section>
 <section class="frame requested">${frameHead('Requested', pending.length ? plural(pending.length, 'check') : '', 'checks asked for by hand, made before the next poll’s')}
-${pending.length ? `<table class="wide"><thead><tr><th>Bug</th><th>Asked</th></tr></thead><tbody>${pending.map((r) => `<tr><td class="key">${bugLink(r.key)}</td><td class="num dim">${fmtAgo(r.at, now)}</td></tr>`).join('')}</tbody></table>` : '<p class="empty">Nothing requested.</p>'}</section>
+${pending.length ? scroll(`<table class="wide"><thead><tr><th>Bug</th><th>Asked</th></tr></thead><tbody>${pending.map((r) => `<tr><td class="key">${bugLink(r.key)}</td><td class="num dim">${fmtAgo(r.at, now)}</td></tr>`).join('')}</tbody></table>`) : '<p class="empty">Nothing requested.</p>'}</section>
 ${skipped.length ? `<section class="frame skipped">${frameHead('Skipped at the first start')}${kv(skippedFacts)}</section>` : ''}
 </div>
 <div class="stack">
@@ -316,7 +319,7 @@ function serviceFacts(m: HomeModel, now: Date): [string, string][] {
   return rows
 }
 
-/** The heartbeat's age and the pid that wrote it; a stale one in rust, none in grey. */
+/** The heartbeat's age and the pid that wrote it; a stale one in red, none in grey. */
 function heartbeatText(h: Heartbeat | null, now: Date): string {
   if (!h) return '<span class="dim">none yet</span>'
   const text = `${fmtAgo(h.seenAt, now)} · pid ${h.pid} · started ${fmtTime(h.startedAt)}`
@@ -324,36 +327,40 @@ function heartbeatText(h: Heartbeat | null, now: Date): string {
 }
 
 function attentionTable(bugs: BugView[]): string {
-  return `<table class="wide"><thead><tr><th>Bug</th><th>Last check</th><th>What</th><th>Why</th></tr></thead><tbody>${bugs
-    .map((b) => {
-      // A bug not the WebUI's waits for a person's decision; its reason is the agent's.
-      if (result(b) === 'not_webui' && b.error === null)
-        return `<tr><td class="key">${bugLink(b.key)}</td><td class="num dim">${fmtTime(b.checkedAt)}</td><td><span class="pill strong">not a WebUI bug</span></td><td>${esc(b.reason)}</td></tr>`
-      // A failed re-check leaves the bug's result as it was: its comment stands, only the error is new.
-      const attempts =
-        result(b) !== 'error'
-          ? 're-check failed'
-          : b.status === 'posting'
-            ? 'post'
-            : `${b.attempts} of ${MAX_ATTEMPTS} failed${b.status === 'failed' ? ', gave up' : ''}`
-      const error =
-        b.status === 'posting'
-          ? `interrupted while posting · the next check looks in Jira${b.error ? ` · ${b.error}` : ''}`
-          : (b.error ?? '')
-      return `<tr><td class="key">${bugLink(b.key)}</td><td class="num dim">${fmtTime(b.checkedAt)}</td><td><span class="pill bad">${attempts}</span></td><td class="err">${esc(error)}</td></tr>`
-    })
-    .join('')}</tbody></table>`
+  return scroll(
+    `<table class="wide"><thead><tr><th>Bug</th><th>Last check</th><th>What</th><th>Why</th></tr></thead><tbody>${bugs
+      .map((b) => {
+        // A bug not the WebUI's waits for a person's decision; its reason is the agent's.
+        if (result(b) === 'not_webui' && b.error === null)
+          return `<tr><td class="key">${bugLink(b.key)}</td><td class="num dim">${fmtTime(b.checkedAt)}</td><td><span class="pill strong">not a WebUI bug</span></td><td>${esc(b.reason)}</td></tr>`
+        // A failed re-check leaves the bug's result as it was: its comment stands, only the error is new.
+        const attempts =
+          result(b) !== 'error'
+            ? 're-check failed'
+            : b.status === 'posting'
+              ? 'post'
+              : `${b.attempts} of ${MAX_ATTEMPTS} failed${b.status === 'failed' ? ', gave up' : ''}`
+        const error =
+          b.status === 'posting'
+            ? `interrupted while posting · the next check looks in Jira${b.error ? ` · ${b.error}` : ''}`
+            : (b.error ?? '')
+        return `<tr><td class="key">${bugLink(b.key)}</td><td class="num dim">${fmtTime(b.checkedAt)}</td><td><span class="pill bad">${attempts}</span></td><td class="err">${esc(error)}</td></tr>`
+      })
+      .join('')}</tbody></table>`,
+  )
 }
 
 function activityTable(recent: LogEvent[]): string {
-  return `<table class="wide activity"><tbody>${[...recent]
-    .reverse()
-    .map((e) => {
-      const key = typeof e.fields.key === 'string' ? e.fields.key : null
-      const cls = e.level === 'error' ? 'err' : e.level === 'warn' ? 'warn' : ''
-      return `<tr><td class="num dim">${fmtTime(e.ts)}</td><td class="key">${key ? bugLink(key) : ''}</td><td class="${cls}">${eventText(e)}</td></tr>`
-    })
-    .join('')}</tbody></table>`
+  return scroll(
+    `<table class="wide activity"><tbody>${[...recent]
+      .reverse()
+      .map((e) => {
+        const key = typeof e.fields.key === 'string' ? e.fields.key : null
+        const cls = e.level === 'error' ? 'err' : e.level === 'warn' ? 'warn' : ''
+        return `<tr><td class="num dim">${fmtTime(e.ts)}</td><td class="key">${key ? bugLink(key) : ''}</td><td class="${cls}">${eventText(e)}</td></tr>`
+      })
+      .join('')}</tbody></table>`,
+  )
 }
 
 /** One line per event, escaped. */
@@ -493,7 +500,7 @@ export function bugsPage(all: BugView[], query: BugsQuery, ctx: PageContext): st
 <input type="hidden" name="result" value="${query.result}">
 </form>
 <section class="frame">
-${bugs.length ? `<table class="wide bugs"><thead><tr><th>Bug</th><th>Jira</th><th>Summary</th><th>Checked</th><th>Result</th><th>Absent</th><th class="num">Related</th><th class="num">Checks</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty">No bug matches.</p>'}
+${bugs.length ? scroll(`<table class="wide bugs"><thead><tr><th>Bug</th><th>Jira</th><th>Summary</th><th>Checked</th><th>Result</th><th>Absent</th><th class="num">Related</th><th class="num">Checks</th><th></th></tr></thead><tbody>${rows}</tbody></table>`) : '<p class="empty">No bug matches.</p>'}
 </section>`
   return layout(`Bugs · Bug validator`, main, ctx, 'bugs')
 }
@@ -574,12 +581,14 @@ export function statsPage(all: BugView[], period: Period, ctx: PageContext): str
   const main = `
 <div class="page-head"><h1>Statistics</h1><span class="stats">${PERIOD_LABEL[period]} · bugs first checked in it, by their result now</span></div>
 <div class="filters"><div class="row"><span class="label">Period</span><div class="opts">${chips}</div></div></div>
+<div class="stack">
 ${strip}
 <div class="stats-pair">
 <section class="frame gaps">${frameHead('Field checks failed most often', total ? `first checks of ${plural(total, 'bug')}` : '', 'what the reports lacked as they arrived')}${gapBars}</section>
 <section class="frame after">${frameHead('Field checks passed after the comment', after.total ? `${after.count} of ${after.total}` : '', 'what arrived while a commented bug was still in Created')}${afterBars}</section>
 </div>
-<section class="frame chart">${frameHead('Bugs checked per day', String(inChart), `${plural(days.length, 'day')} · by the day of the first check`)}${columnChart(days)}</section>`
+<section class="frame chart">${frameHead('Bugs checked per day', String(inChart), `${plural(days.length, 'day')} · by the day of the first check`)}${columnChart(days)}</section>
+</div>`
   return layout('Statistics · Bug validator', main, ctx, 'stats')
 }
 
@@ -708,11 +717,12 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
   const actions = check || posting ? `<div class="actions">${posting}${check}</div>` : ''
   // The dialog after the actions: without JavaScript it opens in the flow, under the buttons.
   const dialog = canPost ? confirmPost(b, m.confirmPost === true, ctx) : ''
-  const head = `<header class="bug-head"><div class="page-head"><h1>${esc(key)}</h1><span class="stats">${esc(b?.summary ?? '')}</span></div>${kv(rows)}${reason}${actions}${dialog}</header>`
+  const title = `<div class="page-head"><h1>${esc(key)}</h1><span class="stats">${esc(b?.summary ?? '')}</span></div>`
+  const head = `<section class="frame bug-head">${kv(rows)}${reason}${actions}${dialog}</section>`
   if (!b)
     return layout(
       `${key} · Bug validator`,
-      `${head}<p class="empty">Not checked yet. The page fills in when the service has checked the bug.</p>`,
+      `${title}<div class="two"><div class="stack">${head}</div><section class="frame checks">${frameHead('Checks')}<p class="empty">Not checked yet. The page fills in when the service has checked the bug.</p></section></div>`,
       ctx,
       'bugs',
     )
@@ -721,15 +731,18 @@ export function bugPage(m: BugModel, ctx: PageContext): string {
       b.status as string
     ] ?? ''
   const main = `
-${head}
+${title}
 <div class="two">
-<section class="frame checks">${frameHead('Checks')}${checks(b)}</section>
+<div class="stack">
+${head}
 <section class="frame comment">${frameHead('Comment', '', subtitle)}${commentBlock(b)}</section>
+</div>
+<section class="frame checks">${frameHead('Checks')}${checks(b)}</section>
 </div>`
   return layout(`${key} · Bug validator`, main, ctx, 'bugs')
 }
 
-/** The sheet's reason block: a label and the text, a rust edge for a bad end. */
+/** The sheet's reason block: a label and the text, a red edge for a bad end. */
 const reasonBlock = (tone: 'bad' | 'ok' | '', label: string, text: string): string =>
   `<div class="reason${tone ? ` ${tone}` : ''}"><span class="label">${esc(label)}</span><span>${esc(text)}</span></div>`
 
@@ -757,12 +770,12 @@ function checks(b: BugView): string {
     return `<p class="empty">${result(b) === 'error' ? 'The check did not finish.' : 'Never checked.'}</p>`
   // The report as the service last read it (every poll, while the bug is in Created); each check
   // keeps the field checks it got in the history. Hints, not the verdict: steps without a heading are still steps.
-  let html = `<h3>Field checks</h3><table class="wide requirements"><tbody>${b.fieldChecks
+  let html = `<h3>Field checks</h3><div class="table-scroll"><table class="wide requirements"><tbody>${b.fieldChecks
     .map(
       (c) =>
         `<tr><th>${c.id}</th><td>${esc(REQUIREMENTS[c.id])}</td><td><span class="${c.passed ? 'ok' : 'err'}">${c.passed ? '✓' : '✗'}</span> <span class="dim">${esc(c.detail)}</span></td></tr>`,
     )
-    .join('')}</tbody></table>`
+    .join('')}</tbody></table></div>`
   // The latest check's reasoning: where the agent looked, what it found, why it decided. For the
   // person who reviews the dry run and tunes the instructions; never posted. Earlier checks keep
   // theirs in the history.
@@ -770,7 +783,7 @@ function checks(b: BugView): string {
   if (latest?.reasoning) html += `<h3>Reasoning</h3><p class="reasoning">${esc(latest.reasoning)}</p>`
   if (b.history.length) {
     // Every check of the bug, oldest first: its outcome, what the agent read, its reasoning and the comment it wrote.
-    html += `<h3>History</h3><table class="wide history"><tbody>${b.history.map((run, i) => `<tr><td class="num dim">${fmtTime(run.at)}</td><td class="dim">${i === 0 ? 'first check' : 're-check'}</td><td>${runText(run, b.reporter)}</td></tr>`).join('')}</tbody></table>`
+    html += `<h3>History</h3><div class="table-scroll"><table class="wide history"><tbody>${b.history.map((run, i) => `<tr><td class="num dim">${fmtTime(run.at)}</td><td class="dim">${i === 0 ? 'first check' : 're-check'}</td><td>${runText(run, b.reporter)}</td></tr>`).join('')}</tbody></table></div>`
   }
   return html
 }
@@ -870,6 +883,9 @@ const resultPill = (b: BugView): string => {
   return `<span class="pill${cls ? ` ${cls}` : ''}">${esc(resultLabel(b))}</span>`
 }
 
+/** A table inside the sheet's scroller: on a narrow window it scrolls sideways within its frame, the page never does. */
+const scroll = (table: string): string => `<div class="table-scroll">${table}</div>`
+
 const kv = (rows: [string, string][]): string => `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`
 
 const bugLink = (key: string): string => (ISSUE_KEY.test(key) ? `<a class="key" href="/bugs/${key}">${key}</a>` : esc(key))
@@ -879,13 +895,15 @@ function jiraLink(key: string, ctx: PageContext, text = 'Jira'): string {
   return `<a class="jira" href="${esc(ctx.jiraBaseUrl)}/browse/${key}" target="_blank" rel="noopener">${text}</a>`
 }
 
-/** The arrow that opens the bug in Jira, as the sheet draws it in a `td.jira`. */
+const AGAIN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 4v7h-7"/></svg>'
+
 /** The Bugs list's button that asks for one more check of the bug; the person stays on the list. */
 const runAgain = (key: string): string =>
   ISSUE_KEY.test(key)
-    ? `<form class="inline" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button class="btn tiny icon" title="Run again" aria-label="Run ${key} again">↻</button></form>`
+    ? `<form class="inline" method="post" action="/requests"><input type="hidden" name="key" value="${key}"><button class="btn tiny icon" title="Run again" aria-label="Run ${key} again">${AGAIN_ICON}</button></form>`
     : ''
 
+/** The arrow that opens the bug in Jira, as the sheet draws it in a `td.jira`. */
 const jiraArrow = (key: string, ctx: PageContext): string =>
   ISSUE_KEY.test(key) ? `<a href="${esc(ctx.jiraBaseUrl)}/browse/${key}" target="_blank" rel="noopener" title="${key} in Jira">↗</a>` : ''
 

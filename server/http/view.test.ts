@@ -272,7 +272,7 @@ describe('bugs', () => {
     )
     assert.match(
       html,
-      /<input type="hidden" name="key" value="KAZ-2"><button class="btn tiny icon" title="Run again" aria-label="Run KAZ-2 again">↻<\/button>/,
+      /<input type="hidden" name="key" value="KAZ-2"><button class="btn tiny icon" title="Run again" aria-label="Run KAZ-2 again"><svg /,
     )
     const page = text(html)
     assert.match(page, /All bugs 6 bugs/)
@@ -283,7 +283,7 @@ describe('bugs', () => {
     )
     assert.match(page, /KAZ-3 ↗ Login page freezes \d\d:\d\d understood 1 /, 'one check is counted')
     assert.match(page, /RPG-6 ↗ Port counter lags behind the CLI \d\d:\d\d not a WebUI bug R6/)
-    assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 ↗ \d\d:\d\d skipped ↻$/)
+    assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 ↗ \d\d:\d\d skipped$/)
     assert.match(
       html,
       /<td class="jira"><a href="https:\/\/jira.example.com\/browse\/KAZ-2" target="_blank" rel="noopener" title="KAZ-2 in Jira">↗<\/a><\/td>/,

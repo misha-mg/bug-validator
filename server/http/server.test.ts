@@ -64,9 +64,9 @@ describe('server', () => {
     assert.equal(css.type, 'text/css; charset=utf-8')
     assert.doesNotMatch(css.body, /@font-face/, "the faces are the sheet's")
     const sheet = (await get('/sheet.css')).body
-    assert.match(sheet, /--slate/)
+    assert.match(sheet, /--accent/)
     assert.match(sheet, /@font-face/)
-    const font = await fetch(`${base}/fonts/barlow-latin-400-normal.woff2`)
+    const font = await fetch(`${base}/fonts/inter-latin-400-normal.woff2`)
     assert.equal(font.status, 200)
     assert.equal(font.headers.get('content-type'), 'font/woff2')
     assert.equal((await font.arrayBuffer()).byteLength > 10_000, true)

@@ -1,181 +1,407 @@
-/* The drafting sheet: the design system pipeline-ui and bug-validator share. This file, with
-   ui/public/theme.js and the Barlow faces in ui/public/fonts/, is the source of truth, in
-   pipeline-ui (ui/src/sheet.css); bug-validator copies the three with its `npm run sheet:sync`,
-   and a test there fails when its copy falls behind. An edit is made here, never in the copy.
+/* The sheet: the design system pipeline-ui and bug-validator share. This file, with
+   ui/public/theme.js and the faces in ui/public/fonts/, is the source of truth, in pipeline-ui
+   (ui/src/sheet.css); bug-validator copies the three with its `npm run sheet:sync`, and a test
+   there fails when its copy falls behind. An edit is made here, never in the copy.
 
-   It holds the tokens and every part both consoles draw: the fonts, the masthead, the page,
-   frames, headings, labels, cards, the strip, controls (buttons, fields, the switch), filters,
-   pills, chips, tables, facts, notices, the confirmation dialog, lamps and the pulse, bars, the
-   column chart, toasts. Each app's own stylesheet only lays out its pages with the colours
-   named here.
+   It is the CGS Glass kit (cgs-design: tokens.css and components.css) applied to the parts both
+   consoles draw: the tokens first, verbatim, with the kit's `--cg-` names, so a change in the
+   kit is a change here; then the fonts, the masthead, the page, frames, headings, labels, cards,
+   the strip, controls (buttons, fields, the switch), filters, pills, chips, tables, facts,
+   notices, the confirmation dialog, lamps and the pulse, bars, the column chart, toasts. The
+   class names are the sheet's own (`.frame`, `.btn`, `.chip`, `.switch`); their look is the
+   kit's (`.cg-card`, `.cg-btn`, `.cg-seg`, `.cg-switch`). Each app's own stylesheet only lays out
+   its pages with the tokens named here.
 
-   One light surface, hairline frames, Barlow Condensed for titles and values, letter-spaced
-   capitals for labels, and colour only where it says something: slate for the one thing to
-   press, moss for ok, rust for an error. Dark by data-theme on <html>, set by theme.js before
-   the page paints. */
+   Dark glass by default: translucent surfaces on a dark window, soft corners, thin bars, a mono
+   log, iOS switches; blue for the one thing to press, green for ok, orange for a stop, red for
+   danger. Light by data-theme on <html>, set by theme.js before the page paints. */
 
-/* The faces, served by each app from /fonts/ (the files are in ui/public/fonts/, OFL licensed). */
+/* ==========================================================================
+   Tokens (cgs-design/tokens.css). Every colour goes through these.
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+
+  /* Fonts: the system face where there is one (SF Pro, SF Mono on a Mac), Inter and JetBrains
+     Mono served by each app from /fonts/ otherwise. */
+  --cg-font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --cg-font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* The type scale. */
+  --cg-text-xs: 11px; /* captions, uppercase labels */
+  --cg-text-sm: 13px; /* labels, meta, the mono log */
+  --cg-text-md: 14px; /* body */
+  --cg-text-lg: 15px; /* navigation, row titles */
+  --cg-text-xl: 18px; /* a card's title */
+  --cg-text-2xl: 22px; /* a page's title */
+  --cg-text-stat: 28px; /* the big numbers in tiles */
+
+  --cg-leading-tight: 1.2;
+  --cg-leading-normal: 1.45;
+  --cg-tracking-label: 0.01em;
+
+  /* Space, in steps of 4px. */
+  --cg-space-1: 4px;
+  --cg-space-2: 8px;
+  --cg-space-3: 12px;
+  --cg-space-4: 16px;
+  --cg-space-5: 20px;
+  --cg-space-6: 24px;
+  --cg-space-8: 32px;
+
+  /* Corners. */
+  --cg-radius-xs: 6px; /* icon tags, small chips */
+  --cg-radius-sm: 8px; /* inputs, list rows */
+  --cg-radius-md: 10px; /* buttons, app icons */
+  --cg-radius-lg: 14px; /* cards, tiles */
+  --cg-radius-xl: 22px; /* the window */
+  --cg-radius-pill: 999px;
+
+  /* Surfaces (the glass). */
+  --cg-stage: #6f93b3; /* the scene behind the window */
+  --cg-stage-glow-1: rgba(255, 255, 255, 0.55);
+  --cg-stage-glow-2: rgba(36, 86, 140, 0.55);
+
+  --cg-window: rgba(43, 45, 49, 0.92); /* the window */
+  --cg-sidebar: rgba(255, 255, 255, 0.025); /* the side panel, the top bar */
+  --cg-surface: rgba(255, 255, 255, 0.045); /* a card */
+  --cg-surface-2: rgba(255, 255, 255, 0.07); /* a selected row, hover */
+  --cg-surface-3: rgba(255, 255, 255, 0.1); /* a button, an input */
+  --cg-surface-4: rgba(255, 255, 255, 0.15); /* a button's hover, the active tab */
+  --cg-well: rgba(0, 0, 0, 0.22); /* a sunken area (the log, a segmented control) */
+  --cg-overlay: rgba(0, 0, 0, 0.55); /* the modal backdrop */
+
+  --cg-border: rgba(255, 255, 255, 0.06);
+  --cg-border-strong: rgba(255, 255, 255, 0.12);
+  --cg-highlight: rgba(255, 255, 255, 0.06); /* the one-pixel gleam along a card's top edge */
+
+  --cg-blur: 28px;
+
+  /* Text. */
+  --cg-fg: #ededef;
+  --cg-fg-2: #a2a5ab; /* secondary */
+  --cg-fg-3: #74777e; /* muted */
+  --cg-fg-on-accent: #ffffff;
+
+  /* Accents. */
+  --cg-blue: #4a8cf7; /* links, ports, active bars */
+  --cg-blue-soft: rgba(74, 140, 247, 0.18);
+  --cg-orange: #e6912a; /* the second series, "working" */
+  --cg-orange-soft: rgba(230, 145, 42, 0.18);
+  --cg-purple: #8b5cf6;
+  --cg-pink: #ec4899;
+
+  /* States. */
+  --cg-ok: #34c759;
+  --cg-ok-soft: rgba(52, 199, 89, 0.18);
+  --cg-warn: #f0a030;
+  --cg-danger: #ff6b6b;
+  --cg-danger-soft: rgba(255, 107, 107, 0.16);
+  --cg-energy: #8fd14f; /* the energy gauge */
+
+  /* Chart series (muted, for the dark glass). */
+  --cg-chart-blue: #8aa6cf;
+  --cg-chart-green: #86bf72;
+  --cg-chart-green-2: #5c8a52;
+  --cg-chart-orange: #e08f6e;
+  --cg-chart-grey: #7f8894;
+
+  /* Charts. */
+  --cg-bar-idle: rgba(255, 255, 255, 0.22);
+  --cg-bar-active: var(--cg-blue);
+  --cg-track: rgba(255, 255, 255, 0.12);
+
+  /* Shadows. */
+  --cg-shadow-window: 0 40px 90px rgba(0, 0, 0, 0.45), 0 2px 0 rgba(255, 255, 255, 0.06) inset;
+  --cg-shadow-card: 0 1px 0 var(--cg-highlight) inset;
+  --cg-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --cg-shadow-popover: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --cg-shadow-knob: 0 1px 3px rgba(0, 0, 0, 0.35);
+
+  /* The keyboard's focus. */
+  --cg-ring: 0 0 0 3px rgba(74, 140, 247, 0.4);
+
+  /* Motion. */
+  --cg-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --cg-dur: 160ms;
+
+  /* The sheet's own: what a chart's colours say (done, done another way, stopped, a plain
+     count, not known; a chart has a legend and a tooltip, the muted steps' contrast is low),
+     and the page: as wide as it gets, the space at its sides, the space between frames. */
+  --chart-ok: var(--cg-chart-green);
+  --chart-ok-soft: var(--cg-chart-green-2);
+  --chart-bad: var(--cg-chart-orange);
+  --chart-count: var(--cg-chart-blue);
+  --chart-none: var(--cg-chart-grey);
+  --page: 1480px;
+  --gutter: var(--cg-space-6);
+  --gap: var(--cg-space-5);
+  /* The scene behind the window: a gradient from one edge of the screen to the other, a dark
+     in one corner, the scene's hue in between, another dark in the other corner; a light of
+     the same hue over it for depth; and the grain's strength over both. The hue is the one
+     colour to change to try another scene. */
+  --scene-hue: var(--accent-fill);
+  --scene-1: #0f1115;
+  --scene-2: color-mix(in srgb, var(--scene-hue) 16%, #13161c);
+  --scene-3: #1c1f25;
+  --scene-light: color-mix(in srgb, var(--scene-hue) 10%, transparent);
+  --grain: 0.18;
+  /* The accent: the one colour for the thing to press, the active choice, a link, the keyboard's
+     ring and what is live now. Yellow, in place of the kit's blue, which stays the colour of
+     data (the chart's count series, the bars, the slate pill). The fill is for a filled surface,
+     the accent itself for text and lines (the light theme darkens it to read on white), the ink
+     is the text on the fill. */
+  --accent: #e3c25a;
+  --accent-fill: #e3c25a;
+  --accent-soft: rgba(227, 194, 90, 0.18);
+  --accent-ink: #1c1d21;
+  --ring: 0 0 0 3px rgba(227, 194, 90, 0.4);
+}
+/* Light. theme.js sets data-theme before the first paint (the stored choice, the system's
+   setting until then), so the attribute is the one switch. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --cg-stage: #c9d6e2;
+  --cg-stage-glow-1: rgba(255, 255, 255, 0.9);
+  --cg-stage-glow-2: rgba(120, 160, 200, 0.6);
+  --cg-window: rgba(244, 245, 247, 0.94);
+  --scene-1: #dfe4ea;
+  --scene-2: color-mix(in srgb, var(--scene-hue) 14%, #e6ebf1);
+  --scene-3: #eef1f5;
+  --scene-light: color-mix(in srgb, var(--scene-hue) 9%, transparent);
+  --grain: 0.12;
+  --accent: #8a6a12;
+  --accent-fill: #dcb43c;
+  --accent-soft: rgba(200, 160, 40, 0.22);
+  --ring: 0 0 0 3px rgba(200, 160, 40, 0.45);
+  --cg-sidebar: rgba(0, 0, 0, 0.025);
+  /* The kit's light card is white at 72%; over a scene it is glass here too, as in the dark,
+     so the scene shows through a card in both themes and the switch changes the page and the
+     text, not the blocks. */
+  --cg-surface: rgba(255, 255, 255, 0.3);
+  --cg-surface-2: rgba(0, 0, 0, 0.045);
+  --cg-surface-3: rgba(0, 0, 0, 0.06);
+  --cg-surface-4: rgba(0, 0, 0, 0.1);
+  --cg-well: rgba(0, 0, 0, 0.05);
+  --cg-overlay: rgba(20, 24, 30, 0.35);
+  --cg-border: rgba(0, 0, 0, 0.07);
+  --cg-border-strong: rgba(0, 0, 0, 0.14);
+  --cg-highlight: rgba(255, 255, 255, 0.8);
+  --cg-fg: #1c1d21;
+  --cg-fg-2: #5e6168;
+  --cg-fg-3: #8a8d94;
+  --cg-blue: #2f6fe0;
+  --cg-orange: #c6730a;
+  --cg-ok: #1f9d55;
+  --cg-danger: #d93f3f;
+  --cg-energy: #5fa52a;
+  --cg-chart-blue: #4f78c2;
+  --cg-chart-green: #3b8a2e;
+  --cg-chart-green-2: #86b57a;
+  --cg-chart-orange: #c9623a;
+  --cg-chart-grey: #8a929e;
+  --cg-bar-idle: rgba(0, 0, 0, 0.18);
+  --cg-track: rgba(0, 0, 0, 0.1);
+  --cg-shadow-window: 0 40px 90px rgba(30, 40, 60, 0.3), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --cg-shadow-card: 0 1px 0 var(--cg-highlight) inset, 0 1px 2px rgba(0, 0, 0, 0.04);
+  --cg-shadow-raised: 0 8px 24px rgba(30, 40, 60, 0.15);
+  --cg-shadow-popover: 0 16px 48px rgba(30, 40, 60, 0.25);
+}
+
+/* The faces, for a machine without SF Pro and SF Mono (the files are in ui/public/fonts/, OFL). */
 @font-face {
-  font-family: 'Barlow';
+  font-family: 'Inter';
   font-weight: 400;
   font-display: swap;
-  src: url(/fonts/barlow-latin-400-normal.woff2) format('woff2');
+  src: url(/fonts/inter-latin-400-normal.woff2) format('woff2');
 }
 @font-face {
-  font-family: 'Barlow';
+  font-family: 'Inter';
   font-weight: 500;
   font-display: swap;
-  src: url(/fonts/barlow-latin-500-normal.woff2) format('woff2');
+  src: url(/fonts/inter-latin-500-normal.woff2) format('woff2');
 }
 @font-face {
-  font-family: 'Barlow';
+  font-family: 'Inter';
   font-weight: 600;
   font-display: swap;
-  src: url(/fonts/barlow-latin-600-normal.woff2) format('woff2');
+  src: url(/fonts/inter-latin-600-normal.woff2) format('woff2');
 }
 @font-face {
-  font-family: 'Barlow Condensed';
-  font-weight: 500;
-  font-display: swap;
-  src: url(/fonts/barlow-condensed-latin-500-normal.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Condensed';
-  font-weight: 600;
-  font-display: swap;
-  src: url(/fonts/barlow-condensed-latin-600-normal.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Condensed';
+  font-family: 'Inter';
   font-weight: 700;
   font-display: swap;
-  src: url(/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2');
+  src: url(/fonts/inter-latin-700-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/jetbrains-mono-latin-400-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/jetbrains-mono-latin-500-normal.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 600;
+  font-display: swap;
+  src: url(/fonts/jetbrains-mono-latin-600-normal.woff2) format('woff2');
 }
 
-:root {
-  --bg: #f3f3f1;
-  --text: #2a2e35;
-  --muted: #7b818b;
-  --faint: #a4a9b1;
-  --line: #d6d8d3;
-  --line-soft: #e5e6e2;
-  --field: #ebebe9;
-  --slate: #6f89aa;
-  --slate-ink: #5b759a;
-  --rust: #a8583c;
-  --moss: #5f7f5a;
-  --on-slate: #fff;
-  --sans: 'Barlow', system-ui, sans-serif;
-  --cond: 'Barlow Condensed', 'Barlow', sans-serif;
-  --mono: ui-monospace, Menlo, Consolas, monospace;
-  /* Chart colours say how a thing ended, from the sheet's own: moss done, its lighter step done
-     another way, rust stopped, slate a plain count, faint not known (a light step's contrast is
-     low, so every chart has a legend and a tooltip). */
-  --chart-ok: var(--moss);
-  --chart-ok-soft: color-mix(in srgb, var(--moss) 50%, var(--bg));
-  --chart-bad: var(--rust);
-  --chart-count: var(--slate);
-  --chart-none: var(--faint);
-  /* One corner for everything boxed: buttons, fields, pills, chips, toasts. */
-  --radius: 3px;
-  /* The page: as wide as the sheet gets, the space at its sides, the space between frames. */
-  --page: 1480px;
-  --gutter: 28px;
-  --gap: 26px;
-}
-:root[data-theme='dark'] {
-  --bg: #1f2124;
-  --text: #dddcd7;
-  --muted: #8e939b;
-  --faint: #666b73;
-  --line: #3d4046;
-  --line-soft: #2e3136;
-  --field: #292b2f;
-  --slate: #7893b4;
-  --slate-ink: #95abc9;
-  --rust: #c98066;
-  --moss: #85a67f;
-  --chart-ok-soft: color-mix(in srgb, var(--moss) 58%, var(--bg));
-}
-
-* {
+/* ==========================================================================
+   Base (the kit's .cg-root, on the page itself)
+   ========================================================================== */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 html,
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.45 var(--sans);
+  background: var(--cg-window);
+  color: var(--cg-fg);
+}
+/* The page is the scene behind the kit's window: a gradient from corner to corner, dark, the
+   scene's hue, dark, a light of that hue over it for depth, and a grain over both, so the glass sits on something
+   and a large dark surface does not band. The
+   two layers are the body's pseudo-elements, fixed and under its content (the body is a
+   stacking context for that); the grain is one SVG noise tile (feTurbulence), no image file
+   and no script, laid over at a low opacity (a blend mode would lose it on the dark window) so
+   it reads as paper, not as dirt. The lights drift
+   a little over a minute, and not at all for who asked for less motion. */
+body {
+  position: relative;
+  z-index: 0;
+  min-height: 100vh;
+  font: var(--cg-text-md) / var(--cg-leading-normal) var(--cg-font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+body::before {
+  inset: -12%;
+  background:
+    radial-gradient(55% 65% at 68% 30%, var(--scene-light), transparent 70%),
+    linear-gradient(128deg, var(--scene-1) 0%, var(--scene-2) 52%, var(--scene-3) 100%);
+  animation: scene-drift 64s ease-in-out infinite alternate;
+}
+body::after {
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23g)'/></svg>")
+    0 0 / 240px 240px;
+  opacity: var(--grain);
+}
+@keyframes scene-drift {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 2%, 0) scale(1.06);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
+  }
+}
+/* The keyboard's focus: the same ring on everything, in the accent (the switch draws it on its track). */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 a {
-  color: var(--slate-ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
+  color: var(--accent);
+  text-decoration: none;
+  border-radius: 4px;
 }
 a:hover {
-  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 code,
 pre {
-  font-family: var(--mono);
-  font-size: 12.5px;
+  font-family: var(--cg-font-mono);
+  font-size: var(--cg-text-sm);
 }
 button {
   font: inherit;
 }
 .muted,
 .dim {
-  color: var(--muted);
+  color: var(--cg-fg-2);
 }
 .ok {
-  color: var(--moss);
+  color: var(--cg-ok);
 }
 .err,
 .warn {
-  color: var(--rust);
+  color: var(--cg-danger);
 }
 
-/* The masthead: the name, what and where, the state; then the pages and the theme switch. Its
-   content lines up with the sheet's under it, however wide the window. */
+/* ==========================================================================
+   The masthead (the kit's top bar): the name, where, the state; the pages and the theme
+   switch. Its content lines up with the sheet's under it, however wide the window. Sticky,
+   and glass over what scrolls under it: the kit's top-bar tint, nearly clear, over the blur,
+   so the scene shows through it.
+   ========================================================================== */
 .masthead {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: var(--cg-space-4);
   height: 60px;
   padding: 0 max(var(--gutter), calc((100% - var(--page)) / 2 + var(--gutter)));
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
+  border-bottom: 1px solid var(--cg-border);
+  background: var(--cg-sidebar);
+  -webkit-backdrop-filter: blur(var(--cg-blur)) saturate(140%);
+  backdrop-filter: blur(var(--cg-blur)) saturate(140%);
   position: sticky;
   top: 0;
   z-index: 2;
 }
 .masthead .brand {
-  font: 600 27px/1 var(--cond);
-  letter-spacing: 0.18em;
+  font-size: var(--cg-text-xl);
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  text-decoration: none;
-  color: var(--text);
+  color: var(--cg-fg);
   white-space: nowrap;
+}
+.masthead .brand:hover {
+  text-decoration: none;
 }
 .masthead .divider {
   width: 1px;
   height: 24px;
-  background: var(--line);
+  background: var(--cg-border-strong);
   flex: none;
 }
 .masthead .where {
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  font-family: var(--cg-font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--cg-fg-3);
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .masthead .offline {
-  color: var(--rust);
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  color: var(--cg-danger);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -184,30 +410,67 @@ button {
 }
 .masthead nav {
   display: flex;
-  gap: 10px;
+  gap: var(--cg-space-2);
 }
 .masthead form {
   display: flex;
-  gap: 8px;
+  gap: var(--cg-space-2);
 }
 .masthead .field {
   width: 15rem;
 }
-.theme {
-  color: var(--muted);
+/* The pages and the theme switch are the kit's ghost caps buttons; the page shown is tinted blue. */
+.masthead .btn {
+  height: 30px;
+  padding: 0 12px;
+  background: transparent;
+  border-color: var(--cg-border-strong);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
-.theme::before {
-  content: 'Dark';
+.masthead .btn:hover:not(:disabled) {
+  background: var(--cg-surface-2);
 }
-:root[data-theme='dark'] .theme::before {
-  content: 'Light';
+/* The theme switch: the kit's icon button, a sun while the page is dark and a moon while it is
+   light (the one to switch to), drawn as inline SVG by the app (`.theme > svg.sun + svg.moon`);
+   the icon turns a little under the pointer. */
+.masthead .btn.theme {
+  width: 30px;
+  padding: 0;
+  color: var(--cg-fg-2);
+}
+.theme:hover:not(:disabled) {
+  color: var(--cg-fg);
+}
+.theme svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--cg-dur) var(--cg-ease);
+}
+.theme:hover svg {
+  transform: rotate(20deg);
+}
+.theme .sun,
+:root[data-theme='dark'] .theme .moon {
+  display: none;
+}
+:root[data-theme='dark'] .theme .sun {
+  display: block;
 }
 
 /* The sheet: the page under the masthead. */
 .sheet {
   max-width: var(--page);
   margin: 0 auto;
-  padding: 30px var(--gutter) 60px;
+  padding: var(--cg-space-6) var(--gutter) 60px;
 }
 .stack {
   display: grid;
@@ -215,32 +478,37 @@ button {
   min-width: 0;
 }
 
-/* Frames: a hairline border, no fill. */
+/* ==========================================================================
+   Frames (the kit's card): a translucent surface, a hairline, soft corners, the gleam.
+   ========================================================================== */
 .frame {
+  --pad: var(--cg-space-4);
   position: relative;
-  border: 1px solid var(--line);
-  padding: 20px 22px 22px;
+  background: var(--cg-surface);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-shadow-card);
+  padding: var(--pad);
   min-width: 0;
 }
-/* A frame's title line: the name, a count, a note, something on the right. */
+/* A frame's title line (the kit's chart head): the name, a count, a note, something on the right. */
 .frame-head {
   display: flex;
   align-items: baseline;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: var(--cg-space-3);
+  margin-bottom: var(--cg-space-3);
   flex-wrap: wrap;
 }
 .frame-head h2 {
   margin: 0;
 }
 .frame-head .count {
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: var(--muted);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
 }
 .frame-head .note {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
   flex: 1 1 260px;
 }
 .frame-head .right {
@@ -249,89 +517,96 @@ button {
 
 /* Headings: the page's title, a frame's, and a label-like one inside a frame. */
 h1 {
-  font: 600 38px/1 var(--cond);
-  letter-spacing: 0.08em;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: var(--cg-leading-tight);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   margin: 0;
 }
 h2 {
-  font: 600 22px/1 var(--cond);
-  letter-spacing: 0.08em;
+  font-size: var(--cg-text-xl);
+  font-weight: 700;
+  line-height: var(--cg-leading-tight);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  margin: 0 0 14px;
+  margin: 0 0 var(--cg-space-3);
 }
 .page-head {
   display: flex;
   align-items: baseline;
-  gap: 16px;
+  gap: var(--cg-space-4);
   flex-wrap: wrap;
-  margin: 6px 0 26px;
+  margin: 0 0 var(--cg-space-5);
 }
 .page-head .stats {
-  font-size: 12px;
-  color: var(--muted);
-  letter-spacing: 0.02em;
+  font-size: var(--cg-text-md);
+  color: var(--cg-fg-2);
 }
 .page-head .action {
-  font: 600 11px/1 var(--cond);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: var(--cg-text-md);
+  font-weight: 500;
 }
 
-/* Labels: small letter-spaced capitals wherever something is named rather than said. */
+/* Labels (the kit's KPI and filter labels): small capitals wherever something is named rather
+   than said. */
 .label,
 h3,
 thead th,
 dl.kv dt {
-  font: 500 11px/1.45 var(--sans);
-  letter-spacing: 0.16em;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--cg-fg-2);
 }
 .label {
-  margin-bottom: 12px;
+  margin-bottom: var(--cg-space-3);
 }
 h3 {
-  margin: 24px 0 10px;
+  margin: var(--cg-space-6) 0 var(--cg-space-2);
 }
 
-/* Cards: a row of compact frames over a page, four across; each a label, a value in the
-   condensed face with a small word beside it, a note under it cut to one line, and a row of
-   small actions when the thing has any. */
+/* ==========================================================================
+   Cards (the kit's stat tiles): a row of compact frames over a page, four across; each a
+   label, a big value with a small word beside it, a note under it cut to one line, and a row
+   of small actions when the thing has any.
+   ========================================================================== */
 .cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--gap);
-  margin-bottom: 30px;
+  margin-bottom: var(--gap);
 }
 .cards .card {
-  padding: 16px 20px 18px;
+  padding: var(--cg-space-4);
 }
 .cards .label {
-  margin-bottom: 8px;
+  margin-bottom: var(--cg-space-2);
 }
 .card .value {
-  font: 500 30px/1 var(--cond);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-size: var(--cg-text-stat);
+  font-weight: 600;
+  line-height: 1.15;
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: var(--cg-space-2);
   flex-wrap: wrap;
 }
 .card .value small {
-  font: 400 12px/1.3 var(--sans);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--muted);
+  font-size: var(--cg-text-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--cg-fg-2);
 }
 .card .value.live {
-  color: var(--moss);
+  color: var(--cg-ok);
 }
 .card .note {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 6px;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
+  margin-top: var(--cg-space-1);
 }
 .card .note.one {
   white-space: nowrap;
@@ -339,12 +614,12 @@ h3 {
   text-overflow: ellipsis;
 }
 .card .note.err {
-  color: var(--rust);
+  color: var(--cg-danger);
 }
 .card .acts {
   display: flex;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: var(--cg-space-2);
 }
 @media (max-width: 1100px) {
   .cards {
@@ -357,40 +632,50 @@ h3 {
   }
 }
 
-/* The strip: one frame of cells parted by hairlines, each a label, a number and a note, for
-   what a list adds up to. Six across, eight with `.eight`; fewer as the page narrows, the cells
-   that start a row losing their left line and the rows under the first getting a top one. */
+/* ==========================================================================
+   The strip (the kit's KPI strip): one frame of cells parted by hairlines, each a label, a
+   number and a note, for what a list adds up to. Six across, eight with `.eight`; fewer as
+   the page narrows. The strip is one frame, its surface the same glass as any block's; the
+   hairlines are drawn into the one-pixel gap by each cell's shadow, so no second layer of
+   surface sits on the cells and the strip is no lighter than the frames around it.
+   ========================================================================== */
 .strip {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
   padding: 0;
-  margin: -6px 0 22px;
+  margin: 0 0 var(--gap);
+  overflow: hidden;
 }
 .strip .cell {
-  padding: 16px 20px 15px;
+  padding: var(--cg-space-4) var(--cg-space-5);
   min-width: 0;
-  border-left: 1px solid var(--line-soft);
-}
-.strip .cell:first-child {
-  border-left: 0;
+  box-shadow:
+    -1px 0 0 var(--cg-border),
+    0 -1px 0 var(--cg-border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .strip .label {
-  margin-bottom: 8px;
+  margin-bottom: var(--cg-space-1);
+  min-height: 2.6em;
 }
 .strip .value {
-  font: 500 30px/1 var(--cond);
-  letter-spacing: 0.02em;
+  font-size: var(--cg-text-stat);
+  font-weight: 600;
+  line-height: 1.15;
 }
 .strip .value.ok {
-  color: var(--moss);
+  color: var(--cg-ok);
 }
 .strip .value.bad {
-  color: var(--rust);
+  color: var(--cg-orange);
 }
 .strip .note {
-  margin-top: 7px;
-  font-size: 12px;
-  color: var(--muted);
+  margin-top: var(--cg-space-1);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -398,26 +683,14 @@ h3 {
 .strip.eight {
   grid-template-columns: repeat(8, minmax(0, 1fr));
 }
-@media (max-width: 1300px) and (min-width: 641px) {
+@media (max-width: 1300px) {
   .strip.eight {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .strip.eight .cell:nth-child(4n + 1) {
-    border-left: 0;
-  }
-  .strip.eight .cell:nth-child(n + 5) {
-    border-top: 1px solid var(--line-soft);
-  }
 }
-@media (max-width: 1100px) and (min-width: 641px) {
+@media (max-width: 1100px) {
   .strip:not(.eight) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .strip:not(.eight) .cell:nth-child(3n + 1) {
-    border-left: 0;
-  }
-  .strip:not(.eight) .cell:nth-child(n + 4) {
-    border-top: 1px solid var(--line-soft);
   }
 }
 @media (max-width: 640px) {
@@ -425,105 +698,107 @@ h3 {
   .strip.eight {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .strip .cell {
-    border-left: 1px solid var(--line-soft);
-    border-top: 1px solid var(--line-soft);
-  }
-  .strip .cell:nth-child(odd) {
-    border-left: 0;
-  }
-  .strip .cell:nth-child(-n + 2) {
-    border-top: 0;
-  }
 }
 
-/* Controls. */
+/* ==========================================================================
+   Controls
+   ========================================================================== */
+/* Buttons (the kit's button): a filled surface, soft corners, no capitals. `.primary` is
+   blue, the one thing to press; `.active` a page or filter that is on; `.danger` turns red
+   under the pointer; `.big` and `.tiny` are the sizes. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 16px;
-  height: 36px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
-  font: 600 12px/1 var(--cond);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--cg-radius-md);
+  background: var(--cg-surface-3);
+  color: var(--cg-fg);
+  font-size: var(--cg-text-md);
+  font-weight: 500;
+  line-height: 1;
   cursor: pointer;
-  border-radius: var(--radius);
-  text-decoration: none;
   white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background var(--cg-dur) var(--cg-ease),
+    color var(--cg-dur) var(--cg-ease),
+    transform var(--cg-dur) var(--cg-ease);
 }
 .btn:hover:not(:disabled) {
-  border-color: var(--muted);
-  color: var(--text);
+  background: var(--cg-surface-4);
+  text-decoration: none;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
-/* The keyboard's focus, the same ring on every control (the switch and the chart draw it on their own part). */
-.btn:focus-visible,
-.chip:focus-visible,
-.field:focus-visible,
-.fold:focus-visible,
-.toast .close:focus-visible {
-  outline: 2px solid var(--slate);
-  outline-offset: 2px;
+.btn.primary {
+  background: var(--accent-fill);
+  color: var(--accent-ink);
 }
-.btn.primary,
-.btn.active {
-  background: var(--slate);
-  border-color: var(--slate);
-  color: var(--on-slate);
+.btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-fill) 88%, #fff);
 }
-.btn.primary:hover:not(:disabled),
-.btn.active:hover {
-  background: var(--slate-ink);
-  border-color: var(--slate-ink);
-  color: var(--on-slate);
+.btn.active,
+.btn.active:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .btn.big {
-  height: 48px;
-  font-size: 16px;
-  letter-spacing: 0.2em;
+  height: 44px;
+  padding: 0 18px;
+  font-size: var(--cg-text-lg);
+  font-weight: 600;
   flex: 1;
 }
 .btn.danger:hover:not(:disabled) {
-  border-color: var(--rust);
-  color: var(--rust);
+  background: var(--cg-danger-soft);
+  color: var(--cg-danger);
 }
 .btn.tiny {
-  height: 24px;
-  padding: 0 8px;
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  height: 26px;
+  padding: 0 10px;
+  font-size: var(--cg-text-sm);
+  border-radius: var(--cg-radius-sm);
 }
+/* Fields (the kit's input). */
 .field {
   width: 100%;
-  height: 36px;
+  height: 34px;
   padding: 0 12px;
-  border: 1px solid var(--line);
-  background: var(--field);
-  color: var(--text);
-  font: 14px var(--sans);
-  border-radius: var(--radius);
+  border: 1px solid transparent;
+  border-radius: var(--cg-radius-sm);
+  background: var(--cg-surface-3);
+  color: var(--cg-fg);
+  font: inherit;
+  font-size: var(--cg-text-md);
+  transition:
+    box-shadow var(--cg-dur) var(--cg-ease),
+    background var(--cg-dur) var(--cg-ease);
 }
 .field::placeholder {
-  color: var(--faint);
+  color: var(--cg-fg-3);
+}
+.field:hover:not(:disabled) {
+  background: var(--cg-surface-4);
 }
 .field:disabled {
-  color: var(--faint);
+  color: var(--cg-fg-3);
 }
 .field:focus {
   outline: none;
-  border-color: var(--slate);
+  box-shadow: var(--ring);
 }
 .ctl {
   display: flex;
-  gap: 8px;
+  gap: var(--cg-space-2);
   align-items: center;
 }
 .ctl .field {
@@ -531,96 +806,83 @@ h3 {
   min-width: 0;
 }
 .hint {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 10px 0 0;
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
+  margin: var(--cg-space-2) 0 0;
+  overflow-wrap: anywhere;
 }
 .hint.err {
-  color: var(--rust);
+  color: var(--cg-danger);
 }
 .empty {
-  color: var(--muted);
-  font-size: 13px;
-  padding: 8px 0;
+  color: var(--cg-fg-2);
+  font-size: var(--cg-text-sm);
+  padding: var(--cg-space-2) 0;
   margin: 0;
 }
 .rule {
   height: 1px;
-  background: var(--line-soft);
-  margin: 22px 0;
+  background: var(--cg-border);
+  margin: var(--cg-space-5) 0;
 }
-/* The switch: a word and a small track whose knob slides right and fills slate when on, so
-   the state shows at a glance; a button with role="switch" and aria-checked. */
+/* The switch (the kit's small switch): a word and a track whose white knob slides right and
+   fills green when on; a button with role="switch" and aria-checked. */
 .switch {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--cg-space-3);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--muted);
-  font: 600 11px/1 var(--cond);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  color: var(--cg-fg);
+  font-size: var(--cg-text-md);
+  font-weight: 500;
   cursor: pointer;
-}
-.switch:hover {
-  color: var(--text);
 }
 .switch .track {
   position: relative;
   flex: none;
-  width: 28px;
-  height: 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--field);
-  transition:
-    background 0.15s,
-    border-color 0.15s;
+  width: 34px;
+  height: 20px;
+  border-radius: var(--cg-radius-pill);
+  background: var(--cg-surface-4);
+  transition: background var(--cg-dur) var(--cg-ease);
 }
 .switch .knob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 10px;
-  height: 10px;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--muted);
-  transition:
-    transform 0.15s,
-    background 0.15s;
-}
-.switch[aria-checked='true'] {
-  color: var(--slate-ink);
+  background: #fff;
+  box-shadow: var(--cg-shadow-knob);
+  transition: transform var(--cg-dur) var(--cg-ease);
 }
 .switch[aria-checked='true'] .track {
-  background: var(--slate);
-  border-color: var(--slate);
+  background: var(--cg-ok);
 }
 .switch[aria-checked='true'] .knob {
-  transform: translateX(12px);
-  background: var(--on-slate);
+  transform: translateX(14px);
 }
 .switch:focus-visible {
-  outline: none;
+  box-shadow: none;
 }
 .switch:focus-visible .track {
-  outline: 2px solid var(--slate);
-  outline-offset: 2px;
+  box-shadow: var(--ring);
 }
 
 /* A block inside a frame: something under the frame's first thing, with its own label line
    that may carry a control at its right (a switch, a small button). */
 .block {
-  margin-top: 24px;
+  margin-top: var(--cg-space-6);
 }
 .block-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--cg-space-3);
+  margin-bottom: var(--cg-space-3);
 }
 .block-head .label {
   margin: 0;
@@ -629,139 +891,162 @@ h3 {
 .more {
   display: flex;
   justify-content: center;
-  padding-top: 16px;
+  padding-top: var(--cg-space-4);
 }
 
-/* Pills: a state in a hairline box, coloured by what it says. */
+/* ==========================================================================
+   Pills (the kit's pill): a state in a soft capsule, tinted by what it says.
+   ========================================================================== */
 .pill {
   display: inline-block;
-  padding: 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  color: var(--muted);
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--cg-radius-pill);
+  background: var(--cg-surface-3);
+  color: var(--cg-fg-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 22px;
   white-space: nowrap;
-  line-height: 1.2;
   text-decoration: none;
+  vertical-align: middle;
 }
 .pill.ok {
-  color: var(--moss);
-  border-color: color-mix(in srgb, var(--moss) 35%, var(--line));
+  background: var(--cg-ok-soft);
+  color: var(--cg-ok);
 }
 .pill.bad {
-  color: var(--rust);
-  border-color: color-mix(in srgb, var(--rust) 35%, var(--line));
+  background: var(--cg-danger-soft);
+  color: var(--cg-danger);
 }
 .pill.slate {
-  color: var(--slate-ink);
-  border-color: color-mix(in srgb, var(--slate) 45%, var(--line));
+  background: var(--cg-blue-soft);
+  color: var(--cg-blue);
 }
 .pill.strong {
-  color: var(--text);
-  border-color: var(--muted);
+  background: var(--cg-surface-4);
+  color: var(--cg-fg);
 }
 
-/* Chips: the filters over a list. */
+/* ==========================================================================
+   Chips and filters (the kit's segmented control). A `.chips` row, or a `.group` in a filter
+   row, is one control whose chips are its segments, the one that is on raised and bright; a
+   chip on its own (loose in a filter row) is a small button. The control is the same glass as
+   a frame (the kit sinks it into a well; here every block on the scene is one surface).
+   ========================================================================== */
+.chips,
+.filters .group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--cg-surface);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-md);
+}
 .chips {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 .chip {
-  padding: 0 12px;
-  height: 30px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--cg-radius-sm);
   background: transparent;
-  font: 600 11px/1 var(--cond);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
+  color: var(--cg-fg-2);
+  font-size: var(--cg-text-sm);
+  font-weight: 500;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
+  transition:
+    background var(--cg-dur) var(--cg-ease),
+    color var(--cg-dur) var(--cg-ease);
 }
 .chip:hover {
-  border-color: var(--muted);
-  color: var(--text);
+  color: var(--cg-fg);
 }
 .chip.on {
-  border-color: var(--slate-ink);
-  color: var(--slate-ink);
+  background: var(--cg-surface-4);
+  color: var(--cg-fg);
 }
 .chip b {
   font-weight: 500;
-  color: var(--faint);
+  color: var(--cg-fg-3);
 }
-
-/* Filters: labelled rows of chips; chips of one family boxed together in a group, the
-   family's own chip (`.fam`) first, its members (`.sub`) after it in plain words. A group's
-   tone colours its family chip: `.ok` moss, `.bad` rust. A Clear button sits at the row's end. */
+.chip.on b {
+  color: var(--cg-fg-2);
+}
+/* Filters: labelled rows; chips of one family boxed together in a group, the family's own chip
+   (`.fam`) first, its members (`.sub`) after it. A group's tone colours its family chip: `.ok`
+   green, `.bad` orange. A loose chip (All, none) is a button as tall as a group. A Clear button
+   sits at the row's end. */
 .filters {
   display: grid;
-  gap: 10px;
-  margin: 0 0 24px;
+  gap: var(--cg-space-2);
+  margin: 0 0 var(--cg-space-5);
 }
 .filters .row {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--cg-space-4);
 }
 .filters .row > .label {
   flex: 0 0 64px;
   margin: 0;
-  line-height: 30px;
+  line-height: 32px;
 }
 .filters .opts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--cg-space-2);
   flex: 1;
   min-width: 0;
 }
-.filters .group {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  padding: 2px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
+.filters .opts.chips {
+  gap: 2px;
+  flex: none;
 }
-.filters .group .chip {
-  height: 24px;
-  border-color: transparent;
+@media (max-width: 640px) {
+  .filters .opts.chips {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
 }
-.filters .group .chip:hover {
-  border-color: var(--line);
+.filters .opts:not(.chips) > .chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--cg-radius-md);
+  background: var(--cg-surface-3);
 }
-.filters .group .chip.on {
-  border-color: var(--slate-ink);
+.filters .opts:not(.chips) > .chip:hover {
+  background: var(--cg-surface-4);
+}
+.filters .opts:not(.chips) > .chip.on {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .filters .group .chip.fam {
-  letter-spacing: 0.18em;
+  font-weight: 600;
 }
 .filters .group.ok .chip.fam {
-  color: var(--moss);
+  color: var(--cg-ok);
 }
 .filters .group.bad .chip.fam {
-  color: var(--rust);
-}
-.filters .group .chip.sub {
-  text-transform: none;
-  letter-spacing: 0.04em;
-  font: 500 12px/1 var(--sans);
+  color: var(--cg-orange);
 }
 .filters .clear {
   flex: none;
-  margin-top: 3px;
 }
 
-/* Tables: capitals over a line, rows parted by a softer one. */
+/* ==========================================================================
+   Tables: capitals over a line, rows parted by a softer one.
+   ========================================================================== */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -769,13 +1054,13 @@ table {
 th,
 td {
   text-align: left;
-  padding: 11px 10px 11px 0;
+  padding: 10px 10px 10px 0;
   vertical-align: top;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--cg-border);
 }
 thead th {
   padding: 0 10px 10px 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--cg-border-strong);
   white-space: nowrap;
 }
 tbody tr:last-child th,
@@ -795,11 +1080,12 @@ th.key {
   font-variant-numeric: tabular-nums;
 }
 td.summary {
-  color: var(--text);
+  color: var(--cg-fg);
 }
 .small-link {
-  font: 600 11px/1 var(--cond);
-  letter-spacing: 0.14em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 /* A wide table whose cells hold pills side by side: the columns get more air than 10px. */
@@ -810,6 +1096,20 @@ table.wide td {
 table.wide th:last-child,
 table.wide td:last-child {
   padding-right: 0;
+}
+/* A wide table on a narrow page keeps its columns and scrolls sideways inside its frame, out to
+   the frame's padding, so the page itself never scrolls sideways; the one-line cell keeps a
+   floor there, or the table would give it nothing. */
+.table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin: 0 calc(-1 * var(--pad));
+  padding: 0 var(--pad);
+}
+@media (max-width: 900px) {
+  .table-scroll td.one-line {
+    min-width: 14rem;
+  }
 }
 /* A cell cut to one line with an ellipsis: max-width 0 lets the table give it the room left. */
 td.one-line {
@@ -824,43 +1124,18 @@ td.jira a {
   text-decoration: none;
   font-size: 15px;
   line-height: 1;
-  color: var(--muted);
+  color: var(--cg-fg-2);
 }
 td.jira a:hover {
-  color: var(--slate-ink);
+  color: var(--accent);
 }
-/* The row of what is going on now: a tinted band and a pulsing dot. The table stops at the
-   frame's padding (22px a side); a strip on each end cell carries the band out to the frame's
-   edges (a cell's box-shadow is not drawn there), and the dot sits in the left one, out of the
-   text's way. */
+/* The row of what is going on now: a tinted band within the row's own lines, and a pulsing dot
+   after the ticket key, where the key column has room. */
 tr.live td {
-  background: color-mix(in srgb, var(--slate) 10%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-tr.live td:first-child,
-tr.live td:last-child {
-  position: relative;
-}
-tr.live td:first-child::before,
-tr.live td:last-child::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 22px;
-  background: inherit;
-}
-tr.live td:first-child::before {
-  left: -22px;
-}
-tr.live td:last-child::after {
-  right: -22px;
-}
-tr.live td:first-child .pulse {
-  position: absolute;
-  z-index: 1;
-  left: -15px;
-  top: 50%;
-  margin: -3.5px 0 0;
+td.key .pulse {
+  margin: 0 0 0 8px;
 }
 
 /* Facts: a name and its value per line. */
@@ -873,7 +1148,7 @@ dl.kv {
 dl.kv dt,
 dl.kv dd {
   padding: 7px 0;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--cg-border);
 }
 dl.kv dt {
   padding-top: 10px;
@@ -887,38 +1162,45 @@ dl.kv dd {
   overflow-wrap: anywhere;
 }
 
-/* Notices: something the page has to say above everything else. */
+/* ==========================================================================
+   Notices: something the page has to say above everything else.
+   ========================================================================== */
 .notice {
-  border: 1px solid color-mix(in srgb, var(--rust) 35%, var(--line));
-  color: var(--rust);
+  border: 1px solid color-mix(in srgb, var(--cg-danger) 30%, var(--cg-border));
+  border-radius: var(--cg-radius-md);
+  background: var(--cg-danger-soft);
+  color: var(--cg-danger);
   padding: 10px 14px;
-  margin: 0 0 22px;
-  font-size: 13px;
+  margin: 0 0 var(--cg-space-5);
+  font-size: var(--cg-text-sm);
+  font-weight: 500;
   display: flex;
-  gap: 12px;
+  gap: var(--cg-space-3);
   align-items: center;
 }
 .notice.calm {
-  border-color: var(--line);
-  color: var(--muted);
+  border-color: var(--cg-border);
+  background: var(--cg-surface-2);
+  color: var(--cg-fg-2);
 }
 .notice .btn {
   margin-left: auto;
 }
 
 /* Why something stopped (or how it ended), whole and wrapped, under its pills: a label at the
-   left and the text, a rust edge for a bad end, moss for a good one. */
+   left and the text in a well, a red edge for a bad end, green for a good one. */
 .reason {
   display: flex;
-  gap: 14px;
+  gap: var(--cg-space-3);
   align-items: baseline;
-  margin: -12px 0 22px;
+  margin: calc(-1 * var(--cg-space-3)) 0 var(--cg-space-5);
   padding: 10px 14px;
-  border-left: 3px solid var(--line);
-  background: var(--field);
-  font-size: 13px;
+  border-left: 3px solid var(--cg-border-strong);
+  border-radius: 0 var(--cg-radius-md) var(--cg-radius-md) 0;
+  background: var(--cg-well);
+  font-size: var(--cg-text-sm);
   line-height: 1.5;
-  color: var(--text);
+  color: var(--cg-fg);
   overflow-wrap: anywhere;
 }
 .reason .label {
@@ -926,52 +1208,62 @@ dl.kv dd {
   margin: 0;
 }
 .reason.bad {
-  border-left-color: var(--rust);
+  border-left-color: var(--cg-danger);
 }
 .reason.ok {
-  border-left-color: var(--moss);
+  border-left-color: var(--cg-ok);
 }
 
-/* The confirmation dialog, for an action that cannot be taken back: a frame over the dimmed
-   page (<dialog class="frame confirm">, opened with showModal), its title line, what the action
-   does, then the buttons in a form, the one that does it first. */
+/* ==========================================================================
+   The confirmation dialog (the kit's popover), for an action that cannot be taken back: a
+   frame over the dimmed page (<dialog class="frame confirm">, opened with showModal), its
+   title line, what the action does, then the buttons in a form, the one that does it first.
+   ========================================================================== */
 dialog.confirm {
   width: min(560px, calc(100vw - 32px));
-  background: var(--bg);
-  color: var(--text);
+  padding: var(--cg-space-5);
+  background: var(--cg-window);
+  color: var(--cg-fg);
+  border: 1px solid var(--cg-border-strong);
+  border-radius: var(--cg-radius-lg);
+  box-shadow: var(--cg-shadow-popover);
+  -webkit-backdrop-filter: blur(var(--cg-blur));
+  backdrop-filter: blur(var(--cg-blur));
 }
 dialog.confirm::backdrop {
-  background: rgb(0 0 0 / 0.35);
+  background: var(--cg-overlay);
 }
 dialog.confirm p {
-  margin: 0 0 14px;
+  margin: 0 0 var(--cg-space-3);
 }
 dialog.confirm form {
   display: flex;
-  gap: 10px;
-  margin-top: 18px;
+  gap: var(--cg-space-2);
+  margin-top: var(--cg-space-4);
 }
 /* Opened without JavaScript (a link to the page with it open): in the flow, under what opened it. */
 dialog.confirm[open]:not(:modal) {
-  margin: 18px 0 0;
+  margin: var(--cg-space-4) 0 0;
 }
 
-/* Lamps: a dot that says ok (moss) or not (rust) with a soft halo; grey while unknown. The
-   pulse is a smaller dot that breathes while something goes on. */
+/* ==========================================================================
+   Lamps (the kit's dot): ok (green) or not (red) with a soft halo; grey while unknown. The
+   pulse is a smaller dot that breathes while something goes on.
+   ========================================================================== */
 .lamp {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   flex: none;
-  background: var(--faint);
+  background: var(--cg-fg-3);
 }
 .lamp.ok {
-  background: var(--moss);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--moss) 22%, transparent);
+  background: var(--cg-ok);
+  box-shadow: 0 0 0 3px var(--cg-ok-soft);
 }
 .lamp.bad {
-  background: var(--rust);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rust) 22%, transparent);
+  background: var(--cg-danger);
+  box-shadow: 0 0 0 3px var(--cg-danger-soft);
 }
 .pulse {
   display: inline-block;
@@ -979,7 +1271,7 @@ dialog.confirm[open]:not(:modal) {
   height: 7px;
   margin-right: 7px;
   border-radius: 50%;
-  background: var(--moss);
+  background: var(--cg-ok);
   vertical-align: 1px;
   animation: pulse 1.6s ease-in-out infinite;
 }
@@ -992,20 +1284,20 @@ dialog.confirm[open]:not(:modal) {
 /* State sources: a frame folded to a lamp and a word, opened to one line per source (`.dep`):
    its name and detail, cut to the width, and a pill. A click anywhere on the frame folds it. */
 .sources {
-  padding-block: 16px;
   cursor: pointer;
 }
 .sources:hover .chevron,
 .sources:hover .fold .label {
-  color: var(--text);
+  color: var(--cg-fg);
 }
 .fold {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--cg-space-2);
   width: 100%;
   padding: 0;
   border: 0;
+  border-radius: var(--cg-radius-sm);
   background: none;
   color: inherit;
   cursor: pointer;
@@ -1015,26 +1307,27 @@ dialog.confirm[open]:not(:modal) {
   margin: 0;
 }
 .fold .state {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
   flex: 1;
 }
 .fold .state.err {
-  color: var(--rust);
+  color: var(--cg-danger);
 }
 .fold .chevron {
-  font: 500 18px/1 var(--cond);
-  color: var(--muted);
+  font-size: var(--cg-text-xl);
+  line-height: 1;
+  color: var(--cg-fg-2);
 }
 .sources .deps {
-  margin-top: 12px;
+  margin-top: var(--cg-space-3);
 }
 .dep {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--cg-space-3);
   padding: 9px 0;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--cg-border);
   min-width: 0;
 }
 .dep:last-of-type {
@@ -1048,8 +1341,8 @@ dialog.confirm[open]:not(:modal) {
   font-weight: 500;
 }
 .dep .detail {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1058,27 +1351,30 @@ dialog.confirm[open]:not(:modal) {
   flex: none;
 }
 
-/* Bars: a row per thing, its name, a thin bar in a track, the count, its share. The fill is a
-   plain count by default; `.bad` for a stop, `.soft` for done another way, `.none` for unknown. */
+/* ==========================================================================
+   Bars (the kit's horizontal bars): a row per thing, its name, a thin bar in a track, the
+   count, its share. The fill is blue by default; `.bad` orange for a stop, `.soft` for done
+   another way, `.none` grey for unknown.
+   ========================================================================== */
 .bars {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 .bar-row {
   display: grid;
   grid-template-columns: 11rem minmax(0, 1fr) 3rem 3rem;
   align-items: center;
-  gap: 12px;
+  gap: var(--cg-space-4);
 }
 .bar-row .name {
-  font-size: 13px;
+  font-size: var(--cg-text-lg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .bar-row .track {
   height: 8px;
-  background: var(--line-soft);
+  background: var(--cg-track);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -1086,11 +1382,11 @@ dialog.confirm[open]:not(:modal) {
   display: block;
   height: 100%;
   border-radius: 4px;
-  background: var(--chart-count);
-  min-width: 2px;
+  background: var(--cg-blue);
+  min-width: 4px;
 }
 .bar-row .track i.bad {
-  background: var(--chart-bad);
+  background: var(--cg-orange);
 }
 .bar-row .track i.soft {
   background: var(--chart-ok-soft);
@@ -1099,22 +1395,28 @@ dialog.confirm[open]:not(:modal) {
   background: var(--chart-none);
 }
 .bar-row b {
-  font: 500 18px/1 var(--cond);
+  font-size: var(--cg-text-xl);
+  font-weight: 600;
   text-align: right;
 }
 .bar-row .share {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
   text-align: right;
 }
 @media (max-width: 640px) {
   .bar-row {
-    grid-template-columns: 7.5rem minmax(0, 1fr) 2.2rem 2.2rem;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) 2.6rem 2.6rem;
+    gap: 4px var(--cg-space-3);
+  }
+  .bar-row .name {
+    grid-column: 1 / -1;
+    white-space: normal;
   }
 }
 
-/* The column chart: stacked columns over time, one per day or week, as SVG. pipeline-ui draws
+/* ==========================================================================
+   The column chart: stacked columns over time, one per day or week, as SVG. pipeline-ui draws
    it in the browser (Columns.vue), bug-validator on the server; both write the same markup, so
    this is its contract:
      div.columns
@@ -1131,16 +1433,17 @@ dialog.confirm[open]:not(:modal) {
          div.tip (absolute, centred on the column: div.when with the date and the total, then a
            div.row per series: i with its colour, span its name, b its count)
    Colours come from the chart tokens (--chart-ok, --chart-ok-soft, --chart-bad, --chart-count,
-   --chart-none), set on each part as its fill. */
+   --chart-none), set on each part as its fill.
+   ========================================================================== */
 .columns .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 16px;
+  gap: var(--cg-space-2) var(--cg-space-4);
   list-style: none;
-  margin: -4px 0 12px;
+  margin: 0 0 var(--cg-space-3);
   padding: 0;
-  font-size: 12px;
-  color: var(--muted);
+  font-size: var(--cg-text-sm);
+  color: var(--cg-fg-2);
 }
 .columns .legend li,
 .columns .tip .row {
@@ -1150,34 +1453,31 @@ dialog.confirm[open]:not(:modal) {
 }
 .columns .legend i,
 .columns .tip i {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius);
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
   flex: none;
 }
 .columns .plot {
   position: relative;
-  outline: none;
-}
-.columns .plot:focus-visible {
-  box-shadow: 0 0 0 1px var(--slate);
+  border-radius: var(--cg-radius-sm);
 }
 .columns svg {
   display: block;
   overflow: visible;
 }
 .columns .grid line {
-  stroke: var(--line-soft);
+  stroke: var(--cg-border-strong);
   stroke-width: 1;
   shape-rendering: crispEdges;
 }
 .columns text {
-  font: 11px var(--sans);
-  fill: var(--muted);
+  font: 12px var(--cg-font-sans);
+  fill: var(--cg-fg-2);
   font-variant-numeric: tabular-nums;
 }
 .columns .band {
-  fill: var(--field);
+  fill: var(--cg-surface-2);
 }
 .columns .hit {
   fill: transparent;
@@ -1188,32 +1488,35 @@ dialog.confirm[open]:not(:modal) {
   transform: translateX(-50%);
   pointer-events: none;
   z-index: 1;
-  background: var(--bg);
-  border: 1px solid var(--line);
+  background: var(--cg-window);
+  border: 1px solid var(--cg-border-strong);
+  border-radius: var(--cg-radius-sm);
+  box-shadow: var(--cg-shadow-popover);
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--cg-text-sm);
   min-width: 150px;
   display: grid;
   gap: 4px;
-  box-shadow: 0 2px 10px rgb(0 0 0 / 0.08);
 }
 .columns .tip .when {
   font-weight: 600;
 }
 .columns .tip .row span {
   flex: 1;
-  color: var(--muted);
+  color: var(--cg-fg-2);
 }
 .columns .tip .row b {
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-/* Toasts: notifications in a stack at the bottom right, the newest lowest, each a hairline card
-   with its kind's colour at the left edge (slate info, moss success, rust error), an icon, the
-   message, and a bar that runs down while it stays (--life, its time; the pointer over it holds
-   it). The transition classes are Vue's (toast-enter, toast-leave, toast-move); a page without
-   them simply shows the stack. */
+/* ==========================================================================
+   Toasts (the kit's popover): notifications in a stack at the bottom right, the newest
+   lowest, each a glass card with its kind's colour at the left edge (blue info, green
+   success, red error), an icon, the message, and a bar that runs down while it stays (--life,
+   its time; the pointer over it holds it). The transition classes are Vue's (toast-enter,
+   toast-leave, toast-move); a page without them simply shows the stack.
+   ========================================================================== */
 .toasts {
   position: fixed;
   bottom: 20px;
@@ -1222,30 +1525,35 @@ dialog.confirm[open]:not(:modal) {
   width: min(380px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--cg-space-2);
   pointer-events: none;
 }
 .toast {
   position: relative;
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: var(--cg-space-3);
   align-items: start;
   overflow: hidden;
   padding: 13px 12px 15px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--cg-border-strong);
   border-left: 3px solid var(--tone);
-  border-radius: var(--radius);
-  background: var(--bg);
-  box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--text) 70%, transparent);
+  border-radius: var(--cg-radius-lg);
+  background: var(--cg-window);
+  -webkit-backdrop-filter: blur(var(--cg-blur));
+  backdrop-filter: blur(var(--cg-blur));
+  box-shadow: var(--cg-shadow-popover);
   pointer-events: auto;
-  --tone: var(--slate);
+  --tone: var(--accent);
+  --tone-soft: var(--accent-soft);
 }
 .toast.success {
-  --tone: var(--moss);
+  --tone: var(--cg-ok);
+  --tone-soft: var(--cg-ok-soft);
 }
 .toast.error {
-  --tone: var(--rust);
+  --tone: var(--cg-danger);
+  --tone-soft: var(--cg-danger-soft);
 }
 .toast .icon {
   width: 26px;
@@ -1253,40 +1561,43 @@ dialog.confirm[open]:not(:modal) {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font: 700 13px/1 var(--sans);
+  font-size: var(--cg-text-sm);
+  font-weight: 700;
+  line-height: 1;
   color: var(--tone);
-  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  background: var(--tone-soft);
 }
 .toast .title {
-  font: 600 15px/1.2 var(--cond);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text);
+  font-size: var(--cg-text-lg);
+  font-weight: 600;
+  line-height: var(--cg-leading-tight);
+  color: var(--cg-fg);
   overflow-wrap: anywhere;
 }
 .toast .detail {
   margin-top: 4px;
-  font-size: 12.5px;
+  font-size: var(--cg-text-sm);
   line-height: 1.4;
-  color: var(--muted);
+  color: var(--cg-fg-2);
   overflow-wrap: anywhere;
 }
 .toast .small-link {
   display: inline-block;
-  margin-top: 8px;
+  margin-top: var(--cg-space-2);
   color: var(--tone);
 }
 .toast .close {
   border: 0;
+  border-radius: var(--cg-radius-xs);
   background: none;
-  color: var(--faint);
+  color: var(--cg-fg-3);
   font-size: 18px;
   line-height: 1;
   padding: 2px 4px;
   cursor: pointer;
 }
 .toast .close:hover {
-  color: var(--text);
+  color: var(--cg-fg);
 }
 .toast .life {
   position: absolute;
@@ -1335,14 +1646,14 @@ dialog.confirm[open]:not(:modal) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pulse,
-  .toast .life {
-    animation: none;
+  * {
+    transition: none !important;
   }
+  .pulse,
+  .toast .life,
   .toast-enter-active,
   .toast-leave-active,
   .toast-move {
-    transition: none;
     animation: none;
   }
 }
@@ -1356,5 +1667,8 @@ dialog.confirm[open]:not(:modal) {
   }
   .masthead .field {
     width: 11rem;
+  }
+  .masthead .where {
+    display: none;
   }
 }

@@ -17,7 +17,7 @@ const STATIC: Record<string, string> = {
   '/app.js': 'text/javascript',
   '/theme.js': 'text/javascript',
 }
-/** The Barlow faces the stylesheet names, under static/fonts. */
+/** The faces the stylesheet names (Inter, JetBrains Mono), under static/fonts. */
 const FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/
 
 /** A posted form is small; anything bigger is not one. */
@@ -58,7 +58,7 @@ const ACTIONS: Record<string, (dbFile: string, form: URLSearchParams) => { key: 
 
 /**
  * The web UI: the pages rendered from the database and the log on every request, plus the
- * stylesheets (the drafting sheet shared with pipeline-ui, and the UI's own), their fonts and the
+ * stylesheets (the sheet shared with pipeline-ui, and the UI's own), their fonts and the
  * scripts. Pages, styles and scripts are not cached: an edit shows on reload; the fonts are. The
  * writes are `POST /requests`, a check asked for by hand, and `POST /posts`, a recorded comment
  * to post to Jira: rows the service serves. `/healthz`

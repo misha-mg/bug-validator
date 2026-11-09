@@ -1,14 +1,30 @@
-/* The console's own layout, on the drafting sheet (sheet.css, shared with pipeline-ui, which
-   names the faces and every part): the cockpit's columns, the bugs' table, the statistics' pair
-   and chart, a bug's page. */
+/* The console's own layout, on the sheet (sheet.css, shared with pipeline-ui, which names the
+   tokens, the faces and every part): the cockpit's columns, the bugs' table, the statistics' pair
+   and chart, a bug's page. Every colour, corner and distance here is one of the sheet's tokens. */
 
-/* The field checks a report lacked, as small chips. */
+/* An icon inside a button: inline SVG drawn with the text's colour. */
+.btn.icon {
+  padding: 0 6px;
+}
+.btn.icon svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The field checks a report lacked, as small mono tags. */
 .req {
   display: inline-block;
   padding: 1px 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  font: 11px var(--mono);
+  border-radius: var(--cg-radius-xs);
+  background: var(--cg-surface-3);
+  color: var(--cg-fg-2);
+  font: 500 var(--cg-text-xs) / 1.5 var(--cg-font-mono);
   cursor: help;
 }
 td.absent {
@@ -25,16 +41,24 @@ td.absent {
 }
 @media (max-width: 1100px) {
   .cockpit {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .sources .facts {
-  margin-top: 14px;
-  font-size: 13px;
+  margin-top: var(--cg-space-3);
+  font-size: var(--cg-text-sm);
 }
 .sources .facts dl.kv dt,
 .sources .facts dl.kv dd {
   padding: 5px 0;
+}
+/* Needs attention: the bug, the time and the pill as wide as they are, the reason wraps. */
+.attention td:not(:last-child) {
+  white-space: nowrap;
+}
+.attention td:last-child {
+  min-width: 16rem;
+  overflow-wrap: anywhere;
 }
 /* Activity: the time and the key as wide as they are, the text takes the rest and wraps. */
 .activity td:not(:last-child) {
@@ -42,6 +66,7 @@ td.absent {
   white-space: nowrap;
 }
 .activity td:last-child {
+  min-width: 14rem;
   overflow-wrap: anywhere;
 }
 
@@ -50,28 +75,29 @@ td.absent {
   max-width: 26rem;
 }
 .bugs tbody tr.day th {
-  padding: 22px 0 8px;
-  border-bottom: 1px solid var(--line);
+  padding: var(--cg-space-5) 0 var(--cg-space-2);
+  border-bottom: 1px solid var(--cg-border-strong);
+}
+.bugs tbody tr.day:first-child th {
+  padding-top: var(--cg-space-3);
+}
+/* A row answers the pointer: the whole line leads to the bug. */
+.bugs tbody tr:not(.day):hover td {
+  background: var(--cg-surface-2);
+}
+.bugs td {
+  vertical-align: middle;
 }
 /* The Run again button at the row's end: the form adds no box, the button is just its icon. */
 .bugs td.again {
   width: 1px;
-  padding-right: 8px;
+  padding-block: 0;
 }
 .bugs td.again form {
   margin: 0;
 }
-.btn.icon {
-  padding: 0 6px;
-  font-size: 14px;
-  letter-spacing: 0;
-}
 .bugs td.summary a {
-  color: var(--text);
-  text-decoration: none;
-}
-.bugs td.summary a:hover {
-  text-decoration: underline;
+  color: var(--cg-fg);
 }
 
 /* Statistics: the two bar frames side by side, the chart under them. The chart's axis numbers
@@ -80,11 +106,14 @@ td.absent {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--gap);
-  margin-bottom: var(--gap);
+}
+/* The strip in a stack: the stack's gap parts it from the next frame, not its own margin too. */
+.stack > .strip {
+  margin-bottom: 0;
 }
 @media (max-width: 900px) {
   .stats-pair {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .columns .plot {
@@ -94,39 +123,44 @@ td.absent {
   margin-left: 30px;
 }
 
-/* One bug: its facts on top, the checks left, the comment right. The reason block sits under the
-   facts, not under pills as on the sheet, so it keeps its distance from them. */
-.bug-head {
-  margin-bottom: 26px;
-}
-.bug-head .page-head {
-  margin-bottom: 14px;
-}
-.bug-head dl.kv {
-  max-width: 760px;
-}
-.bug-head .reason {
-  margin: 18px 0 0;
-  max-width: 760px;
-}
-.bug-head .actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
+/* One bug: its facts, what to press and the comment at the left, the checks (the field checks,
+   the reasoning, the history) at the right; one column on a narrow window, the facts first. */
 .two {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: var(--gap);
   align-items: start;
 }
 @media (max-width: 1100px) {
   .two {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
-.checks h3:first-child {
+/* The summary under the key is a sentence, not a count: it wraps and keeps to a readable width. */
+.page-head .stats {
+  max-width: 70ch;
+  overflow-wrap: anywhere;
+}
+/* The reason block sits under the facts, not under pills as on the sheet, so it keeps its
+   distance from them. */
+.bug-head .reason {
+  margin: var(--cg-space-4) 0 0;
+}
+.bug-head .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-space-2);
+  margin-top: var(--cg-space-4);
+}
+.bug-head .actions form {
+  margin: 0;
+}
+/* The confirmation opened without JavaScript sits in the facts' frame, as wide as the frame. */
+.bug-head dialog.confirm[open]:not(:modal) {
+  position: static;
+  width: auto;
+}
+.checks h3:first-of-type {
   margin-top: 0;
 }
 .requirements tbody th,
@@ -137,36 +171,60 @@ td.absent {
 .requirements td:last-child {
   overflow-wrap: anywhere;
 }
+@media (max-width: 640px) {
+  .requirements td:nth-child(2) {
+    white-space: normal;
+  }
+}
 .history td:not(:last-child) {
   width: 1%;
   white-space: nowrap;
 }
+.history td:last-child {
+  min-width: 16rem;
+  overflow-wrap: anywhere;
+}
 .history details {
-  margin-top: 4px;
+  margin-top: var(--cg-space-1);
 }
 .history summary {
   cursor: pointer;
-  color: var(--slate-ink);
+  width: fit-content;
+  border-radius: 4px;
+  color: var(--accent);
   font-size: 12px;
 }
+.history details[open] summary {
+  margin-bottom: var(--cg-space-2);
+}
+/* The comment as Jira will show it: a sunken sheet of text inside the frame. */
 .jira-comment {
-  background: var(--field);
-  padding: 12px 14px;
+  padding: var(--cg-space-3) var(--cg-space-4);
+  border-radius: var(--cg-radius-md);
+  background: var(--cg-well);
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
 .jira-comment p {
-  margin: 0 0 8px;
+  margin: 0 0 var(--cg-space-2);
 }
 .jira-comment ul {
-  margin: 0 0 8px;
-  padding-left: 20px;
+  margin: 0 0 var(--cg-space-2);
+  padding-left: var(--cg-space-5);
+}
+.jira-comment > :last-child {
+  margin-bottom: 0;
 }
 .jira-comment s {
-  color: var(--muted);
+  color: var(--cg-fg-3);
+}
+.comment .empty + .jira-comment {
+  margin-top: var(--cg-space-2);
 }
 /* The agent's reasoning, as it wrote it: line breaks kept. */
 .reasoning {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  margin: 0 0 8px;
+  margin: 0 0 var(--cg-space-2);
+  line-height: 1.55;
 }
