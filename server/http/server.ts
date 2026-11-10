@@ -150,6 +150,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
     now: new Date(),
     toast: toastOf(url.searchParams),
     settings: settingsModel(config),
+    portalUrl: config.portalUrl,
+    build: config.build,
   }
   const action = req.method === 'POST' ? ACTIONS[path] : undefined
   if (action) {

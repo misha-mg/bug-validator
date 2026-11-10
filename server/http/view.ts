@@ -5,6 +5,7 @@ import { OUTCOMES, REQUIREMENTS, type Outcome, type RequirementId } from '../dom
 import { ISSUE_KEY } from '../domain/key.ts'
 import { cut, fmtAgo, fmtClock, fmtDate, fmtDay, fmtDuration, fmtTime, plural } from '../format.ts'
 import { type CheckSettings, LIMITS } from '../store/settings.ts'
+import type { Build } from '../version.ts'
 import { type BugView, type Heartbeat, type Request, type Result, type Run, checked, result } from './read.ts'
 import { type LogEvent, type ServiceStatus, alive, liveness } from './service-log.ts'
 import {
@@ -53,6 +54,10 @@ export interface PageContext {
   /** The service's mode from its log; null when the log does not say. */
   dryRun: boolean | null
   now: Date
+  /** The start page the masthead's mark leads to (the tools' portal); the cockpit without it. */
+  portalUrl?: string | undefined
+  /** The code the console runs, named in the footer. */
+  build?: Build | undefined
   /** The console's settings, for the gear's dialog and the settings page; null when the service has no table for them yet. */
   settings?: SettingsModel | null | undefined
   /** A notification to show once, after a POST. */
@@ -104,6 +109,13 @@ function layout(title: string, main: string, ctx: PageContext, section: Section 
     ctx.settings && section !== 'settings'
       ? `\n<dialog id="settings" class="frame confirm settings" aria-labelledby="settings-title"><div class="frame-head"><h2 id="settings-title">Settings</h2><span class="note">from the next poll</span></div>${settingsForm(ctx.settings, '<a class="btn" href="/" data-close>Close</a>')}</dialog>`
       : ''
+  // The mark leads to the tools' start page where one is set, as every tool's logo does; the name, to the cockpit.
+  const home = ctx.portalUrl ? `<a class="home" href="${esc(ctx.portalUrl)}" title="All tools" aria-label="All tools"></a>\n` : ''
+  const b = ctx.build
+  const commit = b?.commit ? `${b.commit}${b.dirty ? '+' : ''}` : 'dev'
+  const foot = b
+    ? `\n<footer class="foot"><code>Build v${esc(b.version)} (${b.commitUrl ? `<a href="${esc(b.commitUrl)}" target="_blank" rel="noopener">${esc(commit)}</a>` : esc(commit)})</code></footer>`
+    : ''
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -117,14 +129,14 @@ function layout(title: string, main: string, ctx: PageContext, section: Section 
 </head>
 <body>
 <header class="masthead">
-<a class="brand" href="/">Bug validator</a>
+${home}<a class="brand" href="/">Bug validator</a>
 <span class="spacer"></span>
 <nav>${nav('cockpit', '/', 'Cockpit')}${nav('bugs', '/bugs', 'Bugs')}${nav('stats', '/stats', 'Statistics')}</nav>
 ${gear}<button class="btn theme" type="button" aria-label="Switch between light and dark">${THEME_ICONS}</button>
 </header>
 <main class="sheet">
 ${toast}${main}${dialog}
-</main>
+</main>${foot}
 <script src="/app.js"></script>
 </body>
 </html>

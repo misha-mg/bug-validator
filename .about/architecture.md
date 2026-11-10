@@ -355,6 +355,7 @@ measures them.
 | `VALIDATOR_SLACK_WEBHOOK_URL` | — | a Slack incoming webhook: one message per check that ends not understood; unset, no messages. A secret, like the tokens |
 | `VALIDATOR_SLACK_NOTIFICATIONS` | `true` | `false` turns the messages off with the URL left in place; anything else is refused. The default of the console's Slack setting, which wins once set |
 | `VALIDATOR_CONSOLE_URL` | — | the console as a person opens it, for the link in a message; unset, the message links to Jira alone |
+| `VALIDATOR_PORTAL_URL` | — | the start page the mark in the console's masthead leads to (the tools' portal, "All tools"); unset, the mark is part of the name and leads to the cockpit |
 | `VALIDATOR_DB_FILE` | `state/bug-validator.sqlite` | |
 | `VALIDATOR_LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
 | `VALIDATOR_BACKUP_DIR` | `state/backups` | `maintain`'s copies of the database, the latest 14 kept |

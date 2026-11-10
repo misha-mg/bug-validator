@@ -70,6 +70,31 @@ showed twice. `.cockpit` and `.stats-pair`, which each console had in its own st
 the sheet's too, with one set of breakpoints; `app.css` keeps only what is this console's own.
 `ui/logo.svg` stays as the tab's icon.
 
+## The tools' frame (2026-11-11)
+
+The team's other tools (the `tools` repository, served from one server behind a start page, the
+portal) are framed alike: the logo in the header leads to the start page ("All tools"), and a
+footer names the build, `Build v1.4.2 (commit)`, the version counted from the tool's commits by
+its `scripts/version.sh` (a `feat` the minor, a breaking commit the major, any other the patch;
+nothing tagged). The two consoles are tools of the same team kept in repositories of their own,
+so they take the same frame:
+
+- **The mark leads to the start page** where `VALIDATOR_PORTAL_URL` names one (pipeline-ui:
+  `PIPELINE_PORTAL_URL`): an `a.home` before the name, which still leads to the cockpit. Unset,
+  nothing changes: the address is a deployment's, and a console opened from outside the office
+  network cannot reach the portal, so no address is written into the code.
+- **The foot names the build**: the version by the same `scripts/version.sh`, the commit, a `+`
+  when the working tree has moved on from it, the commit a link where origin is GitHub or
+  Bitbucket (a login in the remote's address is never passed on). `server/version.ts` reads it
+  once when the process starts, since a service runs the code it was started with; the service
+  logs it in `service_start`, the console in `ui_start`. It is the fourth file the two
+  repositories keep byte for byte the same.
+- **Both are the sheet's parts** (`.masthead .home`, `.foot`), so the two consoles draw them alike.
+
+Not taken: the tools' copyright line (pipeline-ui is under the MIT licence, and "all rights
+reserved" would contradict it; the line is the owner's to decide), their full logo (the sheet
+keeps its square mark) and their palette.
+
 ## Considered options
 
 - **One repository for both** — one history, one node_modules, but two services with different

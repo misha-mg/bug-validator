@@ -91,6 +91,27 @@ describe('layout', () => {
     assert.match(statsPage(bugs, '30d', ctx), /<a class="btn active" href="\/stats">Statistics<\/a>/)
     assert.match(bugPage(bugModel('KAZ-2'), ctx), /<a class="btn active" href="\/bugs">Bugs<\/a>/, 'a bug is under Bugs')
   })
+  it('frames the page as the tools are framed: the mark to their start page where one is set, the build in the foot', () => {
+    const plain = homePage(home, ctx)
+    assert.doesNotMatch(plain, /class="home"|<footer/, 'neither without a start page and a build')
+    assert.match(plain, /<a class="brand" href="\/">Bug validator<\/a>/)
+    const build = { version: '0.14.2', commit: 'abc1234', dirty: false, commitUrl: 'https://github.com/owner/tool/commit/abc1234f' }
+    const framed = homePage(home, { ...ctx, portalUrl: 'http://tools.example.net/', build })
+    assert.match(
+      framed,
+      /<a class="home" href="http:\/\/tools.example.net\/" title="All tools" aria-label="All tools"><\/a>\n<a class="brand" href="\/">Bug validator<\/a>/,
+    )
+    assert.match(
+      framed,
+      /<\/main>\n<footer class="foot"><code>Build v0\.14\.2 \(<a href="https:\/\/github.com\/owner\/tool\/commit\/abc1234f" target="_blank" rel="noopener">abc1234<\/a>\)<\/code><\/footer>/,
+    )
+    // A tree that moved on from its commit says so; a console outside a repository names no commit.
+    assert.match(homePage(home, { ...ctx, build: { ...build, dirty: true, commitUrl: null } }), /Build v0\.14\.2 \(abc1234\+\)/)
+    assert.match(
+      homePage(home, { ...ctx, build: { version: '0.0.0', commit: null, dirty: false, commitUrl: null } }),
+      /Build v0\.0\.0 \(dev\)/,
+    )
+  })
   it('opens the settings from a gear beside the theme switch: a dialog on every page, a page of their own without JavaScript', () => {
     const defaults: CheckSettings = { firstCheckMinutes: 30, quietMinutes: 15, maxChecks: 5, slack: true }
     const settings = { settings: { ...defaults, firstCheckMinutes: 10 }, defaults, slackSetUp: true }

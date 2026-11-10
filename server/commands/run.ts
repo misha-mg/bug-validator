@@ -6,6 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { ClaudeAgent } from '../claude/agent.ts'
 import { JiraTool } from '../claude/jira-mcp.ts'
 import { loadConfig } from '../config.ts'
+import { readBuild } from '../version.ts'
 import { type CheckSettings, changedSettings, readSettings, settingsDefaults } from '../store/settings.ts'
 import { Store } from '../store/store.ts'
 import { JiraClient } from '../jira/client.ts'
@@ -64,7 +65,10 @@ export async function run(): Promise<void> {
       return now
     },
   }
+  const build = readBuild(resolve(import.meta.dirname, '../..'))
   log.info('service_start', {
+    version: build.version,
+    commit: build.commit ? `${build.commit}${build.dirty ? '+' : ''}` : null,
     dryRun: config.dryRun,
     slack: config.slack !== null && inForce.slack,
     firstCheckMinutes: inForce.firstCheckMinutes,

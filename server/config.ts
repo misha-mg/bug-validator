@@ -36,6 +36,8 @@ export const Env = z.object({
   VALIDATOR_SLACK_NOTIFICATIONS: z.enum(['true', 'false']).default('true'),
   // The console's address as a person opens it, for the link in a message; unset, the message links to Jira alone.
   VALIDATOR_CONSOLE_URL: z.url().optional(),
+  // The start page the console's mark leads to (the tools' portal); unset, the mark leads to the cockpit.
+  VALIDATOR_PORTAL_URL: z.url().optional(),
 })
 
 /** A bug's first check is tried this many times, then the bug is recorded as failed. */

@@ -383,14 +383,27 @@ button {
 }
 /* The company's mark before the brand's name, the app's icon in the window: drawn by the sheet
    itself (an SVG in a data URI, the mark's own four blues, no file to serve), so every console
-   that copies the sheet carries it with no markup of its own. */
-.masthead .brand::before {
+   that copies the sheet carries it with no markup of its own. Where the consoles have a start
+   page (the tools' portal), the mark is a link to it, as every tool's logo is: an empty
+   `a.home` before the brand (title and aria-label "All tools") carries the mark, and the brand
+   after it draws none. */
+.masthead .brand::before,
+.masthead .home {
   content: '';
+  display: block;
   flex: none;
   width: 24px;
   height: 24px;
   background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 203.05 81.19 81.19'><path fill='%230095da' d='M50.516 217.598c0 14.855 13.664 26.992 30.672 27.484V222.23c0-10.55-8.63-19.18-19.176-19.18H50.516'/><path fill='%2300529c' d='M25.426 264.79v19.448h5.695v-81.187H19.176C8.629 203.05 0 211.68 0 222.23v10.324c14.813 4.777 25.426 17.422 25.426 32.234'/><path fill='%23009db4' d='M43.754 217.598V203.05h-5.867v81.187h24.125c10.547 0 19.175-8.629 19.175-19.175v-13.215c-20.738-.508-37.433-15.672-37.433-34.25'/><path fill='%234dbeee' d='M18.656 264.79c0-11.126-7.664-20.724-18.656-25.052v25.325c0 10.37 8.348 18.886 18.656 19.164'/></svg>")
     center / contain no-repeat;
+}
+.masthead .home {
+  /* The brand's own gap between the mark and the name, not the masthead's. */
+  margin-right: -6px;
+  border-radius: var(--cg-radius-xs);
+}
+.masthead .home + .brand::before {
+  content: none;
 }
 .masthead .brand:hover {
   text-decoration: none;
@@ -466,7 +479,33 @@ button {
 .sheet {
   max-width: var(--page);
   margin: 0 auto;
-  padding: var(--cg-space-6) var(--gutter) 60px;
+  padding: var(--cg-space-6) var(--gutter) var(--cg-space-8);
+}
+/* The foot, under the sheet: what code runs here, as the tools' pages say it, `Build v1.4.2
+   (commit)` in a <code>, the commit a link where it has a page; something before it (a span)
+   sits at the left. */
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--cg-space-1) var(--cg-space-4);
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--cg-space-6);
+  color: var(--cg-fg-3);
+  font-size: var(--cg-text-xs);
+}
+.foot code {
+  margin-left: auto;
+  font-family: var(--cg-font-mono);
+}
+.foot a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.foot a:hover {
+  color: var(--cg-fg);
 }
 .stack {
   display: grid;
