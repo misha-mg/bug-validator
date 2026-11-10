@@ -59,6 +59,9 @@ describe('server', () => {
     assert.equal((await fetch(`${base}/`, { method: 'POST' })).status, 405)
   })
   it('serves the stylesheet, its fonts and the scripts with no-store and a CSP', async () => {
+    const logo = await get('/logo.svg')
+    assert.equal(logo.status, 200)
+    assert.equal(logo.type, 'image/svg+xml')
     const css = await get('/app.css')
     assert.equal(css.status, 200)
     assert.equal(css.type, 'text/css; charset=utf-8')

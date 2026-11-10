@@ -16,6 +16,7 @@ const STATIC: Record<string, string> = {
   '/app.css': 'text/css',
   '/app.js': 'text/javascript',
   '/theme.js': 'text/javascript',
+  '/logo.svg': 'image/svg+xml',
 }
 /** The faces the stylesheet names (Inter, JetBrains Mono), under static/fonts. */
 const FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/

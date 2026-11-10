@@ -97,13 +97,14 @@ function layout(title: string, main: string, ctx: PageContext, section: Section 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/sheet.css">
 <link rel="stylesheet" href="/app.css">
 <script src="/theme.js"></script>
 </head>
 <body>
 <header class="masthead">
-<a class="brand" href="/">Bug validator</a>
+<a class="brand" href="/"><img class="mark" src="/logo.svg" alt="" width="24" height="24">Bug validator</a>
 <span class="divider"></span>
 <span class="where">console${ctx.host ? ` · ${esc(ctx.host)}` : ''}</span>
 ${modePill(ctx.dryRun)}

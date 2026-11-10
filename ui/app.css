@@ -2,6 +2,18 @@
    tokens, the faces and every part): the cockpit's columns, the bugs' table, the statistics' pair
    and chart, a bug's page. Every colour, corner and distance here is one of the sheet's tokens. */
 
+/* The company's mark before the console's name (ui/logo.svg, also the tab's icon). */
+.masthead .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-space-3);
+}
+.masthead .brand .mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+
 /* An icon inside a button: inline SVG drawn with the text's colour. */
 .btn.icon {
   padding: 0 6px;
