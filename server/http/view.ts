@@ -4,6 +4,7 @@ import { MAX_ATTEMPTS } from '../config.ts'
 import { OUTCOMES, REQUIREMENTS, type Outcome, type RequirementId } from '../domain/bug.ts'
 import { ISSUE_KEY } from '../domain/key.ts'
 import { cut, fmtAgo, fmtClock, fmtDate, fmtDay, fmtDuration, fmtTime, plural } from '../format.ts'
+import { type CheckSettings, LIMITS } from '../store/settings.ts'
 import { type BugView, type Heartbeat, type Request, type Result, type Run, checked, result } from './read.ts'
 import { type LogEvent, type ServiceStatus, alive, liveness } from './service-log.ts'
 import {
@@ -52,8 +53,8 @@ export interface PageContext {
   /** The service's mode from its log; null when the log does not say. */
   dryRun: boolean | null
   now: Date
-  /** The host the page was asked from, for the masthead. */
-  host?: string | undefined
+  /** The console's settings, for the gear's dialog and the settings page; null when the service has no table for them yet. */
+  settings?: SettingsModel | null | undefined
   /** A notification to show once, after a POST. */
   toast?: Toast | null | undefined
 }
@@ -78,8 +79,11 @@ export const RESULT_TONE: Record<Result, Tone> = {
 
 // ---- Layout
 
-/** The pages the masthead lists; a bug's page is under Bugs. */
-export type Section = 'cockpit' | 'bugs' | 'stats'
+/** The pages the masthead lists, and the settings its gear opens; a bug's page is under Bugs. */
+export type Section = 'cockpit' | 'bugs' | 'stats' | 'settings'
+
+/** The settings' gear, as the sheet draws the masthead's icon buttons. */
+const GEAR_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`
 
 /** The theme switch's two icons, as the sheet expects them: the sun while the page is dark, the moon while it is light. */
 const THEME_ICONS = `<svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>`
@@ -91,6 +95,15 @@ function layout(title: string, main: string, ctx: PageContext, section: Section 
   const toast = ctx.toast
     ? `<div class="notice${ctx.toast.kind === 'error' ? '' : ' calm'}" data-toast="${ctx.toast.kind}">${esc(ctx.toast.text)}</div>\n`
     : ''
+  // The gear opens the settings: a dialog on the page (app.js), the settings page without
+  // JavaScript. No gear while the service has nowhere to keep them.
+  const gear = ctx.settings
+    ? `<a class="btn gear${section === 'settings' ? ' active' : ''}" href="/settings" data-dialog="settings" aria-label="Settings" title="Settings: when a bug is checked, how often, Slack">${GEAR_ICON}</a>`
+    : ''
+  const dialog =
+    ctx.settings && section !== 'settings'
+      ? `\n<dialog id="settings" class="frame confirm settings" aria-labelledby="settings-title"><div class="frame-head"><h2 id="settings-title">Settings</h2><span class="note">from the next poll</span></div>${settingsForm(ctx.settings, '<a class="btn" href="/" data-close>Close</a>')}</dialog>`
+      : ''
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -105,16 +118,12 @@ function layout(title: string, main: string, ctx: PageContext, section: Section 
 <body>
 <header class="masthead">
 <a class="brand" href="/">Bug validator</a>
-<span class="divider"></span>
-<span class="where">console${ctx.host ? ` · ${esc(ctx.host)}` : ''}</span>
-${modePill(ctx.dryRun)}
 <span class="spacer"></span>
-<form class="request" method="post" action="/requests"><input class="field" name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button class="btn">Check</button></form>
 <nav>${nav('cockpit', '/', 'Cockpit')}${nav('bugs', '/bugs', 'Bugs')}${nav('stats', '/stats', 'Statistics')}</nav>
-<button class="btn theme" type="button" aria-label="Switch between light and dark">${THEME_ICONS}</button>
+${gear}<button class="btn theme" type="button" aria-label="Switch between light and dark">${THEME_ICONS}</button>
 </header>
 <main class="sheet">
-${toast}${main}
+${toast}${main}${dialog}
 </main>
 <script src="/app.js"></script>
 </body>
@@ -127,6 +136,57 @@ export function errorPage(status: number, message: string, ctx: PageContext): st
     `${status} · Bug validator`,
     `<div class="page-head"><h1>${status}</h1></div><div class="notice">${esc(message)}</div>`,
     ctx,
+  )
+}
+
+// ---- Settings
+
+/** The settings in force, their defaults, and whether Slack has a webhook to tell. */
+export interface SettingsModel {
+  settings: CheckSettings
+  defaults: CheckSettings
+  slackSetUp: boolean
+}
+
+/**
+ * The settings' form, the same in the gear's dialog and on the settings page: each setting a
+ * label, its control and what it does, then Save, `close`, and Defaults, which posts the form
+ * with nothing but its name, so the service's own values come back whatever the fields say.
+ */
+function settingsForm(m: SettingsModel, close: string): string {
+  const { settings: s, defaults: d } = m
+  const number = (name: keyof typeof LIMITS, label: string, hint: string): string =>
+    `<div class="setting"><label class="label" for="setting-${name}">${label}</label><input id="setting-${name}" class="field short" type="number" name="${name}" value="${s[name]}" min="${LIMITS[name].min}" max="${LIMITS[name].max}" step="1" required><p class="hint">${hint} The service's own: ${d[name]}.</p></div>`
+  const atDefaults = (Object.keys(d) as (keyof CheckSettings)[]).every((k) => s[k] === d[k])
+  return `<form class="settings" method="post" action="/settings">
+${number('firstCheckMinutes', 'First check, minutes after the bug is created', 'A new bug is checked once it is this old, so its reporter has time to finish the report.')}
+${number('quietMinutes', 'Re-check, minutes of quiet after a change', 'A bug not understood whose report changed is checked again once nothing has moved on it for this long, so a burst of edits gives one re-check.')}
+${number('maxChecks', 'Checks per bug', 'Failed ones included: a bug that keeps changing or failing is left alone after this many.')}
+<div class="setting"><label class="switch"><input type="checkbox" name="slack"${s.slack ? ' checked' : ''}${m.slackSetUp ? '' : ' disabled'}><span class="track"><span class="knob"></span></span>Slack messages</label><p class="hint">${m.slackSetUp ? 'A message for every check that ends not understood.' : 'No webhook is set (VALIDATOR_SLACK_WEBHOOK_URL): nothing is sent, whatever this says.'}</p></div>
+<div class="buttons"><button class="btn primary">Save</button>${close}${atDefaults ? '' : '<button class="btn" name="defaults" value="1" formnovalidate title="The service\'s own values">Defaults</button>'}</div>
+</form>`
+}
+
+/** The settings an event names, in the form's words: `first check after 10m · Slack off`. */
+function settingsText(f: Record<string, unknown>): string {
+  const parts: string[] = []
+  if (typeof f.firstCheckMinutes === 'number') parts.push(`first check after ${f.firstCheckMinutes}m`)
+  if (typeof f.quietMinutes === 'number') parts.push(`re-check after ${f.quietMinutes}m of quiet`)
+  if (typeof f.maxChecks === 'number') parts.push(`${plural(f.maxChecks, 'check')} per bug`)
+  if (typeof f.slack === 'boolean') parts.push(`Slack ${f.slack ? 'on' : 'off'}`)
+  return parts.join(' · ')
+}
+
+/** The settings as a page: where the gear leads without JavaScript, and after a value was refused. */
+export function settingsPage(ctx: PageContext, problem: string | null = null): string {
+  const body = ctx.settings
+    ? `<section class="frame settings-page">${problem ? `<div class="notice">${esc(problem)}</div>` : ''}${settingsForm(ctx.settings, '<a class="btn" href="/">Close</a>')}</section>`
+    : `<div class="notice">The service has no table for the settings yet: restart it on this version first.</div>`
+  return layout(
+    'Settings · Bug validator',
+    `<div class="page-head"><h1>Settings</h1><span class="stats">they apply from the service's next poll</span></div>${body}`,
+    ctx,
+    'settings',
   )
 }
 
@@ -183,6 +243,8 @@ export function homePage(m: HomeModel, ctx: PageContext): string {
 <div class="facts">${kv(serviceFacts(m, now))}</div>
 </div>
 </section>
+<section class="frame check">${frameHead('Check a bug', '', 'by its key or a link, before the next poll')}
+<form class="request ctl" method="post" action="/requests"><input class="field" name="key" placeholder="KAZ-1234 or a link" required aria-label="Bug to check"><button class="btn primary">Check</button></form></section>
 <section class="frame requested">${frameHead('Requested', pending.length ? plural(pending.length, 'check') : '', 'checks asked for by hand, made before the next poll’s')}
 ${pending.length ? scroll(`<table class="wide"><thead><tr><th>Bug</th><th>Asked</th></tr></thead><tbody>${pending.map((r) => `<tr><td class="key">${bugLink(r.key)}</td><td class="num dim">${fmtAgo(r.at, now)}</td></tr>`).join('')}</tbody></table>`) : '<p class="empty">Nothing requested.</p>'}</section>
 ${skipped.length ? `<section class="frame skipped">${frameHead('Skipped at the first start')}${kv(skippedFacts)}</section>` : ''}
@@ -427,6 +489,8 @@ export function eventText(e: LogEvent): string {
       return `${by}${re ? 're-check' : 'check'} failed${f.attempts ? ` · attempt ${esc(f.attempts)}` : ''} · ${errorText(f.error)}`
     case 'mentions_stripped':
       return esc(`mentions stripped: ${Array.isArray(f.stripped) ? f.stripped.join(', ') : ''}`)
+    case 'settings_changed':
+      return esc(`settings changed · ${settingsText(f)}`)
     case 'slack_notified':
       return 'Slack message sent'
     case 'slack_failed':
@@ -875,9 +939,6 @@ export function resultLabel(b: BugView): string {
 /** A frame's title line: its name, a count and a note beside it. */
 const frameHead = (title: string, count = '', note = ''): string =>
   `<div class="frame-head"><h2>${title}</h2>${count ? `<span class="count">${esc(count)}</span>` : ''}${note ? `<span class="note">${note}</span>` : ''}</div>`
-
-const modePill = (dryRun: boolean | null): string =>
-  dryRun === null ? '' : dryRun ? '<span class="pill">dry run</span>' : '<span class="pill ok">live</span>'
 
 const resultPill = (b: BugView): string => {
   const cls = toneClass(RESULT_TONE[result(b)])

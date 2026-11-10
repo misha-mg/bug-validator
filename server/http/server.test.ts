@@ -5,6 +5,7 @@ import { request } from 'node:http'
 import { afterAll, beforeAll, describe, it } from 'vitest'
 import { startUi } from './server.ts'
 import { readBug, readPosts, readRequests } from './read.ts'
+import { readSettings, settingsDefaults } from '../store/settings.ts'
 import { appendLog, heartbeat, logLine, sampleState } from './sample.ts'
 
 const state = sampleState()
@@ -118,6 +119,37 @@ describe('server', () => {
     const bad = await post('ABC-1')
     assert.equal(bad.status, 400)
     assert.match(await bad.text(), /Not a KAZ or RPG issue: ABC-1/)
+  })
+  it('takes the settings from its own form, keeps what differs from the defaults, and says what it refused', async () => {
+    const post = (fields: Record<string, string>, referer = `${base}/bugs`) =>
+      fetch(`${base}/settings`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', referer },
+        body: new URLSearchParams(fields),
+        redirect: 'manual',
+      })
+    const defaults = settingsDefaults(false)
+    assert.match((await get('/')).body, /<a class="btn gear" href="\/settings" data-dialog="settings"/)
+    assert.match((await get('/settings')).body, /name="maxChecks" value="5"/)
+
+    const saved = await post({ firstCheckMinutes: '10', quietMinutes: '15', maxChecks: '3', slack: 'on' })
+    assert.equal(saved.status, 303)
+    assert.match(saved.headers.get('location') ?? '', /^\/bugs\?toast=success%3ASettings\+saved/, 'back to the page the gear was on')
+    // No webhook in this console: the Slack switch is not the form's to change.
+    assert.deepEqual(readSettings(state.dbFile, defaults).settings, { firstCheckMinutes: 10, quietMinutes: 15, maxChecks: 3, slack: false })
+    assert.match((await get('/settings')).body, /name="firstCheckMinutes" value="10"/)
+
+    const refused = await post({ firstCheckMinutes: '10', quietMinutes: '15', maxChecks: '0' })
+    assert.equal(refused.status, 400)
+    assert.match(await refused.text(), /<div class="notice">The checks per bug is a whole number from 1 to 20<\/div>/)
+    assert.equal(readSettings(state.dbFile, defaults).settings.maxChecks, 3, 'nothing kept of a refused form')
+
+    const same = await post({ firstCheckMinutes: '10', quietMinutes: '15', maxChecks: '3' })
+    assert.match(same.headers.get('location') ?? '', /toast=info%3ASettings\+left/)
+    assert.equal((await post({ defaults: '1', maxChecks: 'x' })).status, 303, 'Defaults posts whatever the fields say')
+    assert.deepEqual(readSettings(state.dbFile, defaults).settings, defaults)
+    const elsewhere = await fetch(`${base}/settings`, { method: 'POST', headers: { origin: 'https://evil.example' }, body: 'maxChecks=1' })
+    assert.equal(elsewhere.status, 403)
   })
   it('takes a post of a recorded comment, only the one the page showed, and shows it on the bug page', async () => {
     const post = (key: string, checked: string) =>

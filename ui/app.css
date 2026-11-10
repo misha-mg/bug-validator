@@ -2,6 +2,28 @@
    tokens, the faces and every part): the cockpit's tables, the bugs' table, the statistics' chart,
    a bug's page. Every colour, corner and distance here is one of the sheet's tokens. */
 
+/* The settings (the sheet's .setting parts): the form's buttons under them, as a dialog's are;
+   as a page, a column no wider than the dialog. */
+form.settings,
+dialog.confirm form.settings {
+  display: block;
+  margin: 0;
+}
+form.settings .buttons {
+  display: flex;
+  gap: var(--cg-space-2);
+  margin-top: var(--cg-space-5);
+}
+.settings-page {
+  max-width: 560px;
+}
+.settings-page .notice {
+  margin-bottom: var(--cg-space-2);
+}
+/* Check a bug: the field and its button on one line, in the cockpit's left column. */
+.check form {
+  margin: 0;
+}
 /* An icon inside a button: inline SVG drawn with the text's colour. */
 .btn.icon {
   padding: 0 6px;

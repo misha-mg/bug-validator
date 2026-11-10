@@ -34,6 +34,7 @@ server/
     jira-mcp.ts        the agent's Jira tool: search_issues, get_issue — read-only, KAZ and RPG only, served over HTTP by the service itself
   store/
     store.ts           SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta` (the first start, the heartbeat), `requests` (checks asked for by hand) and `posts` (comments a person posts from the UI); the schema's migrations; a request written by the UI or the CLI, a post by the UI; a backup
+    settings.ts        the settings the console may change (the first check's wait, the quiet before a re-check, the checks per bug, Slack): the defaults, what was set over them; read by the service at every poll, written by the console
   notify/
     slack.ts           one Slack message per check that ends not understood, through an incoming webhook; a failure is logged, never a check's
   pipeline/
@@ -295,6 +296,7 @@ its Activity frame from every event but `poll` and `check_start`, one line each.
 | `service_stopping` | signal | stopping |
 | `service_stopped` | | stopped |
 | `poll` | inQuery, waiting, pending, checked, failed, deferred, ms | last poll, in Created, waiting |
+| `settings_changed` | the settings the console changed since the last poll, each with its new value: firstCheckMinutes, quietMinutes, maxChecks, slack | |
 | `poll_failed` | error, ms, requests (when the waiting loop's requests failed) | last poll failed, error, failures in a row |
 | `first_start` | skipped (the keys) | |
 | `key_changed` | from, to | |
@@ -351,7 +353,7 @@ measures them.
 | `VALIDATOR_AGENT_MAX_BUDGET_USD` | `2` | one agent run; a sonnet check of a clear bug costs about $0.04 |
 | `VALIDATOR_WEBUI_DIR` | `state/webui` | the service's clone |
 | `VALIDATOR_SLACK_WEBHOOK_URL` | — | a Slack incoming webhook: one message per check that ends not understood; unset, no messages. A secret, like the tokens |
-| `VALIDATOR_SLACK_NOTIFICATIONS` | `true` | `false` turns the messages off with the URL left in place; anything else is refused |
+| `VALIDATOR_SLACK_NOTIFICATIONS` | `true` | `false` turns the messages off with the URL left in place; anything else is refused. The default of the console's Slack setting, which wins once set |
 | `VALIDATOR_CONSOLE_URL` | — | the console as a person opens it, for the link in a message; unset, the message links to Jira alone |
 | `VALIDATOR_DB_FILE` | `state/bug-validator.sqlite` | |
 | `VALIDATOR_LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |

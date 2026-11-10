@@ -49,7 +49,8 @@ formatting. Node 24 runs the server's TypeScript as it is (type stripping): only
   marks.tsv` against a developer's marks; the running service picks up edits without a restart.
 - One thing is kept in step by hand: the log events in `.about/architecture.md` ↔
   `server/http/service-log.ts` + `server/http/view.ts` (the console reads them). The console
-  (`server/http/`) reads `state/`, writes only check and post requests, and imports the tables,
+  (`server/http/`) reads `state/`, writes only check and post requests and the settings (`server/store/settings.ts`,
+  read by the service at every poll), and imports the tables,
   the statuses, the outcomes and the requirement ids from the service's own modules, never the
   agent, the clone or the Jira client.
 - Tests sit next to the code (`*.test.ts`), use in-memory or temporary databases made by the real

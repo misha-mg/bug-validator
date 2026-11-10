@@ -1,5 +1,6 @@
 // Tests of view.ts: the three pages and a bug's page rendered from the sample state.
 import assert from 'node:assert/strict'
+import type { CheckSettings } from '../store/settings.ts'
 import { describe, it } from 'vitest'
 import {
   type HomeModel,
@@ -12,6 +13,7 @@ import {
   commentHtml,
   errorPage,
   eventText,
+  settingsPage,
   filterBugs,
   homePage,
   resultLabel,
@@ -70,18 +72,53 @@ const section = (html: string, cls: string): string => {
 const card = (html: string, name: string): string => text(section(html, `card ${name}`))
 
 describe('layout', () => {
-  it('has the masthead with the three pages, the mode and the theme switch', () => {
+  it('has the masthead with the three pages and the theme switch, and nothing else: no host, no mode, no field', () => {
     const html = homePage(home, ctx)
     assert.match(
       html,
       /<a class="btn active" href="\/">Cockpit<\/a><a class="btn" href="\/bugs">Bugs<\/a><a class="btn" href="\/stats">Statistics<\/a>/,
     )
-    assert.match(html, /<span class="pill">dry run<\/span>/)
     assert.match(html, /<button class="btn theme" type="button"/)
+    const masthead = html.slice(html.indexOf('<header'), html.indexOf('</header>'))
+    assert.doesNotMatch(masthead, /console|dry run|<form|class="where"|class="divider"|class="btn gear/)
+    // The mode is the cockpit's card; a bug is asked for from the cockpit's left column.
+    assert.match(html, /<div class="value">dry run<\/div>/)
+    assert.match(
+      html,
+      /<section class="frame check">.*<form class="request ctl" method="post" action="\/requests"><input class="field" name="key"/s,
+    )
     assert.match(bugsPage(bugs, bugsQuery(new URLSearchParams()), ctx), /<a class="btn active" href="\/bugs">Bugs<\/a>/)
     assert.match(statsPage(bugs, '30d', ctx), /<a class="btn active" href="\/stats">Statistics<\/a>/)
     assert.match(bugPage(bugModel('KAZ-2'), ctx), /<a class="btn active" href="\/bugs">Bugs<\/a>/, 'a bug is under Bugs')
-    assert.doesNotMatch(homePage(home, { ...ctx, dryRun: null }), /<span class="pill[^"]*">(dry run|live)</)
+  })
+  it('opens the settings from a gear beside the theme switch: a dialog on every page, a page of their own without JavaScript', () => {
+    const defaults: CheckSettings = { firstCheckMinutes: 30, quietMinutes: 15, maxChecks: 5, slack: true }
+    const settings = { settings: { ...defaults, firstCheckMinutes: 10 }, defaults, slackSetUp: true }
+    const html = homePage(home, { ...ctx, settings })
+    assert.match(
+      html,
+      /<a class="btn gear" href="\/settings" data-dialog="settings" aria-label="Settings"[^>]*>.*<\/a><button class="btn theme"/s,
+    )
+    assert.match(html, /<dialog id="settings" class="frame confirm settings"/)
+    assert.match(
+      html,
+      /<input id="setting-firstCheckMinutes" class="field short" type="number" name="firstCheckMinutes" value="10" min="0" max="1440"/,
+    )
+    assert.match(html, /The service's own: 30\./)
+    assert.match(html, /<input type="checkbox" name="slack" checked>/)
+    assert.match(html, /<button class="btn" name="defaults" value="1" formnovalidate/, 'Defaults while a setting differs')
+    // The page: the same form, no dialog under it, the gear lit; what was refused is said over the form.
+    const page = settingsPage({ ...ctx, settings }, 'The checks per bug is a whole number from 1 to 20')
+    assert.match(page, /<a class="btn gear active" href="\/settings"/)
+    assert.doesNotMatch(page, /<dialog id="settings"/)
+    assert.match(page, /<div class="notice">The checks per bug is a whole number from 1 to 20<\/div>/)
+    // At the defaults there is nothing to put back; without a webhook the switch is off limits.
+    const plain = settingsPage({ ...ctx, settings: { settings: defaults, defaults, slackSetUp: false } })
+    assert.doesNotMatch(plain, /name="defaults"/)
+    assert.match(plain, /<input type="checkbox" name="slack" checked disabled>/)
+    // A service from before the settings has no table for them: no gear, and the page says so.
+    assert.doesNotMatch(homePage(home, { ...ctx, settings: null }), /class="btn gear|<dialog id="settings"/)
+    assert.match(settingsPage({ ...ctx, settings: null }), /no table for the settings yet/)
   })
   it('shows the toast of a redirect as a notice, for a page without JavaScript', () => {
     assert.deepEqual(toastOf(new URLSearchParams('toast=success%3ACheck+of+KAZ-1+requested')), {

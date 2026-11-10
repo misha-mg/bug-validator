@@ -55,7 +55,7 @@ export async function poll(deps: Deps, signal?: AbortSignal): Promise<PollSummar
   for (const move of deps.store.track(watched)) log.info('key_changed', move)
   for (const change of deps.store.refresh(watched.flatMap((w) => (w.report ? [w.report] : [])))) log.info('report_changed', { ...change })
   const rows = deps.store.rows(keys)
-  const due = plan(watched, rows, Date.now(), deps.config.dryRun)
+  const due = plan(watched, rows, Date.now(), deps.config.dryRun, deps.timing?.())
   const checks = [...due.first.map((bug) => ({ bug, row: rows.get(bug.key) ?? null })), ...due.recheck]
   const summary: PollSummary = { inQuery: keys.length, waiting: due.waiting, pending: checks.length, checked: 0, failed: 0, deferred: 0 }
   const served = new Set<string>()

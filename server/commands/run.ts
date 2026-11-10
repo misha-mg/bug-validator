@@ -6,10 +6,11 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { ClaudeAgent } from '../claude/agent.ts'
 import { JiraTool } from '../claude/jira-mcp.ts'
 import { loadConfig } from '../config.ts'
+import { type CheckSettings, changedSettings, readSettings, settingsDefaults } from '../store/settings.ts'
 import { Store } from '../store/store.ts'
 import { JiraClient } from '../jira/client.ts'
 import { describeError, log } from '../log.ts'
-import { SlackNotifier, silent } from '../notify/slack.ts'
+import { type Notifier, SlackNotifier, silent } from '../notify/slack.ts'
 import type { Deps } from '../pipeline/deps.ts'
 import { poll } from '../pipeline/poll.ts'
 import { serveRequests } from '../pipeline/requests.ts'
@@ -37,13 +38,38 @@ export async function run(): Promise<void> {
   const claudeVersion = await agent.version()
   const clone = new Clone(config.webui.dir, config.webui.repoUrl)
   const webuiCommit = await clone.update(0)
-  const notifier = config.slack
+  const store = new Store(config.dbFile)
+  // The settings the console may change (store/settings.ts), read when they are needed: the
+  // timing at every poll, the Slack switch at every message.
+  const defaults = settingsDefaults(config.slackNotifications)
+  const settings = (): CheckSettings => readSettings(config.dbFile, defaults).settings
+  const slack = config.slack
     ? new SlackNotifier(config.slack.webhookUrl, { jiraBaseUrl: config.jira.baseUrl, consoleUrl: config.slack.consoleUrl })
-    : silent
-  const deps: Deps = { config, jira, agent, clone, store: new Store(config.dbFile), notifier }
+    : null
+  const notifier: Notifier = slack ? { notify: (notice) => (settings().slack ? slack.notify(notice) : Promise.resolve()) } : silent
+  let inForce = settings()
+  const deps: Deps = {
+    config,
+    jira,
+    agent,
+    clone,
+    store,
+    notifier,
+    timing: () => {
+      // Said once when the console changed them, so the log shows from which poll on.
+      const now = settings()
+      const changed = changedSettings(inForce, now)
+      if (Object.keys(changed).length) log.info('settings_changed', changed)
+      inForce = now
+      return now
+    },
+  }
   log.info('service_start', {
     dryRun: config.dryRun,
-    slack: config.slack !== null,
+    slack: config.slack !== null && inForce.slack,
+    firstCheckMinutes: inForce.firstCheckMinutes,
+    quietMinutes: inForce.quietMinutes,
+    maxChecks: inForce.maxChecks,
     pollIntervalS: config.pollIntervalMs / 1000,
     maxAttempts: config.maxAttempts,
     model: config.agent.model,

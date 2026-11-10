@@ -1,4 +1,4 @@
-// The console's HTTP server (node:http): the pages, the static files under ui/, /healthz; guard.ts on every request.
+// The console's HTTP server (node:http): the pages, the settings, the static files under ui/, /healthz; guard.ts on every request.
 import { existsSync, readFileSync } from 'node:fs'
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http'
 import { requestCheck, requestPost } from '../store/store.ts'
@@ -6,7 +6,20 @@ import { ISSUE_KEY } from '../domain/key.ts'
 import { describeError, log } from '../log.ts'
 import type { UiConfig } from './config.ts'
 import { SECURITY_HEADERS, TooLarge, knownHost, loggedIn, loginChallenge, readBody, sameOrigin } from './guard.ts'
-import { type PageContext, bugPage, bugsPage, bugsQuery, errorPage, homePage, statsPage, toastOf, toastParam } from './view.ts'
+import {
+  type PageContext,
+  type SettingsModel,
+  bugPage,
+  bugsPage,
+  bugsQuery,
+  errorPage,
+  homePage,
+  settingsPage,
+  statsPage,
+  toastOf,
+  toastParam,
+} from './view.ts'
+import { changedSettings, parseSettings, readSettings, settingsDefaults, writeSettings } from '../store/settings.ts'
 import { readBug, readBugs, readHeartbeat, readPosts, readRequests } from './read.ts'
 import { health, ServiceLog } from './service-log.ts'
 import { periodOf } from './stats.ts'
@@ -20,6 +33,16 @@ const STATIC: Record<string, string> = {
 }
 /** The faces the stylesheet names (Inter, JetBrains Mono), under static/fonts. */
 const FONT = /^\/fonts\/[a-z0-9-]+\.woff2$/
+
+/** A console started without settings (a test's): the plan's own defaults, no Slack. */
+const NO_SETTINGS = { defaults: settingsDefaults(false), slackSetUp: false }
+
+/** The settings as the pages show them; null while the database has no table for them (the service has not migrated it yet). */
+function settingsModel(config: UiConfig): SettingsModel | null {
+  const { defaults, slackSetUp } = config.settings ?? NO_SETTINGS
+  const { settings, kept } = readSettings(config.dbFile, defaults)
+  return kept ? { settings, defaults, slackSetUp } : null
+}
 
 /** A posted form is small; anything bigger is not one. */
 const MAX_BODY = 4096
@@ -62,7 +85,8 @@ const ACTIONS: Record<string, (dbFile: string, form: URLSearchParams) => { key: 
  * stylesheets (the sheet shared with pipeline-ui, and the UI's own), their fonts and the
  * scripts. Pages, styles and scripts are not cached: an edit shows on reload; the fonts are. The
  * writes are `POST /requests`, a check asked for by hand, and `POST /posts`, a recorded comment
- * to post to Jira: rows the service serves. `/healthz`
+ * to post to Jira: rows the service serves; and `POST /settings`, the settings the service reads
+ * at its next poll (store/settings.ts). `/healthz`
  * answers a monitor: 200 while the service runs and polls, 503 otherwise.
  *
  * A page is served only to a Host the UI knows (an IP address, localhost, this machine's name,
@@ -124,8 +148,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
     jiraBaseUrl: config.jiraBaseUrl,
     dryRun: status?.dryRun ?? null,
     now: new Date(),
-    host: req.headers.host,
     toast: toastOf(url.searchParams),
+    settings: settingsModel(config),
   }
   const action = req.method === 'POST' ? ACTIONS[path] : undefined
   if (action) {
@@ -142,6 +166,30 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
       res.end()
     } catch (err) {
       send(res, 400, 'text/html', errorPage(400, err instanceof Error ? err.message : String(err), ctx))
+    }
+    return
+  }
+  if (req.method === 'POST' && path === '/settings') {
+    if (!sameOrigin(req))
+      return send(res, 403, 'text/html', errorPage(403, 'The settings can be changed from the UI’s own pages only.', ctx))
+    const form = new URLSearchParams(await readBody(req, MAX_BODY))
+    const defaults = (config.settings ?? NO_SETTINGS).defaults
+    try {
+      const before = readSettings(config.dbFile, defaults).settings
+      const next = form.has('defaults') ? defaults : parseSettings(form)
+      // A disabled switch is not sent: without a webhook the Slack setting stays as it was.
+      if (!form.has('defaults') && !(config.settings ?? NO_SETTINGS).slackSetUp) next.slack = before.slack
+      writeSettings(config.dbFile, next, defaults)
+      const changed = changedSettings(before, next)
+      if (Object.keys(changed).length) log.info('settings_saved', changed)
+      const back = new URL(backTo(req), 'http://x')
+      const done = Object.keys(changed).length ? 'Settings saved: the service takes them at its next poll' : 'Settings left as they were'
+      back.searchParams.set('toast', toastParam({ kind: Object.keys(changed).length ? 'success' : 'info', text: done }))
+      res.writeHead(303, { ...SECURITY_HEADERS, Location: back.pathname + back.search })
+      res.end()
+    } catch (err) {
+      // What was wrong is said on the settings page, over the form with the values in force.
+      send(res, 400, 'text/html', settingsPage(ctx, err instanceof Error ? err.message : String(err)))
     }
     return
   }
@@ -167,6 +215,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, config: UiConfi
     )
   } else if (path === '/bugs') {
     send(res, 200, 'text/html', bugsPage(readBugs(config.dbFile), bugsQuery(url.searchParams), ctx))
+  } else if (path === '/settings') {
+    send(res, 200, 'text/html', settingsPage(ctx))
   } else if (path === '/stats') {
     send(res, 200, 'text/html', statsPage(readBugs(config.dbFile), periodOf(url.searchParams.get('period')), ctx))
   } else if (path.startsWith('/bugs/')) {

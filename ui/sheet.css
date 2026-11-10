@@ -350,8 +350,9 @@ button {
 }
 
 /* ==========================================================================
-   The masthead (the kit's top bar): the name, where, the state; the pages and the theme
-   switch. Its content lines up with the sheet's under it, however wide the window. Sticky,
+   The masthead (the kit's top bar): the name, a word when the service is not there
+   (`.offline`); at the right the pages, the settings' gear and the theme switch. Nothing else:
+   where the console is and what the service does are the page's to say. Its content lines up with the sheet's under it, however wide the window. Sticky,
    and glass over what scrolls under it: the kit's top-bar tint, nearly clear, over the blur,
    so the scene shows through it.
    ========================================================================== */
@@ -394,23 +395,6 @@ button {
 .masthead .brand:hover {
   text-decoration: none;
 }
-.masthead .divider {
-  width: 1px;
-  height: 24px;
-  background: var(--cg-border-strong);
-  flex: none;
-}
-.masthead .where {
-  font-family: var(--cg-font-mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--cg-fg-3);
-  white-space: nowrap;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .masthead .offline {
   color: var(--cg-danger);
   font-size: 12px;
@@ -425,13 +409,6 @@ button {
 .masthead nav {
   display: flex;
   gap: var(--cg-space-2);
-}
-.masthead form {
-  display: flex;
-  gap: var(--cg-space-2);
-}
-.masthead .field {
-  width: 15rem;
 }
 /* The pages and the theme switch are the kit's ghost caps buttons; the page shown is tinted blue. */
 .masthead .btn {
@@ -870,6 +847,19 @@ select.field,
   outline: none;
   box-shadow: var(--ring);
 }
+/* A setting, in a console's settings (the dialog the masthead's gear opens, or a page): a
+   `.setting` holds a label.label, its control and a .hint that says what it does; a number's
+   field is `.short`. */
+.setting {
+  margin-top: var(--cg-space-4);
+}
+.setting .label {
+  display: block;
+  margin-bottom: var(--cg-space-2);
+}
+.setting .field.short {
+  width: 96px;
+}
 /* A combo: a select with a search, for a list too long to scroll. The app writes
      div.combo (.open while its list is shown)
        button.field                       the chosen value, the arrow
@@ -1029,6 +1019,31 @@ select.field,
 }
 .switch[aria-checked='true'] .knob {
   transform: translateX(14px);
+}
+/* The same switch in a form, working without JavaScript: a label.switch around a checkbox
+   (hidden, it keeps the keyboard and the form's value), the track, the word. */
+.switch input[type='checkbox'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.switch input:checked + .track {
+  background: var(--cg-ok);
+}
+.switch input:checked + .track .knob {
+  transform: translateX(14px);
+}
+.switch input:focus-visible + .track {
+  box-shadow: var(--ring);
+}
+.switch:has(input:disabled) {
+  color: var(--cg-fg-3);
+  cursor: default;
+}
+.switch input:disabled + .track {
+  opacity: 0.5;
 }
 .switch:focus-visible {
   box-shadow: none;
@@ -1870,11 +1885,5 @@ dialog.confirm[open]:not(:modal) {
     min-height: 60px;
     flex-wrap: wrap;
     padding-block: 10px;
-  }
-  .masthead .field {
-    width: 11rem;
-  }
-  .masthead .where {
-    display: none;
   }
 }
