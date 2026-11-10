@@ -840,10 +840,13 @@ h3 {
   font-size: var(--cg-text-md);
   transition:
     box-shadow var(--cg-dur) var(--cg-ease),
-    background var(--cg-dur) var(--cg-ease);
+    background-color var(--cg-dur) var(--cg-ease);
 }
-/* A select is a field with its own arrow at the right; the list it opens is the system's. */
-select.field {
+/* A select is a field with its own arrow at the right; the list it opens is the system's. A
+   combo's field (below) has the same arrow. The pointer changes the field's colour alone: the
+   arrow stays where it is. */
+select.field,
+.combo > .field {
   padding-right: 34px;
   -webkit-appearance: none;
   appearance: none;
@@ -858,7 +861,7 @@ select.field {
   color: var(--cg-fg-3);
 }
 .field:hover:not(:disabled) {
-  background: var(--cg-surface-4);
+  background-color: var(--cg-surface-4);
 }
 .field:disabled {
   color: var(--cg-fg-3);
@@ -866,6 +869,97 @@ select.field {
 .field:focus {
   outline: none;
   box-shadow: var(--ring);
+}
+/* A combo: a select with a search, for a list too long to scroll. The app writes
+     div.combo (.open while its list is shown)
+       button.field                       the chosen value, the arrow
+       div.combo-list                     under the field, over what follows it
+         input.field[type=search]         what is typed cuts the options
+         ul[role=listbox]
+           li.group                       a group's name, its count in a <b>
+           li[role=option]                .on the chosen one, .at the one the keyboard is at;
+                                          a <span> with the value, a <small> with a note
+         p.empty                          when nothing holds what is typed
+   and the keys (arrows, Enter, Escape); the sheet draws it. */
+.combo {
+  position: relative;
+}
+.combo > .field {
+  display: block;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.combo.open > .field {
+  box-shadow: var(--ring);
+}
+.combo-list {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  padding: var(--cg-space-2);
+  background: var(--cg-window);
+  border: 1px solid var(--cg-border-strong);
+  border-radius: var(--cg-radius-md);
+  box-shadow: var(--cg-shadow-popover);
+  -webkit-backdrop-filter: blur(var(--cg-blur));
+  backdrop-filter: blur(var(--cg-blur));
+}
+.combo-list ul {
+  max-height: 264px;
+  margin: var(--cg-space-2) 0 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.combo-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-space-2);
+  padding: 6px 10px;
+  border-radius: var(--cg-radius-sm);
+  font-size: var(--cg-text-sm);
+  cursor: pointer;
+}
+.combo-list li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.combo-list li small {
+  flex: none;
+  color: var(--cg-fg-3);
+  font-size: var(--cg-text-xs);
+}
+.combo-list li.at {
+  background: var(--cg-surface-3);
+}
+.combo-list li.on {
+  color: var(--accent);
+  font-weight: 600;
+}
+.combo-list li.on::after {
+  content: '✓';
+  margin-left: auto;
+}
+.combo-list li.group {
+  padding: var(--cg-space-2) 10px 4px;
+  color: var(--cg-fg-3);
+  font-size: var(--cg-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: default;
+}
+.combo-list li.group b {
+  font-weight: 500;
+}
+.combo-list .empty {
+  padding: var(--cg-space-3) 10px var(--cg-space-2);
 }
 .ctl {
   display: flex;
