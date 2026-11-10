@@ -447,18 +447,22 @@ button {
 .masthead .btn:hover:not(:disabled) {
   background: var(--cg-surface-2);
 }
-/* The theme switch: the kit's icon button, a sun while the page is dark and a moon while it is
-   light (the one to switch to), drawn as inline SVG by the app (`.theme > svg.sun + svg.moon`);
-   the icon turns a little under the pointer. */
-.masthead .btn.theme {
+/* The masthead's icon buttons, at its right end (the kit's icon button). The settings' gear
+   (`.gear > svg`), which opens the console's settings, then the theme switch: a sun while the
+   page is dark and a moon while it is light (the one to switch to), drawn as inline SVG by the
+   app (`.theme > svg.sun + svg.moon`). The icon turns a little under the pointer. */
+.masthead .btn.theme,
+.masthead .btn.gear {
   width: 30px;
   padding: 0;
   color: var(--cg-fg-2);
 }
-.theme:hover:not(:disabled) {
+.theme:hover:not(:disabled),
+.gear:hover:not(:disabled) {
   color: var(--cg-fg);
 }
-.theme svg {
+.theme svg,
+.gear svg {
   flex: none;
   width: 17px;
   height: 17px;
@@ -469,7 +473,8 @@ button {
   stroke-linejoin: round;
   transition: transform var(--cg-dur) var(--cg-ease);
 }
-.theme:hover svg {
+.theme:hover svg,
+.gear:hover svg {
   transform: rotate(20deg);
 }
 .theme .sun,
