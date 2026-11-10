@@ -59,16 +59,9 @@ td.absent {
   overflow-wrap: anywhere;
 }
 
-/* Bugs: the search field among the filters, a day's checks under its date. */
+/* Bugs: the search field among the filters; a day's checks sit under its date (the sheet's tr.day). */
 .filters .opts .field {
   max-width: 26rem;
-}
-.bugs tbody tr.day th {
-  padding: var(--cg-space-5) 0 var(--cg-space-2);
-  border-bottom: 1px solid var(--cg-border-strong);
-}
-.bugs tbody tr.day:first-child th {
-  padding-top: var(--cg-space-3);
 }
 /* A row answers the pointer: the whole line leads to the bug. */
 .bugs tbody tr:not(.day):hover td {

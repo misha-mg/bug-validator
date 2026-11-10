@@ -1137,6 +1137,15 @@ tbody th {
   font-weight: 500;
   white-space: nowrap;
 }
+/* A day row (`tr.day` with one `th.label` across the table): the date over that day's rows, in
+   a list that runs latest first; each row then needs only its clock. */
+tbody tr.day th {
+  padding: var(--cg-space-5) 0 var(--cg-space-2);
+  border-bottom: 1px solid var(--cg-border-strong);
+}
+tbody tr.day:first-child th {
+  padding-top: var(--cg-space-3);
+}
 td.key,
 th.key {
   white-space: nowrap;
