@@ -837,6 +837,18 @@ h3 {
     box-shadow var(--cg-dur) var(--cg-ease),
     background var(--cg-dur) var(--cg-ease);
 }
+/* A select is a field with its own arrow at the right; the list it opens is the system's. */
+select.field {
+  padding-right: 34px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%238b93a1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
 .field::placeholder {
   color: var(--cg-fg-3);
 }
@@ -1298,6 +1310,38 @@ dialog.confirm form {
 /* Opened without JavaScript (a link to the page with it open): in the flow, under what opened it. */
 dialog.confirm[open]:not(:modal) {
   margin: var(--cg-space-4) 0 0;
+}
+
+/* ==========================================================================
+   A tip: what a small mark means, said at once beside it under the pointer or the keyboard's
+   focus (a title waits a second, and is not shown at all on some machines). The text is the
+   element's `data-tip`; it opens to the right, inside the row, so a scrolling table does not
+   cut it.
+   ========================================================================== */
+[data-tip] {
+  position: relative;
+}
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: max-content;
+  max-width: 280px;
+  padding: 6px 10px;
+  background: var(--cg-window);
+  border: 1px solid var(--cg-border-strong);
+  border-radius: var(--cg-radius-sm);
+  box-shadow: var(--cg-shadow-popover);
+  color: var(--cg-fg);
+  font: 500 var(--cg-text-sm) / 1.35 var(--cg-font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
 }
 
 /* ==========================================================================
