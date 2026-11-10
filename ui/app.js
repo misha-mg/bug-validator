@@ -1,5 +1,5 @@
 // The console's few behaviours on the server-rendered pages; everything works without this file,
-// minus the refresh, the toasts, the fold and the chart's tooltip.
+// minus the refresh, the toasts, the fold, the dialogs as modals and the chart's tooltip.
 //
 // Every 5 s, fetch this page again and swap <main> when it changed: not while the tab is hidden,
 // the search box has focus or a confirmation is open. A comment opened in a bug's history stays
@@ -61,6 +61,18 @@ document.addEventListener('click', (event) => {
   event.preventDefault()
   if (link.matches('[data-close]')) link.closest('dialog')?.close()
   else document.getElementById(link.dataset.dialog)?.showModal()
+})
+
+// A modal dialog closes when the pointer goes down outside it, on its backdrop, as well as by
+// its Close and Escape. The backdrop is the dialog element itself as far as an event can tell,
+// and so is the dialog's padding: the pointer's place decides. On the press, not the click, so
+// a text selection dragged out of the dialog does not close it.
+document.addEventListener('pointerdown', (event) => {
+  const dialog = event.target
+  if (!(dialog instanceof HTMLDialogElement) || !dialog.matches(':modal')) return
+  const box = dialog.getBoundingClientRect()
+  const inside = event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom
+  if (!inside) dialog.close()
 })
 
 // A notification after a POST comes in the URL (?toast=kind:text) and, for a page without
