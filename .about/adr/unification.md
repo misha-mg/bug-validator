@@ -62,6 +62,14 @@ Toasts follow the same rule with no framework: a POST redirects with `?toast=<ki
 `app.js` renders the sheet's toast markup and drops the parameter, and a page without JavaScript
 shows the text as a notice — the console keeps working with JavaScript off, as it always has.
 
+## The mark and the page grids are the sheet's (2026-11-10)
+
+The masthead's mark is drawn by the sheet (pipeline-ui's ADR glass-kit, The mark), so the
+`<img>` this console put before its name and its rules in `app.css` went: with both, the mark
+showed twice. `.cockpit` and `.stats-pair`, which each console had in its own stylesheet, are
+the sheet's too, with one set of breakpoints; `app.css` keeps only what is this console's own.
+`ui/logo.svg` stays as the tab's icon.
+
 ## Considered options
 
 - **One repository for both** — one history, one node_modules, but two services with different

@@ -1,18 +1,6 @@
 /* The console's own layout, on the sheet (sheet.css, shared with pipeline-ui, which names the
-   tokens, the faces and every part): the cockpit's columns, the bugs' table, the statistics' pair
-   and chart, a bug's page. Every colour, corner and distance here is one of the sheet's tokens. */
-
-/* The company's mark before the console's name (ui/logo.svg, also the tab's icon). */
-.masthead .brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--cg-space-3);
-}
-.masthead .brand .mark {
-  flex: none;
-  width: 24px;
-  height: 24px;
-}
+   tokens, the faces and every part): the cockpit's tables, the bugs' table, the statistics' chart,
+   a bug's page. Every colour, corner and distance here is one of the sheet's tokens. */
 
 /* An icon inside a button: inline SVG drawn with the text's colour. */
 .btn.icon {
@@ -43,19 +31,8 @@ td.absent {
   white-space: nowrap;
 }
 
-/* Cockpit: the cards across, the state sources and the requests left of what needs attention and
-   the activity; one column on a narrow window. */
-.cockpit {
-  display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  gap: var(--gap);
-  align-items: start;
-}
-@media (max-width: 1100px) {
-  .cockpit {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
+/* Cockpit (the sheet's .cockpit): the state sources and the requests left of what needs attention
+   and the activity. */
 .sources .facts {
   margin-top: var(--cg-space-3);
   font-size: var(--cg-text-sm);
@@ -112,21 +89,12 @@ td.absent {
   color: var(--cg-fg);
 }
 
-/* Statistics: the two bar frames side by side, the chart under them. The chart's axis numbers
-   sit in the plot's left padding: the columns are placed in percentages of the rest. */
-.stats-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--gap);
-}
+/* Statistics: the two bar frames side by side (the sheet's .stats-pair), the chart under them.
+   The chart's axis numbers sit in the plot's left padding: the columns are placed in percentages
+   of the rest. */
 /* The strip in a stack: the stack's gap parts it from the next frame, not its own margin too. */
 .stack > .strip {
   margin-bottom: 0;
-}
-@media (max-width: 900px) {
-  .stats-pair {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 .columns .plot {
   padding-left: 30px;

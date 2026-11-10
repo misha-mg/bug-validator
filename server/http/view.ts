@@ -104,7 +104,7 @@ function layout(title: string, main: string, ctx: PageContext, section: Section 
 </head>
 <body>
 <header class="masthead">
-<a class="brand" href="/"><img class="mark" src="/logo.svg" alt="" width="24" height="24">Bug validator</a>
+<a class="brand" href="/">Bug validator</a>
 <span class="divider"></span>
 <span class="where">console${ctx.host ? ` · ${esc(ctx.host)}` : ''}</span>
 ${modePill(ctx.dryRun)}

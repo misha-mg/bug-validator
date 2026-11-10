@@ -370,12 +370,26 @@ button {
   z-index: 2;
 }
 .masthead .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-size: var(--cg-text-xl);
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--cg-fg);
   white-space: nowrap;
+}
+/* The company's mark before the brand's name, the app's icon in the window: drawn by the sheet
+   itself (an SVG in a data URI, the mark's own four blues, no file to serve), so every console
+   that copies the sheet carries it with no markup of its own. */
+.masthead .brand::before {
+  content: '';
+  flex: none;
+  width: 24px;
+  height: 24px;
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 203.05 81.19 81.19'><path fill='%230095da' d='M50.516 217.598c0 14.855 13.664 26.992 30.672 27.484V222.23c0-10.55-8.63-19.18-19.176-19.18H50.516'/><path fill='%2300529c' d='M25.426 264.79v19.448h5.695v-81.187H19.176C8.629 203.05 0 211.68 0 222.23v10.324c14.813 4.777 25.426 17.422 25.426 32.234'/><path fill='%23009db4' d='M43.754 217.598V203.05h-5.867v81.187h24.125c10.547 0 19.175-8.629 19.175-19.175v-13.215c-20.738-.508-37.433-15.672-37.433-34.25'/><path fill='%234dbeee' d='M18.656 264.79c0-11.126-7.664-20.724-18.656-25.052v25.325c0 10.37 8.348 18.886 18.656 19.164'/></svg>")
+    center / contain no-repeat;
 }
 .masthead .brand:hover {
   text-decoration: none;
@@ -476,6 +490,46 @@ button {
   display: grid;
   gap: var(--gap);
   min-width: 0;
+}
+/* The cockpit: a narrow column of controls and state left of the wide lists; one column on a
+   narrow window. */
+.cockpit {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .cockpit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* The statistics' bar frames side by side: two, or three with `.three` (two and the third
+   across under them on a middling window); one column on a narrow one. */
+.stats-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+}
+.stats-pair.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 1300px) {
+  .stats-pair.three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stats-pair.three > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 900px) {
+  .stats-pair,
+  .stats-pair.three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stats-pair.three > :last-child {
+    grid-column: auto;
+  }
 }
 
 /* ==========================================================================

@@ -55,7 +55,7 @@ server/
     server.ts          node:http: the pages, the static files from ui/, /healthz; guard.ts on every request
     sample.ts          the sample state the tests build: the service's tables made by the real Store, a log, a heartbeat
 ui/                    what the browser gets: sheet.css, theme.js and fonts/ (the design system, copied from pipeline-ui by
-                       `npm run sheet:sync`, scripts/sheet-sync.sh), app.css (the pages' own layout), logo.svg (the company's mark: the masthead and the tab's icon) and app.js (the refresh,
+                       `npm run sheet:sync`, scripts/sheet-sync.sh), app.css (the pages' own layout), logo.svg (the company's mark as the tab's icon; the masthead's is drawn by the sheet) and app.js (the refresh,
                        the fold, the toasts, the chart's tooltip)
 agent/instructions.md  the agent's system prompt
 deploy/                systemd user units: the service, the UI, and maintain with its daily timer
