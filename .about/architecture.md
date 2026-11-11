@@ -8,7 +8,7 @@ when it is not, writes the comment. Why things are as they are: `prd.md`.
 ## Layers
 
 ```
-bin/bug-validator      the command line: execs server/cli.ts (run | check <KEY> [--recheck] | request <KEY|URL> | ui | maintain)
+bin/bug-validator      the command line: execs server/cli.ts (run | check <KEY> [--recheck] | request <KEY|URL> | ui | maintain | update)
 server/
   cli.ts               the commands above; a fatal error is one JSON line, so the UI can show it
   config.ts            env → typed Config through one zod schema; fails fast on a bad value or an old, unprefixed name
@@ -45,7 +45,7 @@ server/
     handle.ts          one check and its record / post / edit; the service's comment found in Jira; which failures are the surroundings'
     requests.ts        the posts and the checks asked for by hand, served before each check of a poll and while the service waits
     poll.ts            one poll: query → first-start bootstrap → moved bugs → plan → checks, requests first
-  commands/            run (the loop, the lock, the heartbeat), check (one bug, writes nothing), request (the service checks a bug next), ui (the web UI), maintain (backup, log size)
+  commands/            run (the loop, the lock, the heartbeat), check (one bug, writes nothing), request (the service checks a bug next), ui (the web UI), maintain (backup, log size), update (origin's new commits, the units restarted)
   http/                the web UI: a separate process that reads state/ and writes nothing but check and post requests
     config.ts          VALIDATOR_HOST, _PORT, _HOSTNAMES, _USER, _PASSWORD, plus the service's VALIDATOR_DB_FILE, VALIDATOR_LOG_FILE and JIRA_BASE_URL
     guard.ts           the security headers, the Host check, the same-origin check, the login, the body cap (the same file as pipeline-ui's)
@@ -59,7 +59,7 @@ ui/                    what the browser gets: sheet.css, theme.js and fonts/ (th
                        `npm run sheet:sync`, scripts/sheet-sync.sh), app.css (the pages' own layout), logo.svg (the company's mark as the tab's icon; the masthead's is drawn by the sheet) and app.js (the refresh,
                        the fold, the toasts, the chart's tooltip)
 agent/instructions.md  the agent's system prompt
-deploy/                systemd user units: the service, the UI, and maintain with its daily timer
+deploy/                systemd user units: the service, the UI, maintain with its daily timer, and update with its timer
 scripts/late-changes.ts   how reports change after creation (read-only measurement): `node scripts/late-changes.ts [days]`
 scripts/agreement.ts      the agent against a developer's marks (rollout step 3): `node scripts/agreement.ts marks.tsv`
 test/fixtures/         real bugs saved from Jira (REST v2 JSON) and a HAR; test/fixtures.ts reads them
@@ -325,7 +325,10 @@ a stop. `/healthz` answers 200 while it runs and fewer than 5 polls in a row hav
 otherwise; its `lastSeen` is the later of the log's last line and the heartbeat. The UI's own log (`ui_start`, `ui_stopping`, `ui_stopped`, `ui_error`) goes to
 `state/ui.log` under systemd; `maintain` logs `backup` and `log_cut` (or `log_cut_skipped`, when
 the service wrote to the log between the copy and the cut: the next day's run tries again) to
-the journal.
+the journal, and `update` logs there too: `update` (from, to, whether the dependencies were
+installed, the units restarted), `update_units_changed` (a unit file in `deploy/` changed: install
+it by hand), `update_skipped` (the checkout is a person's: another branch, changed files, commits
+of its own) and `update_undone` (a unit did not come up: the checkout is back where it was).
 
 ## Configuration
 
@@ -359,6 +362,7 @@ measures them.
 | `VALIDATOR_DB_FILE` | `state/bug-validator.sqlite` | |
 | `VALIDATOR_LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
 | `VALIDATOR_BACKUP_DIR` | `state/backups` | `maintain`'s copies of the database, the latest 14 kept |
+| `VALIDATOR_UPDATE_BRANCH` | `main` | the branch of origin `update` follows; the checkout must be on it |
 | `VALIDATOR_HOST` | `127.0.0.1` | this machine only; the UI's unit sets `0.0.0.0` for the office network |
 | `VALIDATOR_PORT` | `8081` | |
 | `VALIDATOR_HOSTNAMES` | — | names the UI may be opened by, comma-separated, besides IP addresses, localhost and the machine's name |
@@ -381,6 +385,7 @@ npm start                                   # the loop (bin/bug-validator run), 
 npm run request -- KAZ-9025                 # the running service checks the bug next (a key or a link)
 npm run ui                                  # the web UI on http://127.0.0.1:8081/ (VALIDATOR_HOST to open it wider)
 npm run maintain                            # back up the database, cut the log down to size
+npm run update                              # move to origin's new commits and restart the running units (the timer's job)
 npm run check && npm test                   # tsc and prettier, then vitest; before every commit
 npm run format                              # prettier over the repository
 ```
@@ -490,7 +495,7 @@ as `Tue 04 Nov` (`server/format.ts`, the words pipeline-ui's console uses). Jira
 
 ### Deploy
 
-systemd user units (`deploy/`): `ExecStart` is `node server/cli.ts run`, `ui` and `maintain`.
+systemd user units (`deploy/`): `ExecStart` is `node server/cli.ts run`, `ui`, `maintain` and `update`.
 Machine-specific in each: `WorkingDirectory`, the node path (in `PATH` and `ExecStart`; claude is
 installed with npm under that node, and `PATH` must also hold `bwrap`, `ffmpeg` and `git`) and, for
 the service and the UI, the log path; the UI's unit sets `VALIDATOR_HOST=0.0.0.0`. The units set
@@ -515,6 +520,29 @@ daily at 04:30: a copy of the database in `state/backups/` (the latest 14 kept),
 once past 5 MB, copied to `service.log.1` and emptied in place (the UI reads both). Its output:
 `journalctl --user -u bug-validator-maintain`. The WebUI clone is not backed up: it is cloned
 again when missing.
+
+**Following origin.** On the machine that runs the service for the team, a push to
+`VALIDATOR_UPDATE_BRANCH` (`main`) is running within five minutes:
+
+```
+cp deploy/bug-validator-update.service deploy/bug-validator-update.timer ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now bug-validator-update.timer
+journalctl --user -u bug-validator-update     # update, update_skipped, update_undone
+```
+
+The timer runs `update` three minutes after the last one ended. It fetches origin; with nothing
+new it says nothing. Otherwise it fast-forwards the checkout, runs `npm ci` when
+`package-lock.json` changed, restarts the service and the console (only those running: a unit
+the operator stopped stays stopped) and looks at them for half a minute. A unit that does not
+stay up (a new variable `.env` lacks, a broken start) sends the checkout back to the commit it
+was at, the units are restarted on it, the timer's unit ends failed, and that commit is not
+tried again (`state/update-failed` names it; the next push is tried as usual, and deleting the
+file tries the same one again). While the service is checking a bug the update waits for the
+next turn, so no agent run is lost to it. It does nothing, and says why, on a checkout that is
+on another branch, has changed tracked files or commits origin lacks. A changed unit file is
+only reported: the installed copies carry the machine's paths, so compare and install by hand.
+The machine's git must fetch origin without asking for a password (an SSH key or a stored
+credential). The timer is for that one machine: a developer's checkout does without it.
 
 Claude auth: `claude setup-token` once (opens the browser), paste the token into `.env`, restart.
 

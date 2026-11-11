@@ -86,8 +86,10 @@ formatting. Node 24 runs the server's TypeScript as it is (type stripping): only
 
 Three systemd user units (`deploy/`): `bug-validator` (the service, `server/cli.ts run`),
 `bug-validator-ui` (the console, `http://<server-ip>:8081/`) and the `bug-validator-maintain`
-timer (a daily backup, the log's size), with the real `state/` database. A check costs an agent
-run, so:
+timer (a daily backup, the log's size), with the real `state/` database. On the team's server a
+fourth, the `bug-validator-update` timer, follows `main` on origin: a push there is deployed
+within five minutes (it waits for a check in flight, and goes back when a unit does not come
+up), so `main` holds only what may run. A check costs an agent run, so:
 
 - never run `start`/`run` a second time on the operator's database, and never `check` a real bug
   unless asked;

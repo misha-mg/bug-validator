@@ -1,9 +1,10 @@
-// The command line: run | check <KEY> [--recheck] | request <KEY|URL> | ui | maintain; bin/bug-validator execs it.
+// The command line: run | check <KEY> [--recheck] | request <KEY|URL> | ui | maintain | update; bin/bug-validator execs it.
 import { check } from './commands/check.ts'
 import { maintain } from './commands/maintain.ts'
 import { request } from './commands/request.ts'
 import { run } from './commands/run.ts'
 import { ui } from './commands/ui.ts'
+import { update } from './commands/update.ts'
 import { log } from './log.ts'
 
 const USAGE = `usage:
@@ -13,6 +14,7 @@ const USAGE = `usage:
   node server/cli.ts request <KEY|URL>  the running service checks the bug next, whatever its state
   node server/cli.ts ui              serve the web UI (VALIDATOR_HOST, VALIDATOR_PORT); reads the database and the log
   node server/cli.ts maintain        back up the database, cut the log down to size (daily, from a timer)
+  node server/cli.ts update          move to origin's new commits and restart the units (every few minutes, from a timer)
 `
 
 const [command, arg, ...flags] = process.argv.slice(2)
@@ -34,6 +36,8 @@ try {
     await ui()
   } else if (command === 'maintain' && !arg) {
     maintain()
+  } else if (command === 'update' && !arg) {
+    await update()
   } else {
     process.stderr.write(USAGE)
     process.exit(2)

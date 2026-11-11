@@ -44,14 +44,16 @@ bin/bug-validator check KAZ-9025         # one bug: the outcome, the agent's rea
 node scripts/agreement.ts marks.tsv      # the agent against a developer's marks: agreement, cost, time
 bin/bug-validator run                    # the service (npm start), VALIDATOR_DRY_RUN=true by default
 bin/bug-validator ui                     # the web console (npm run ui), http://127.0.0.1:8081/
+bin/bug-validator update                 # origin's new commits, the running units restarted (a timer on the server)
 npm run sheet:sync                       # the design system copied from ../pipeline-ui (or PIPELINE_UI_DIR)
 npm run check && npm test                # tsc and prettier, then vitest
 ```
 
 Every setting of the service's own is a `VALIDATOR_*` variable (`.env.example` lists them;
 `.about/architecture.md`, Configuration); the Jira login is `JIRA_*`. The first run clones WebUI
-into `state/webui`. Deployment is three systemd user units (`deploy/`): the service, the web
-console and a daily maintenance timer — `.about/architecture.md`, Deploy.
+into `state/webui`. Deployment is systemd user units (`deploy/`): the service, the web
+console, a daily maintenance timer and, on the server, a timer that follows `main` on origin, so
+a push is running there within five minutes — `.about/architecture.md`, Deploy.
 
 ## Working on it
 

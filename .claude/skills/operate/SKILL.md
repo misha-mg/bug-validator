@@ -15,10 +15,18 @@ systemctl --user status bug-validator bug-validator-ui
 systemctl --user restart bug-validator          # after a code change, a new claude, a new token
 tail -f state/service.log                        # one JSON line per event
 journalctl --user -u bug-validator-maintain      # backup, log_cut
+journalctl --user -u bug-validator-update        # update, update_skipped, update_undone (where the timer is enabled)
 curl -s http://127.0.0.1:8081/healthz            # 200 while it runs and polls succeed, 503 otherwise
 ```
 
 An edit to `agent/instructions.md` needs no restart: the agent reads it on every run.
+
+Where the `bug-validator-update` timer is enabled, a push to `main` restarts the units by itself
+within five minutes. `update_undone` means the new commit did not start and the old one runs:
+read the service's log for the refused start, fix it in a new commit (or bring `.env` to what
+the start asks for and delete `state/update-failed` to try the same commit again).
+`update_skipped` names what makes the checkout a person's: put it back on `main`, clean.
+`update_units_changed`: compare `deploy/` with `~/.config/systemd/user/` and install by hand.
 
 ## What a start must show
 

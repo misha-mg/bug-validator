@@ -1,0 +1,12 @@
+# systemd user timer: `update` three minutes after the last one ended, so a push is running within five.
+# Enable it only on a machine that is meant to follow origin; a developer's checkout does without.
+
+[Unit]
+Description=Bug Validator update, every few minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=3min
+
+[Install]
+WantedBy=timers.target

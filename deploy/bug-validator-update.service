@@ -1,0 +1,16 @@
+# systemd user unit for `update`: the checkout moved to origin's new commits, the units restarted.
+# Run by bug-validator-update.timer. Install and operate: .about/architecture.md, Deploy.
+# Machine-specific: WorkingDirectory and the node path (PATH and ExecStart; PATH must also hold git,
+# npm and systemctl). The machine's git must reach origin without asking for a password.
+
+[Unit]
+Description=Bug Validator update — origin's new commits, the units restarted
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/npb/bug-validator
+Environment=PATH=%h/.nvm/versions/node/v24.19.0/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.nvm/versions/node/v24.19.0/bin/node server/cli.ts update
+# An npm ci on a slow disk, then half a minute of watching the units, twice when it goes back.
+TimeoutStartSec=30min
+NoNewPrivileges=yes

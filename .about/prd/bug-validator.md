@@ -407,6 +407,17 @@ Every WebUI bug counts, whoever reported it.
   the measurement). The same day the masthead lost what was not navigation: the host, the
   mode's pill (the cockpit's card says it) and the field that asks for a check, which is now the
   first frame of the cockpit's left column, over Requested.
+- 2026-11-11 — The team's server follows `main`: a timer there runs `update` every few minutes,
+  which fast-forwards the checkout to origin, installs the dependencies when the lock file
+  changed and restarts the service and the console (the owner: the tool moved from the tools
+  server, where CI deployed it on a push, to the pipeline's server beside WebUI, and an update
+  became a `git pull` and a restart by hand). Pulled by the server, not pushed to it: the
+  repository is on GitHub, which cannot reach the server, and a few minutes' wait is fine, so
+  neither a runner on the server nor the tools' CI is worth having. A unit that does not come up
+  sends the checkout back and the commit is not tried again; a check in flight is waited for;
+  a checkout a person works in is left alone; unit files are installed by hand. This settles
+  the open idea "deploy by git tag", which is removed. The copy in the `tools` repository is
+  retired.
 
 ## Sources
 

@@ -15,6 +15,7 @@
     "ui": "node server/cli.ts ui",
     "request": "node server/cli.ts request",
     "maintain": "node server/cli.ts maintain",
+    "update": "node server/cli.ts update",
     "sheet:sync": "scripts/sheet-sync.sh"
   },
   "dependencies": {
