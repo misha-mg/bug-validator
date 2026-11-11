@@ -1,4 +1,4 @@
-// The drafting sheet's copy is current: ui/sheet.css, ui/theme.js and ui/fonts/ match pipeline-ui's
+// The sheet's copy is current: ui/sheet.css, ui/theme.js and ui/fonts/ match pipeline-ui's
 // (scripts/sheet-sync.sh brings them up to date). Skipped where pipeline-ui is not checked out.
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'

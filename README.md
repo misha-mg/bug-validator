@@ -16,7 +16,8 @@ reaches Jira but a comment a person approves.
 
 ## How it works
 
-A poll every three minutes reads the bugs in Created. A bug is checked once it is 30 minutes
+A poll every three minutes reads the bugs in Created (the waits below and the checks per bug are
+the console's settings, the gear in its masthead; these are their defaults). A bug is checked once it is 30 minutes
 old, and again when the reporter changes it while it is not understood. Each check runs
 `claude -p` inside a bubblewrap sandbox that holds only a read-only clone of WebUI master, the
 run's files and claude itself; Jira is reached through a read-only tool the service serves on

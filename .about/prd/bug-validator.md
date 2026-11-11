@@ -143,6 +143,9 @@ triage (median time in Created 2.4 h over the last 90 days, 17 h over the year, 
   report). Other comments, labels, assignee and status are left out: the service's own comment
   and the QA lead's hand-off are not changes. A bug understood, or not a WebUI bug, is done.
 - At most 5 checks per bug, failed ones included. Re-checks stop when the bug leaves Created.
+- The 30 minutes, the 15 minutes and the 5 checks are the defaults: whoever runs the service
+  can set others from the console's settings, and turn the Slack messages off there, without a
+  restart (Decisions, 2026-11-10).
 - **On request**: whoever runs the service can ask for a check of any KAZ or RPG bug, by key or
   link, from the web UI or the command line. It runs next, whatever the bug's age, status or
   record, the caps included, and its result is recorded (or posted) as any check's.
@@ -391,6 +394,19 @@ Every WebUI bug counts, whoever reported it.
   check's. The first check's field checks stay in the history and are what the metric counts; a
   re-check is still planned against the fingerprint of the last check. The poll reads every
   report anyway, so this costs no request and no agent run.
+- 2026-11-10 — The wait before the first check, the quiet before a re-check, the checks per bug
+  and the Slack switch are settings of the console (the gear in the masthead, beside the theme
+  switch; a dialog, or `/settings` without JavaScript). They were constants in the code and one
+  variable of `.env`: changing one meant an edit and a restart, and they are what the operator
+  tunes while the check is measured. The code's values and `VALIDATOR_SLACK_NOTIFICATIONS` are
+  the defaults; a value set in the console is kept in the database's `settings` table and wins,
+  and one put back to its default is forgotten, so a later change of the default shows again.
+  The service reads them at every poll, so a change is for the next poll, and logs
+  `settings_changed`. Not settings: the dry run (the guard against writing to Jira stays a
+  deliberate edit of `.env`), the poll interval, the agent's model and caps (provisional until
+  the measurement). The same day the masthead lost what was not navigation: the host, the
+  mode's pill (the cockpit's card says it) and the field that asks for a check, which is now the
+  first frame of the cockpit's left column, over Requested.
 
 ## Sources
 

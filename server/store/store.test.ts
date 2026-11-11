@@ -254,7 +254,7 @@ describe('Store', () => {
     assert.deepEqual({ ...row }, { summary: 'Ports table is empty', reporter: 'A Tester', fingerprint: 'f1' })
     const figures = db.prepare("SELECT model, instructions, cost_usd, turns, agent_ms FROM runs WHERE key = 'KAZ-5'").get()
     assert.deepEqual({ ...figures }, { model: 'haiku', instructions: 'abc', cost_usd: 0.002, turns: 3, agent_ms: 900 })
-    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 5)
+    assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, 6)
     db.close()
     new Store(file).close()
     assert.equal(readdirSync(dir).filter((f) => f.startsWith('old.sqlite.before-v')).length, 1, 'no copy when there is nothing to migrate')
@@ -306,7 +306,7 @@ describe('Store', () => {
     read.close()
     s.close()
     assert.ok(
-      readdirSync(dirname(file)).some((f) => f.startsWith('v3.sqlite.before-v5-')),
+      readdirSync(dirname(file)).some((f) => f.startsWith('v3.sqlite.before-v6-')),
       'a copy before the migration',
     )
   })

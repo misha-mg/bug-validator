@@ -51,7 +51,10 @@ describe('config', () => {
       webhookUrl: hook,
       consoleUrl: 'http://validator.lan:8081',
     })
-    assert.equal(loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: hook, VALIDATOR_SLACK_NOTIFICATIONS: 'false' })).slack, null)
+    // The switch no longer drops the webhook: it is the default of the console's setting.
+    const off = loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: hook, VALIDATOR_SLACK_NOTIFICATIONS: 'false' }))
+    assert.deepEqual([off.slack?.webhookUrl, off.slackNotifications], [hook, false])
+    assert.equal(loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: hook })).slackNotifications, true)
     assert.throws(() => loadConfig(env({ VALIDATOR_SLACK_WEBHOOK_URL: 'hooks.slack.com/x' })), /VALIDATOR_SLACK_WEBHOOK_URL/)
     assert.throws(() => loadConfig(env({ VALIDATOR_SLACK_NOTIFICATIONS: 'off' })), /VALIDATOR_SLACK_NOTIFICATIONS/)
   })

@@ -34,6 +34,7 @@ server/
     jira-mcp.ts        the agent's Jira tool: search_issues, get_issue — read-only, KAZ and RPG only, served over HTTP by the service itself
   store/
     store.ts           SQLite (node:sqlite): one row per bug (by issue id) in `checks`, one per check in `runs`, `meta` (the first start, the heartbeat), `requests` (checks asked for by hand) and `posts` (comments a person posts from the UI); the schema's migrations; a request written by the UI or the CLI, a post by the UI; a backup
+    settings.ts        the settings the console may change (the first check's wait, the quiet before a re-check, the checks per bug, Slack): the defaults, what was set over them; read by the service at every poll, written by the console
   notify/
     slack.ts           one Slack message per check that ends not understood, through an incoming webhook; a failure is logged, never a check's
   pipeline/
@@ -55,7 +56,7 @@ server/
     server.ts          node:http: the pages, the static files from ui/, /healthz; guard.ts on every request
     sample.ts          the sample state the tests build: the service's tables made by the real Store, a log, a heartbeat
 ui/                    what the browser gets: sheet.css, theme.js and fonts/ (the design system, copied from pipeline-ui by
-                       `npm run sheet:sync`, scripts/sheet-sync.sh), app.css (the pages' own layout) and app.js (the refresh,
+                       `npm run sheet:sync`, scripts/sheet-sync.sh), app.css (the pages' own layout), logo.svg (the company's mark as the tab's icon; the masthead's is drawn by the sheet) and app.js (the refresh,
                        the fold, the toasts, the chart's tooltip)
 agent/instructions.md  the agent's system prompt
 deploy/                systemd user units: the service, the UI, and maintain with its daily timer
@@ -295,6 +296,7 @@ its Activity frame from every event but `poll` and `check_start`, one line each.
 | `service_stopping` | signal | stopping |
 | `service_stopped` | | stopped |
 | `poll` | inQuery, waiting, pending, checked, failed, deferred, ms | last poll, in Created, waiting |
+| `settings_changed` | the settings the console changed since the last poll, each with its new value: firstCheckMinutes, quietMinutes, maxChecks, slack | |
 | `poll_failed` | error, ms, requests (when the waiting loop's requests failed) | last poll failed, error, failures in a row |
 | `first_start` | skipped (the keys) | |
 | `key_changed` | from, to | |
@@ -351,8 +353,9 @@ measures them.
 | `VALIDATOR_AGENT_MAX_BUDGET_USD` | `2` | one agent run; a sonnet check of a clear bug costs about $0.04 |
 | `VALIDATOR_WEBUI_DIR` | `state/webui` | the service's clone |
 | `VALIDATOR_SLACK_WEBHOOK_URL` | — | a Slack incoming webhook: one message per check that ends not understood; unset, no messages. A secret, like the tokens |
-| `VALIDATOR_SLACK_NOTIFICATIONS` | `true` | `false` turns the messages off with the URL left in place; anything else is refused |
+| `VALIDATOR_SLACK_NOTIFICATIONS` | `true` | `false` turns the messages off with the URL left in place; anything else is refused. The default of the console's Slack setting, which wins once set |
 | `VALIDATOR_CONSOLE_URL` | — | the console as a person opens it, for the link in a message; unset, the message links to Jira alone |
+| `VALIDATOR_PORTAL_URL` | — | the start page the mark in the console's masthead leads to (the tools' portal, "All tools"); unset, the mark is part of the name and leads to the cockpit |
 | `VALIDATOR_DB_FILE` | `state/bug-validator.sqlite` | |
 | `VALIDATOR_LOG_FILE` | `state/service.log` | the service's log as the systemd unit writes it; the UI and `maintain` read it |
 | `VALIDATOR_BACKUP_DIR` | `state/backups` | `maintain`'s copies of the database, the latest 14 kept |
@@ -427,12 +430,12 @@ The masthead names the three pages as pipeline-ui's does: Cockpit, Bugs, Statist
   when any. Right: **Needs attention** (failed first checks, failed re-checks of a commented bug,
   interrupted posts, bugs not the WebUI's with the agent's reason) and **Activity** (the latest
   30 events of the log).
-- `/bugs` **Bugs** — the filters row: the result chips with their counts (understood in moss, not
-  understood and not a WebUI bug together, error in rust, skipped apart), the search field (keys,
+- `/bugs` **Bugs** — the filters row: the result chips with their counts (understood in green, not
+  understood and not a WebUI bug together, error in orange, skipped apart), the search field (keys,
   summaries, reporters; Enter submits, the form is a GET: `?result=`, `?q=`), Clear once narrowed.
   Then every bug by the day of its last check, latest first: the Jira arrow, the summary on one
   line, the clock, the result as a pill, the field checks the report fails now, related bugs,
-  how many checks.
+  how many checks, Run again.
 - `/stats` **Statistics** — a period (`?period=today|7d|30d|all`, 30 days by default), counted by
   the bugs first checked in it: a strip of six (checked, understood, not understood, not a WebUI
   bug, failed, the agent's cost with the median per check); the field checks failed most often at
@@ -440,10 +443,11 @@ The masthead names the three pages as pipeline-ui's does: Cockpit, Bugs, Statist
   report passes now, over bugs with a comment);
   bugs checked per day as stacked columns by their result now, over the period's days (all time:
   since the first check, 90 days at most), with a tooltip per day.
-- `/bugs/<KEY>` — the facts (reporter, result, checked, checks, related bugs as pills, the
+- `/bugs/<KEY>` — left, a frame of the facts (reporter, result, checked, checks, related bugs as pills, the
   request or the post waiting or failed, Jira), a reason block under them when the check failed,
-  the post was interrupted, or the bug is not the WebUI's; the actions, the one to press in slate
-  (Post to Jira when a comment waits, else Check again); the field checks of the report as last
+  the post was interrupted, or the bug is not the WebUI's; the actions, the one to press in the accent
+  (Post to Jira when a comment waits, else Check again), and under it the comment's frame; right,
+  the checks: the field checks of the report as last
   read; the latest check's
   reasoning (where the agent looked, what it found, why it decided; never posted); every check with
   its outcome, commit, files, cost, its reasoning and the comment it recorded (a version 1 check
@@ -466,7 +470,8 @@ confirmation as a modal, folds the state sources, and draws the chart's tooltip 
 masthead's button in the browser (the system's setting until then). Everything works with
 JavaScript off, minus the refresh, the toasts, the fold and the tooltip.
 
-The look is the drafting sheet (`ui/sheet.css`) shared with pipeline-ui, whose `ui/src/sheet.css`,
+The look is the sheet (`ui/sheet.css`: the CGS design system, glass blocks over a drifting scene,
+one yellow accent, Inter and JetBrains Mono) shared with pipeline-ui, whose `ui/src/sheet.css`,
 `ui/public/theme.js` and `ui/public/fonts/` are its source of truth (ADR unification):
 `npm run sheet:sync` (`scripts/sheet-sync.sh`, pipeline-ui at `../pipeline-ui` or
 `PIPELINE_UI_DIR`) copies the three into `ui/`, and `server/http/sheet.test.ts` fails when the
@@ -475,9 +480,9 @@ pages draw — the masthead, cards, the strip, filters, pills, chips, tables, fa
 reason block, the confirmation dialog, lamps, bars, the column chart, toasts — and the chart's
 SVG markup contract, which `view.ts` writes on the server with the columns placed in percentages
 of the plot's width (the frame's width is not known there). `ui/app.css` only lays out the pages:
-the cockpit's two columns, the bugs' day rows and `.req` chips, the statistics' pair, a bug's
+the cockpit's two columns, the bugs' day rows and `.req` tags, the statistics' pair, a bug's
 `.two` columns and its Jira comment. One `Tone` map (`view.ts`) gives a result its pill:
-understood `ok`, not understood `live` (slate), not a WebUI bug `strong`, error `bad`, skipped
+understood `ok`, not understood `live` (`.pill.slate`, the data blue), not a WebUI bug `strong`, error `bad`, skipped
 plain. Times are the server's local time (`TZ` in the units: Europe/Warsaw), written as
 `2026-11-04 23:10`, durations as `1h 05m` or `5m 03s`, a time ago as `5m 03s ago` and a day row
 as `Tue 04 Nov` (`server/format.ts`, the words pipeline-ui's console uses). Jira links use

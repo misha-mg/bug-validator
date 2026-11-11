@@ -1,5 +1,6 @@
 // Tests of view.ts: the three pages and a bug's page rendered from the sample state.
 import assert from 'node:assert/strict'
+import type { CheckSettings } from '../store/settings.ts'
 import { describe, it } from 'vitest'
 import {
   type HomeModel,
@@ -12,6 +13,7 @@ import {
   commentHtml,
   errorPage,
   eventText,
+  settingsPage,
   filterBugs,
   homePage,
   resultLabel,
@@ -70,18 +72,74 @@ const section = (html: string, cls: string): string => {
 const card = (html: string, name: string): string => text(section(html, `card ${name}`))
 
 describe('layout', () => {
-  it('has the masthead with the three pages, the mode and the theme switch', () => {
+  it('has the masthead with the three pages and the theme switch, and nothing else: no host, no mode, no field', () => {
     const html = homePage(home, ctx)
     assert.match(
       html,
       /<a class="btn active" href="\/">Cockpit<\/a><a class="btn" href="\/bugs">Bugs<\/a><a class="btn" href="\/stats">Statistics<\/a>/,
     )
-    assert.match(html, /<span class="pill">dry run<\/span>/)
     assert.match(html, /<button class="btn theme" type="button"/)
+    const masthead = html.slice(html.indexOf('<header'), html.indexOf('</header>'))
+    assert.doesNotMatch(masthead, /console|dry run|<form|class="where"|class="divider"|class="btn gear/)
+    // The mode is the cockpit's card; a bug is asked for from the cockpit's left column.
+    assert.match(html, /<div class="value">dry run<\/div>/)
+    assert.match(
+      html,
+      /<section class="frame check">.*<form class="request ctl" method="post" action="\/requests"><input class="field" name="key"/s,
+    )
     assert.match(bugsPage(bugs, bugsQuery(new URLSearchParams()), ctx), /<a class="btn active" href="\/bugs">Bugs<\/a>/)
     assert.match(statsPage(bugs, '30d', ctx), /<a class="btn active" href="\/stats">Statistics<\/a>/)
     assert.match(bugPage(bugModel('KAZ-2'), ctx), /<a class="btn active" href="\/bugs">Bugs<\/a>/, 'a bug is under Bugs')
-    assert.doesNotMatch(homePage(home, { ...ctx, dryRun: null }), /<span class="pill[^"]*">(dry run|live)</)
+  })
+  it('frames the page as the tools are framed: the mark to their start page where one is set, the build in the foot', () => {
+    const plain = homePage(home, ctx)
+    assert.doesNotMatch(plain, /class="home"|<footer/, 'neither without a start page and a build')
+    assert.match(plain, /<a class="brand" href="\/">Bug validator<\/a>/)
+    const build = { version: '0.14.2', commit: 'abc1234', dirty: false, commitUrl: 'https://github.com/owner/tool/commit/abc1234f' }
+    const framed = homePage(home, { ...ctx, portalUrl: 'http://tools.example.net/', build })
+    assert.match(
+      framed,
+      /<a class="home" href="http:\/\/tools.example.net\/" title="All tools" aria-label="All tools"><\/a>\n<a class="brand" href="\/">Bug validator<\/a>/,
+    )
+    assert.match(
+      framed,
+      /<\/main>\n<footer class="foot"><code>Build v0\.14\.2 \(<a href="https:\/\/github.com\/owner\/tool\/commit\/abc1234f" target="_blank" rel="noopener">abc1234<\/a>\)<\/code><\/footer>/,
+    )
+    // A tree that moved on from its commit says so; a console outside a repository names no commit.
+    assert.match(homePage(home, { ...ctx, build: { ...build, dirty: true, commitUrl: null } }), /Build v0\.14\.2 \(abc1234\+\)/)
+    assert.match(
+      homePage(home, { ...ctx, build: { version: '0.0.0', commit: null, dirty: false, commitUrl: null } }),
+      /Build v0\.0\.0 \(dev\)/,
+    )
+  })
+  it('opens the settings from a gear beside the theme switch: a dialog on every page, a page of their own without JavaScript', () => {
+    const defaults: CheckSettings = { firstCheckMinutes: 30, quietMinutes: 15, maxChecks: 5, slack: true }
+    const settings = { settings: { ...defaults, firstCheckMinutes: 10 }, defaults, slackSetUp: true }
+    const html = homePage(home, { ...ctx, settings })
+    assert.match(
+      html,
+      /<a class="btn gear" href="\/settings" data-dialog="settings" aria-label="Settings"[^>]*>.*<\/a><button class="btn theme"/s,
+    )
+    assert.match(html, /<dialog id="settings" class="frame confirm settings"/)
+    assert.match(
+      html,
+      /<input id="setting-firstCheckMinutes" class="field short" type="number" name="firstCheckMinutes" value="10" min="0" max="1440"/,
+    )
+    assert.match(html, /The service's own: 30\./)
+    assert.match(html, /<input type="checkbox" name="slack" checked>/)
+    assert.match(html, /<button class="btn" name="defaults" value="1" formnovalidate/, 'Defaults while a setting differs')
+    // The page: the same form, no dialog under it, the gear lit; what was refused is said over the form.
+    const page = settingsPage({ ...ctx, settings }, 'The checks per bug is a whole number from 1 to 20')
+    assert.match(page, /<a class="btn gear active" href="\/settings"/)
+    assert.doesNotMatch(page, /<dialog id="settings"/)
+    assert.match(page, /<div class="notice">The checks per bug is a whole number from 1 to 20<\/div>/)
+    // At the defaults there is nothing to put back; without a webhook the switch is off limits.
+    const plain = settingsPage({ ...ctx, settings: { settings: defaults, defaults, slackSetUp: false } })
+    assert.doesNotMatch(plain, /name="defaults"/)
+    assert.match(plain, /<input type="checkbox" name="slack" checked disabled>/)
+    // A service from before the settings has no table for them: no gear, and the page says so.
+    assert.doesNotMatch(homePage(home, { ...ctx, settings: null }), /class="btn gear|<dialog id="settings"/)
+    assert.match(settingsPage({ ...ctx, settings: null }), /no table for the settings yet/)
   })
   it('shows the toast of a redirect as a notice, for a page without JavaScript', () => {
     assert.deepEqual(toastOf(new URLSearchParams('toast=success%3ACheck+of+KAZ-1+requested')), {
@@ -272,7 +330,7 @@ describe('bugs', () => {
     )
     assert.match(
       html,
-      /<input type="hidden" name="key" value="KAZ-2"><button class="btn tiny icon" title="Run again" aria-label="Run KAZ-2 again">↻<\/button>/,
+      /<input type="hidden" name="key" value="KAZ-2"><button class="btn tiny icon" title="Run again" aria-label="Run KAZ-2 again"><svg /,
     )
     const page = text(html)
     assert.match(page, /All bugs 6 bugs/)
@@ -283,7 +341,7 @@ describe('bugs', () => {
     )
     assert.match(page, /KAZ-3 ↗ Login page freezes \d\d:\d\d understood 1 /, 'one check is counted')
     assert.match(page, /RPG-6 ↗ Port counter lags behind the CLI \d\d:\d\d not a WebUI bug R6/)
-    assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 ↗ \d\d:\d\d skipped ↻$/)
+    assert.match(page, /\w\w\w \d\d \w\w\w KAZ-1 ↗ \d\d:\d\d skipped$/)
     assert.match(
       html,
       /<td class="jira"><a href="https:\/\/jira.example.com\/browse\/KAZ-2" target="_blank" rel="noopener" title="KAZ-2 in Jira">↗<\/a><\/td>/,

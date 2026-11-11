@@ -144,6 +144,11 @@ const MIGRATIONS: ((db: DatabaseSync) => void)[] = [
   (db) => {
     db.exec('ALTER TABLE runs ADD COLUMN reasoning TEXT')
   },
+  // 6: the settings a person sets from the console, one row per setting that differs from its
+  // default (store/settings.ts).
+  (db) => {
+    db.exec('CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL)')
+  },
 ]
 
 /** A verdict of the list's check (comment_needed, missing, related with reasons) in the new shape; a broken one is left as it is. */

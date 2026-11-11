@@ -42,6 +42,17 @@ describe('plan', () => {
     const p = plan([bug('KAZ-1', 90, 14), bug('KAZ-2', 90, 15), bug('KAZ-3', 90, 60)], rows, NOW, true)
     assert.deepEqual(keys(p), { first: [], recheck: ['KAZ-2'], waiting: 1 }, 'KAZ-3 did not change')
   })
+  it('takes its waits and its cap from the timing the console set, the defaults without one', () => {
+    const timing = { firstCheckMinutes: 5, quietMinutes: 60, maxChecks: 2 }
+    const rows = new Map([
+      ['KAZ-2', row('dry_run')],
+      ['KAZ-3', row('dry_run', 'old', 2)],
+    ])
+    const watched = [bug('KAZ-1', 5), bug('KAZ-2', 90, 59), bug('KAZ-3', 90, 90), bug('KAZ-4', 4)]
+    assert.deepEqual(keys(plan(watched, rows, NOW, true, timing)), { first: ['KAZ-1'], recheck: [], waiting: 2 })
+    // The same poll by the defaults: KAZ-1 is too young, KAZ-2 has been quiet long enough, KAZ-3 has checks left.
+    assert.deepEqual(keys(plan(watched, rows, NOW, true)), { first: [], recheck: ['KAZ-2', 'KAZ-3'], waiting: 2 })
+  })
   it('re-checks only bugs not understood, with the comment of the current mode, a fingerprint, and up to the cap', () => {
     const rows = new Map([
       ['KAZ-1', row('commented')],

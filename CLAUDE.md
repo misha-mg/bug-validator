@@ -36,8 +36,9 @@ formatting. Node 24 runs the server's TypeScript as it is (type stripping): only
   `style:`, `chore:`); the subject says what changes for the operator, the body why.
 - Each file opens with a comment that says what it is for; comments say why, not what.
 - The layout, the shared modules and the environment names are the ones pipeline-ui has (ADR
-  unification): `server/format.ts`, `server/log.ts` and `server/http/guard.ts` are the same
-  files in both repositories, byte for byte — an edit to one is copied to the other.
+  unification): `server/format.ts`, `server/log.ts`, `server/http/guard.ts` and `server/version.ts`
+  (with its test and `scripts/version.sh`) are the same files in both repositories, byte for
+  byte — an edit to one is copied to the other.
 - No machine-specific or company-specific values in the repository: no home paths, user names,
   hosts, the Jira site or its cloud id, the WebUI repository URL. They come from `.env`
   (gitignored, `chmod 600`, template `.env.example`), read once in `server/config.ts`
@@ -49,7 +50,8 @@ formatting. Node 24 runs the server's TypeScript as it is (type stripping): only
   marks.tsv` against a developer's marks; the running service picks up edits without a restart.
 - One thing is kept in step by hand: the log events in `.about/architecture.md` ↔
   `server/http/service-log.ts` + `server/http/view.ts` (the console reads them). The console
-  (`server/http/`) reads `state/`, writes only check and post requests, and imports the tables,
+  (`server/http/`) reads `state/`, writes only check and post requests and the settings (`server/store/settings.ts`,
+  read by the service at every poll), and imports the tables,
   the statuses, the outcomes and the requirement ids from the service's own modules, never the
   agent, the clone or the Jira client.
 - Tests sit next to the code (`*.test.ts`), use in-memory or temporary databases made by the real

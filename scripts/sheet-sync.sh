@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Copies the drafting sheet from pipeline-ui, its source of truth, into ui/: sheet.css, theme.js
-# and the Barlow faces with their licence. pipeline-ui is ../pipeline-ui next to this repository
+# Copies the sheet (the CGS design system) from pipeline-ui, its source of truth, into ui/: sheet.css, theme.js
+# and the Inter and JetBrains Mono faces with their licence. pipeline-ui is ../pipeline-ui next to this repository
 # unless PIPELINE_UI_DIR says where it is. server/http/sheet.test.ts fails when the copy falls
 # behind; an edit to the sheet is made there, never here.
 set -euo pipefail
